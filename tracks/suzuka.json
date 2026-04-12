@@ -1,0 +1,32 @@
+{
+  "name": "Suzuka International Racing Course",
+  "country": "Japan",
+  "length_m": 5807,
+  "corners": [
+    {"id": 1, "name": "Turn 1", "short": "T1", "type": "medium_speed", "direction": "right", "entry_m": 659, "apex_m": 898, "exit_m": 939},
+    {"id": 2, "name": "Turn 2", "short": "T2", "type": "medium_speed", "direction": "left", "entry_m": 940, "apex_m": 1050, "exit_m": 1170},
+    {"id": 3, "name": "S Curve 1", "short": "S1", "type": "high_speed", "direction": "left", "entry_m": 1178, "apex_m": 1248, "exit_m": 1296},
+    {"id": 4, "name": "S Curve 2", "short": "S2", "type": "high_speed", "direction": "right", "entry_m": 1296, "apex_m": 1380, "exit_m": 1430},
+    {"id": 5, "name": "S Curve 3", "short": "S3", "type": "high_speed", "direction": "left", "entry_m": 1430, "apex_m": 1500, "exit_m": 1550},
+    {"id": 6, "name": "S Curve 4", "short": "S4", "type": "high_speed", "direction": "right", "entry_m": 1485, "apex_m": 1575, "exit_m": 1620},
+    {"id": 7, "name": "Dunlop", "short": "DUN", "type": "medium_speed", "direction": "right", "entry_m": 2239, "apex_m": 2349, "exit_m": 2412},
+    {"id": 8, "name": "Degner 1", "short": "DG1", "type": "high_speed", "direction": "right", "entry_m": 2412, "apex_m": 2473, "exit_m": 2534},
+    {"id": 9, "name": "Degner 2", "short": "DG2", "type": "medium_speed", "direction": "left", "entry_m": 2534, "apex_m": 2620, "exit_m": 2700},
+    {"id": 10, "name": "Hairpin", "short": "HAIR", "type": "low_speed", "direction": "left", "entry_m": 2818, "apex_m": 2942, "exit_m": 3005},
+    {"id": 11, "name": "200R", "short": "200R", "type": "high_speed", "direction": "left", "entry_m": 3200, "apex_m": 3400, "exit_m": 3600},
+    {"id": 12, "name": "Spoon Entry", "short": "SP-E", "type": "medium_speed", "direction": "left", "entry_m": 3742, "apex_m": 3826, "exit_m": 3852},
+    {"id": 13, "name": "Spoon Exit", "short": "SP-X", "type": "medium_speed", "direction": "left", "entry_m": 3900, "apex_m": 3976, "exit_m": 4090},
+    {"id": 14, "name": "130R", "short": "130R", "type": "high_speed", "direction": "left", "entry_m": 4850, "apex_m": 4950, "exit_m": 5100},
+    {"id": 15, "name": "Casio Triangle 1", "short": "CS1", "type": "low_speed", "direction": "left", "entry_m": 5282, "apex_m": 5416, "exit_m": 5480},
+    {"id": 16, "name": "Casio Triangle 2", "short": "CS2", "type": "low_speed", "direction": "right", "entry_m": 5480, "apex_m": 5530, "exit_m": 5600},
+    {"id": 17, "name": "Final Corner", "short": "FIN", "type": "low_speed", "direction": "right", "entry_m": 5600, "apex_m": 5660, "exit_m": 5750}
+  ],
+  "sectors": [
+    {"id": 1, "name": "Sector 1", "start_m": 0, "end_m": 1920},
+    {"id": 2, "name": "Sector 2", "start_m": 1920, "end_m": 4090},
+    {"id": 3, "name": "Sector 3", "start_m": 4090, "end_m": 5807}
+  ],
+  "drs_zones": [
+    {"start_m": 4200, "end_m": 5200}
+  ]
+}
