@@ -1,6 +1,12 @@
 """
 FastF1 data loader.
 Downloads real F1 telemetry for comparison.
+
+Changes from original:
+  - [FIX] Normalize brake data (FastF1 boolean → continuous 0-1)
+  - [NEW] Detect and document data format differences
+  - [NEW] Better error messages with fallback strategies
+  - [NEW] Metadata includes data format info for downstream use
 """
 
 import fastf1
@@ -8,6 +14,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from typing import Tuple, Dict, Any, Optional
+import warnings
 
 # Cache directory
 CACHE_DIR = Path(__file__).parent.parent / "cache" / "fastf1"
@@ -18,7 +25,6 @@ fastf1.Cache.enable_cache(str(CACHE_DIR))
 # Track name → GP event mapping
 # ============================================================
 TRACK_TO_GP = {
-    # 2024 calendar
     'suzuka': 'Japanese Grand Prix',
     'japan': 'Japanese Grand Prix',
     'japanese': 'Japanese Grand Prix',
@@ -72,56 +78,75 @@ TRACK_TO_GP = {
 }
 
 SESSION_MAP = {
-    'Q': 'Q',
-    'R': 'R',
-    'FP1': 'FP1',
-    'FP2': 'FP2',
-    'FP3': 'FP3',
-    'S': 'S',
-    'SQ': 'SQ',
-    'SS': 'SS',
+    'Q': 'Q', 'R': 'R',
+    'FP1': 'FP1', 'FP2': 'FP2', 'FP3': 'FP3',
+    'S': 'S', 'SQ': 'SQ', 'SS': 'SS',
 }
 
 
 def resolve_gp_name(track_hint: str, year: int) -> str:
-    """
-    Resolve track hint to official GP name.
-
-    Args:
-        track_hint: e.g. 'suzuka', 'japan', 'Japanese Grand Prix'
-        year: e.g. 2024
-
-    Returns:
-        Official GP name for FastF1
-    """
+    """Resolve track hint to official GP name."""
     if track_hint is None:
         raise ValueError(
-            "Track/GP name is required. Use --gp 'Japanese Grand Prix' "
-            "or --track suzuka"
+            "Track/GP name is required. "
+            "Use --gp 'Japanese Grand Prix' or --track suzuka"
         )
 
     hint_lower = track_hint.lower().strip().replace(' ', '_')
 
-    # Direct match in our mapping
     if hint_lower in TRACK_TO_GP:
         gp_name = TRACK_TO_GP[hint_lower]
         print(f"  Track '{track_hint}' → {gp_name}")
         return gp_name
 
-    # Already a full GP name? Pass through
     if 'grand prix' in track_hint.lower():
         return track_hint
 
-    # Try partial match
     for key, gp in TRACK_TO_GP.items():
         if hint_lower in key or key in hint_lower:
             print(f"  Track '{track_hint}' → {gp} (partial match)")
             return gp
 
+    available = sorted(set(TRACK_TO_GP.values()))
     raise ValueError(
-        f"Cannot resolve track '{track_hint}' to a GP name.\n"
-        f"Available: {sorted(set(TRACK_TO_GP.values()))}"
+        f"Cannot resolve track '{track_hint}'.\n"
+        f"Available: {available}"
     )
+
+
+def _normalize_brake(brake_raw: np.ndarray) -> Tuple[np.ndarray, str]:
+    """
+    Normalize brake data to continuous 0.0-1.0.
+
+    FastF1 brake data varies by source:
+      - Some years: boolean (True/False → 0/1)
+      - Some years: 0-100 percentage
+      - Some years: 0-1 float
+
+    Returns:
+        (normalized_array, format_description)
+    """
+    brake = brake_raw.astype(float)
+    unique_vals = np.unique(brake[~np.isnan(brake)])
+
+    # Case 1: Boolean (only 0 and 1, or True/False)
+    if len(unique_vals) <= 2 and set(unique_vals).issubset({0.0, 1.0}):
+        return brake, "boolean"
+
+    # Case 2: 0-100 range
+    if np.nanmax(brake) > 1.5:
+        return brake / 100.0, "percentage_0_100"
+
+    # Case 3: Already 0-1 continuous
+    return brake.clip(0.0, 1.0), "continuous_0_1"
+
+
+def _normalize_throttle(throttle_raw: np.ndarray) -> np.ndarray:
+    """Normalize throttle to 0-1 range."""
+    throttle = throttle_raw.astype(float)
+    if np.nanmax(throttle) > 1.5:
+        return throttle / 100.0
+    return throttle.clip(0.0, 1.0)
 
 
 def load_real_telemetry(driver: str, year: int, session: str = 'Q',
@@ -130,15 +155,9 @@ def load_real_telemetry(driver: str, year: int, session: str = 'Q',
     """
     Load real F1 telemetry from FastF1.
 
-    Args:
-        driver: e.g. 'VER', 'HAM'
-        year: e.g. 2024
-        session: 'Q', 'R', 'FP1', etc.
-        track: Track short name e.g. 'suzuka'
-        gp: Full GP name e.g. 'Japanese Grand Prix'
-
     Returns:
         (resampled_data, metadata)
+        metadata includes 'brake_format' to inform downstream analysis.
     """
     # Resolve GP name
     if gp:
@@ -148,10 +167,7 @@ def load_real_telemetry(driver: str, year: int, session: str = 'Q',
     elif track:
         gp_name = resolve_gp_name(track, year)
     else:
-        raise ValueError(
-            "Must provide --track or --gp.\n"
-            "Example: --track suzuka  or  --gp 'Japanese Grand Prix'"
-        )
+        raise ValueError("Must provide --track or --gp.")
 
     session_type = SESSION_MAP.get(session.upper(), session)
 
@@ -159,10 +175,17 @@ def load_real_telemetry(driver: str, year: int, session: str = 'Q',
     print(f"  Driver: {driver}")
 
     # Load session
-    f1_session = fastf1.get_session(year, gp_name, session_type)
-    f1_session.load()
+    try:
+        f1_session = fastf1.get_session(year, gp_name, session_type)
+        f1_session.load()
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to load FastF1 session: {e}\n"
+            f"Check: year={year}, gp='{gp_name}', session='{session_type}'\n"
+            f"FastF1 cache: {CACHE_DIR}"
+        ) from e
 
-    # Get driver's fastest lap
+    # Get driver's laps
     driver_laps = f1_session.laps.pick_drivers(driver)
 
     if driver_laps.empty:
@@ -172,14 +195,15 @@ def load_real_telemetry(driver: str, year: int, session: str = 'Q',
             f"Available: {available}"
         )
 
+    # Find fastest lap (with fallback)
     fastest = driver_laps.pick_fastest()
 
     if fastest is None or pd.isna(fastest['LapTime']):
-        # Fallback: pick quickest valid lap manually
         valid = driver_laps.dropna(subset=['LapTime'])
         if valid.empty:
             raise ValueError(f"No valid laps for {driver}")
         fastest = valid.loc[valid['LapTime'].idxmin()]
+        print(f"  ⚠ Using manual fastest lap selection (pick_fastest failed)")
 
     lap_time = fastest['LapTime'].total_seconds()
     print(f"  Lap time: {int(lap_time//60)}:{lap_time%60:06.3f}")
@@ -195,32 +219,26 @@ def load_real_telemetry(driver: str, year: int, session: str = 'Q',
     # Build standardized DataFrame
     data = pd.DataFrame()
 
-    # Distance
-    if 'Distance' in tel.columns:
-        data['lap_distance'] = tel['Distance'].values
-    else:
+    if 'Distance' not in tel.columns:
         raise ValueError("No Distance column in FastF1 telemetry")
+    data['lap_distance'] = tel['Distance'].values
 
     track_length = float(data['lap_distance'].max())
     print(f"  Track length: {track_length:.0f}m")
 
-    # Speed
-    if 'Speed' in tel.columns:
-        data['speed_kmh'] = tel['Speed'].values.astype(float)
-    else:
+    if 'Speed' not in tel.columns:
         raise ValueError("No Speed column in FastF1 telemetry")
+    data['speed_kmh'] = tel['Speed'].values.astype(float)
 
-    # Throttle (0-100 → 0-1)
+    # Throttle (normalize to 0-1)
     if 'Throttle' in tel.columns:
-        throttle_raw = tel['Throttle'].values.astype(float)
-        if throttle_raw.max() > 1.5:
-            data['throttle'] = throttle_raw / 100.0
-        else:
-            data['throttle'] = throttle_raw
+        data['throttle'] = _normalize_throttle(tel['Throttle'].values)
 
-    # Brake
+    # Brake (normalize + detect format)
+    brake_format = "unavailable"
     if 'Brake' in tel.columns:
-        data['brake'] = tel['Brake'].values.astype(float)
+        data['brake'], brake_format = _normalize_brake(tel['Brake'].values)
+        print(f"  Brake data format: {brake_format}")
 
     # Gear
     if 'nGear' in tel.columns:
@@ -249,11 +267,15 @@ def load_real_telemetry(driver: str, year: int, session: str = 'Q',
     sort_idx = np.argsort(src_dist)
     src_sorted = src_dist[sort_idx]
 
+    # Remove duplicates
+    unique_mask = np.concatenate([[True], np.diff(src_sorted) > 0.01])
+    src_unique = src_sorted[unique_mask]
+
     for col in data.columns:
         if col == 'lap_distance':
             continue
-        vals = data[col].values[sort_idx]
-        resampled[col] = np.interp(distances, src_sorted, vals)
+        vals = data[col].values[sort_idx][unique_mask]
+        resampled[col] = np.interp(distances, src_unique, vals)
 
     meta = {
         'driver': driver,
@@ -263,6 +285,7 @@ def load_real_telemetry(driver: str, year: int, session: str = 'Q',
         'lap_time': lap_time,
         'track_length': track_length,
         'telemetry_points': len(tel),
+        'brake_format': brake_format,  # NEW: downstream needs this
     }
 
     return resampled, meta
