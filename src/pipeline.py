@@ -28,6 +28,9 @@ def make_parser(description: str) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('csv', nargs='?', default='data/my_lap.csv',
                         help='Path to your telemetry CSV')
+    parser.add_argument('--lap', type=int, default=None,
+                        help='lapIndex to use (0-based). '
+                             'If omitted, auto-selects fastest lap.')
     parser.add_argument('--driver', type=str, default='VER',
                         help='F1 driver code (e.g. VER, HAM, LEC)')
     parser.add_argument('--year', type=int, default=2024,
@@ -95,7 +98,8 @@ def run_pipeline(args) -> Tuple[pd.DataFrame, List[Dict], CoachingReport,
     """
     # ---- Step 1: Load game data ----
     print(f"\n  [1/5] Loading game data...")
-    game_data, game_meta = load_and_prepare(args.csv)
+    lap_index = getattr(args, 'lap', None)
+    game_data, game_meta = load_and_prepare(args.csv, lap_index=lap_index)
     game_length = game_meta['track_length']
 
     # ---- Step 2: Auto-detect track ----

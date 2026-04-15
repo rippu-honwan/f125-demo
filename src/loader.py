@@ -71,6 +71,7 @@ COLUMN_MAP = {
     'validBin': 'valid_bin',
     'lapFlag': 'lap_flag',
     'binIndex': 'bin_index',
+    'lapIndex': 'lap_index',
     'trackLength': 'track_length_meta',
     'trackId': 'track_id',
     'carId': 'car_id',
@@ -461,26 +462,169 @@ def resample_lap(lap_data: pd.DataFrame, track_length: float,
 
 
 # ============================================================
+# Lap summary (all laps overview)
+# ============================================================
+
+def get_lap_summary(csv_path: str,
+                    sectors: Optional[List[Dict]] = None
+                    ) -> List[Dict[str, Any]]:
+    """
+    Generate a summary table of ALL laps in the CSV.
+
+    Returns a list of dicts, one per complete lap:
+        {lap_index, lap_number, lap_time, sector_times: [s1, s2, s3],
+         max_speed, valid}
+    """
+    sep = detect_separator(csv_path)
+    df = pd.read_csv(csv_path, sep=sep)
+    df = standardize_columns(df)
+    df = calculate_speed(df)
+    df = df.copy()
+
+    # Default sectors if none provided
+    if sectors is None:
+        track_len = df['lap_distance'].max()
+        sectors = [
+            {'start_m': 0, 'end_m': track_len / 3},
+            {'start_m': track_len / 3, 'end_m': track_len * 2 / 3},
+            {'start_m': track_len * 2 / 3, 'end_m': track_len},
+        ]
+
+    # Use lap_index if available, otherwise lap_number
+    if 'lap_index' in df.columns:
+        group_col = 'lap_index'
+    elif 'lap_number' in df.columns:
+        group_col = 'lap_number'
+    else:
+        return []
+
+    summaries = []
+
+    for group_val, group in df.groupby(group_col):
+        # Filter valid bins
+        if 'valid_bin' in group.columns:
+            group = group[group['valid_bin'] == 1]
+        if 'lap_flag' in group.columns:
+            group = group[group['lap_flag'] == 0]
+
+        if len(group) < 200:
+            continue
+
+        max_dist = group['lap_distance'].max()
+        if max_dist < 1000:
+            continue
+
+        # Lap time
+        lap_time = (float(group['lap_time'].max())
+                    if 'lap_time' in group.columns else 0)
+        if lap_time <= 0 or lap_time > 300:
+            continue
+
+        # Lap number (from lapNum column)
+        lap_num = (int(group['lap_number'].iloc[0])
+                   if 'lap_number' in group.columns
+                   else int(group_val) + 1)
+
+        # Sector times from lap_time running counter
+        dist = group['lap_distance'].values
+        lt = group['lap_time'].values
+        sector_times = []
+
+        for sec in sectors:
+            s_mask = ((dist >= sec['start_m']) &
+                      (dist <= sec['end_m']))
+            if s_mask.sum() > 0:
+                s_lt = lt[s_mask]
+                sector_times.append(float(s_lt.max() - s_lt.min()))
+            else:
+                sector_times.append(0.0)
+
+        # Max speed
+        max_speed = float(group['speed_kmh'].max())
+
+        summaries.append({
+            'lap_index': int(group_val),
+            'lap_number': lap_num,
+            'lap_time': lap_time,
+            'sector_times': sector_times,
+            'max_speed': max_speed,
+            'valid': True,
+        })
+
+    # Sort by lap_index
+    summaries.sort(key=lambda s: s['lap_index'])
+    return summaries
+
+
+# ============================================================
 # Main pipeline
 # ============================================================
 
-def load_and_prepare(csv_path: str) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+def load_and_prepare(csv_path: str,
+                     lap_index: Optional[int] = None
+                     ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
-    Full pipeline: load CSV → filter valid → find best lap → resample.
+    Full pipeline: load CSV → filter valid → select lap → resample.
+
+    Args:
+        csv_path: path to telemetry CSV
+        lap_index: specific lapIndex to use (0-based).
+                   If None, auto-selects the fastest lap.
 
     Returns:
         (resampled_data, metadata_dict)
     """
     raw = load_csv(csv_path)
     laps = extract_laps(raw)
-    lap_num, best_lap = find_best_lap(laps)
-    track_length = get_track_length(best_lap)
-    lap_time = get_lap_time(best_lap)
+
+    if lap_index is not None:
+        # User specified a lap — find it by lap_index
+        # laps dict is keyed by lap_number (from lapNum column)
+        # We need to match lap_index to lap_number
+        target_lap = None
+        for lap_num, lap_data in laps.items():
+            if 'lap_index' in lap_data.columns:
+                li = int(lap_data['lap_index'].iloc[0])
+                if li == lap_index:
+                    target_lap = (lap_num, lap_data)
+                    break
+            else:
+                # Fallback: assume lap_index = lap_number - 1
+                if lap_num - 1 == lap_index:
+                    target_lap = (lap_num, lap_data)
+                    break
+
+        if target_lap is None:
+            available = []
+            for ln, ld in laps.items():
+                if 'lap_index' in ld.columns:
+                    available.append(int(ld['lap_index'].iloc[0]))
+                else:
+                    available.append(ln - 1)
+            raise ValueError(
+                f"lapIndex {lap_index} not found. "
+                f"Available: {available}"
+            )
+
+        lap_num, selected_lap = target_lap
+        print(f"  Selected lap: lapIndex={lap_index} "
+              f"(lapNum={lap_num})")
+    else:
+        # Auto-select fastest
+        lap_num, selected_lap = find_best_lap(laps)
+
+    track_length = get_track_length(selected_lap)
+    lap_time = get_lap_time(selected_lap)
+
+    # Get lap_index for metadata
+    selected_lap_index = None
+    if 'lap_index' in selected_lap.columns:
+        selected_lap_index = int(selected_lap['lap_index'].iloc[0])
 
     # Validate before resample
-    best_lap = validate_data(best_lap, context=f"lap #{lap_num}")
+    selected_lap = validate_data(selected_lap, context=f"lap #{lap_num}")
 
-    resampled = resample_lap(best_lap, track_length)
+    resampled = resample_lap(selected_lap, track_length)
 
     # Validate after resample
     resampled = validate_data(resampled, context="resampled")
@@ -492,12 +636,16 @@ def load_and_prepare(csv_path: str) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         'best_lap_number': lap_num,
         'best_time': lap_time,
         'track_length': track_length,
-        'track_id': get_track_id(best_lap),
-        'car_id': get_car_id(best_lap),
+        'track_id': get_track_id(selected_lap),
+        'car_id': get_car_id(selected_lap),
+        'lap_index': selected_lap_index,
         'columns': list(raw.columns),
     }
 
-    print(f"  Best lap: #{lap_num} ({lap_time:.3f}s)")
+    if lap_index is not None:
+        print(f"  Using lap: lapIndex={lap_index} ({lap_time:.3f}s)")
+    else:
+        print(f"  Best lap: #{lap_num} ({lap_time:.3f}s)")
     print(f"  Track: {meta['track_id'] or 'unknown'} ({track_length:.0f}m)")
     print(f"  Team: {meta['car_id'] or 'unknown'}")
     print(f"  Resampled: {len(resampled)} points")

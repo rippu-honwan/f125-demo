@@ -4,7 +4,7 @@ F1 Lap Insight - Step 3: Lap Comparison
 Compare your game telemetry with real F1 driver data.
 
 Usage:
-    python scripts/03_lap_comparison.py data/my_lap.csv \
+    python scripts/03_lap_comparison.py data/my_lap.csv --lap 0 \
         --driver VER --year 2025 --session Q --track suzuka
 
 Changes from original:

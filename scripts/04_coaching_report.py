@@ -4,7 +4,7 @@ F1 Lap Insight - Step 4: Visual Coaching Report
 Generates multi-page visual coaching report.
 
 Usage:
-    python scripts/04_coaching_report.py data/my_lap.csv \
+    python scripts/04_coaching_report.py data/my_lap.csv --lap 0 \
         --driver VER --year 2025 --session Q --track suzuka
 
 Changes from original:

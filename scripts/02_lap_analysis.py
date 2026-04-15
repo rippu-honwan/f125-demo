@@ -4,12 +4,7 @@ F1 Lap Insight - Step 2: Lap Analysis
 Corner-by-corner analysis of your game lap.
 
 Usage:
-    python scripts/02_lap_analysis.py [csv_path] [--track suzuka]
-
-Changes from original:
-  - Uses shared plotting helpers
-  - Better auto-detection via SRT metadata
-  - Cleaner print output
+    python scripts/02_lap_analysis.py [csv_path] [--lap 0] [--track suzuka]
 """
 
 import sys
@@ -35,6 +30,9 @@ def parse_args():
         description="F1 Lap Insight - Lap Analysis"
     )
     parser.add_argument('csv', nargs='?', default=DEFAULT_CSV)
+    parser.add_argument('--lap', type=int, default=None,
+                        help='lapIndex to analyze (0-based). '
+                             'If omitted, uses fastest lap.')
     parser.add_argument('--track', '-t', default=None,
                         help='Track name (auto-detect if omitted)')
     return parser.parse_args()
@@ -45,9 +43,11 @@ def plot_corner_speeds(corners, track, meta):
     fig, ax = plt.subplots(figsize=(max(20, n * 1.2), 8))
     fig.set_facecolor(COLORS['bg'])
 
+    lap_label = f"lapIndex={meta.get('lap_index', '?')}"
     style_axis(ax, ylabel='Min Speed (km/h)',
                title=f"{track.name} - Corner Speeds  |  "
-                     f"Lap: {format_laptime(meta['best_time'])}")
+                     f"Lap: {format_laptime(meta['best_time'])} "
+                     f"({lap_label})")
 
     x = np.arange(n)
     colors = [c['color'] for c in corners]
@@ -83,11 +83,9 @@ def plot_corner_map(data, corners, track, meta):
     y = data['world_position_Y'].values
     dist = data['lap_distance'].values
 
-    # Track outline
     ax.plot(x, y, color='#2a2a2a', lw=12, zorder=1,
             solid_capstyle='round')
 
-    # Corner highlighting
     speed = data['speed_kmh'].values
     for c in corners:
         entry_m = c['entry_dist']
@@ -97,12 +95,9 @@ def plot_corner_map(data, corners, track, meta):
         if len(cidx) < 2:
             continue
 
-        # Highlight corner zone
         ax.plot(x[cidx], y[cidx], color=c['color'], lw=10,
                 alpha=0.5, zorder=3, solid_capstyle='round')
 
-        # Place marker at ACTUAL speed minimum within the zone,
-        # not the JSON apex_m (which may differ from this lap)
         zone_speeds = speed[cidx]
         actual_apex_idx = cidx[np.argmin(zone_speeds)]
 
@@ -116,8 +111,11 @@ def plot_corner_map(data, corners, track, meta):
     ax.set_aspect('equal')
     ax.set_xticks([])
     ax.set_yticks([])
+
+    lap_label = f"lapIndex={meta.get('lap_index', '?')}"
     ax.set_title(
-        f"{track.name} - Corner Map  |  {track.n_corners} Corners",
+        f"{track.name} - Corner Map  |  {track.n_corners} Corners  |  "
+        f"{lap_label}",
         color='white', fontsize=14, fontweight='bold'
     )
 
@@ -126,8 +124,9 @@ def plot_corner_map(data, corners, track, meta):
 
 
 def print_summary(corners, track, meta):
+    lap_label = f"lapIndex={meta.get('lap_index', '?')}"
     print(f"\n{'=' * 70}")
-    print(f"  {track.name} - Lap Analysis")
+    print(f"  {track.name} - Lap Analysis ({lap_label})")
     print(f"  Lap Time: {format_laptime(meta['best_time'])}")
     print(f"  {track.n_corners} Corners")
     print(f"{'=' * 70}")
@@ -162,9 +161,8 @@ def main():
     print("  F1 Lap Insight - Step 2: Lap Analysis")
     print("=" * 60)
 
-    data, meta = load_and_prepare(args.csv)
+    data, meta = load_and_prepare(args.csv, lap_index=args.lap)
 
-    # Track detection: CLI flag → SRT metadata → auto-detect by length
     if args.track:
         track = load_track(args.track)
     elif meta.get('track_id'):
@@ -185,7 +183,6 @@ def main():
     corners = analyze_solo(data, track)
     print_summary(corners, track, meta)
 
-    # Save plots
     fig1 = plot_corner_speeds(corners, track, meta)
     save_figure(fig1, OUTPUT_DIR / f"{track.short}_corner_speeds.png",
                 dpi=DPI_SAVE)
