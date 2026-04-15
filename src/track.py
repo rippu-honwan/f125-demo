@@ -25,24 +25,19 @@ class Corner:
     id: int
     name: str
     short: str
-    type: str           # low_speed, medium_speed, high_speed, flat_out
-    direction: str      # left, right
+    type: str
+    direction: str
     entry_m: float
     apex_m: float
     exit_m: float
     color: str = ""
 
     @property
-    def length(self) -> float:
-        return self.exit_m - self.entry_m
-
+    def length(self): return self.exit_m - self.entry_m
     @property
-    def is_slow(self) -> bool:
-        return self.type == "low_speed"
-
+    def is_slow(self): return self.type == "low_speed"
     @property
-    def is_fast(self) -> bool:
-        return self.type in ("high_speed", "flat_out")
+    def is_fast(self): return self.type in ("high_speed", "flat_out")
 
 
 @dataclass
@@ -51,10 +46,8 @@ class Sector:
     name: str
     start_m: float
     end_m: float
-
     @property
-    def length(self) -> float:
-        return self.end_m - self.start_m
+    def length(self): return self.end_m - self.start_m
 
 
 @dataclass
@@ -76,124 +69,63 @@ class Track:
     fastf1_race_name: str = ""
 
     @property
-    def n_corners(self) -> int:
-        return len(self.corners)
+    def n_corners(self): return len(self.corners)
 
-    def get_corner(self, corner_id: int) -> Optional[Corner]:
+    def get_corner(self, corner_id):
         for c in self.corners:
-            if c.id == corner_id:
-                return c
+            if c.id == corner_id: return c
         return None
 
-    def get_sector(self, sector_id: int) -> Optional[Sector]:
+    def get_sector(self, sector_id):
         for s in self.sectors:
-            if s.id == sector_id:
-                return s
+            if s.id == sector_id: return s
         return None
 
-    def corners_in_sector(self, sector_id: int) -> List[Corner]:
+    def corners_in_sector(self, sector_id):
         sector = self.get_sector(sector_id)
-        if sector is None:
-            return []
-        return [c for c in self.corners
-                if sector.start_m <= c.apex_m <= sector.end_m]
-
-    def corner_tuples(self):
-        """Legacy format: list of (id, name, short, entry, apex, exit)."""
-        return [
-            (c.id, c.name, c.short, c.entry_m, c.apex_m, c.exit_m)
-            for c in self.corners
-        ]
+        if sector is None: return []
+        return [c for c in self.corners if sector.start_m <= c.apex_m <= sector.end_m]
 
 
-def load_track(track_name: str) -> Track:
-    """
-    Load track definition from JSON file.
-
-    Args:
-        track_name: e.g. "suzuka", "monza", "spa"
-
-    Returns:
-        Track dataclass
-    """
+def load_track(track_name):
     path = TRACKS_DIR / f"{track_name.lower()}.json"
-
     if not path.exists():
         available = [f.stem for f in TRACKS_DIR.glob("*.json")]
-        raise FileNotFoundError(
-            f"Track '{track_name}' not found at {path}\n"
-            f"Available: {available}"
-        )
+        raise FileNotFoundError(f"Track '{track_name}' not found. Available: {available}")
 
     with open(path, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
-    corners = []
-    for i, c in enumerate(data.get('corners', [])):
-        corners.append(Corner(
-            id=c['id'],
-            name=c['name'],
-            short=c['short'],
-            type=c.get('type', 'medium_speed'),
-            direction=c.get('direction', 'right'),
-            entry_m=c['entry_m'],
-            apex_m=c['apex_m'],
-            exit_m=c['exit_m'],
-            color=CORNER_COLORS[i % len(CORNER_COLORS)],
-        ))
+    corners = [Corner(
+        id=c['id'], name=c['name'], short=c['short'],
+        type=c.get('type','medium_speed'), direction=c.get('direction','right'),
+        entry_m=c['entry_m'], apex_m=c['apex_m'], exit_m=c['exit_m'],
+        color=CORNER_COLORS[i % len(CORNER_COLORS)],
+    ) for i, c in enumerate(data.get('corners', []))]
 
-    sectors = []
-    for s in data.get('sectors', []):
-        sectors.append(Sector(
-            id=s['id'],
-            name=s.get('name', f"Sector {s['id']}"),
-            start_m=s['start_m'],
-            end_m=s['end_m'],
-        ))
+    sectors = [Sector(id=s['id'], name=s.get('name',f"Sector {s['id']}"),
+               start_m=s['start_m'], end_m=s['end_m'])
+               for s in data.get('sectors', [])]
 
-    drs_zones = []
-    for d in data.get('drs_zones', []):
-        drs_zones.append(DRSZone(
-            start_m=d['start_m'],
-            end_m=d['end_m'],
-            detection_m=d.get('detection_m', 0),
-        ))
+    drs_zones = [DRSZone(start_m=d['start_m'], end_m=d['end_m'],
+                 detection_m=d.get('detection_m',0))
+                 for d in data.get('drs_zones', [])]
 
-    fastf1_data = data.get('fastf1', {})
-
-    track = Track(
-        name=data['name'],
-        short=data.get('short', track_name.lower()),
-        country=data.get('country', ''),
-        length_m=data['length_m'],
-        corners=corners,
-        sectors=sectors,
-        drs_zones=drs_zones,
-        fastf1_race_name=fastf1_data.get('race_name', ''),
+    return Track(
+        name=data['name'], short=data.get('short', track_name.lower()),
+        country=data.get('country',''), length_m=data['length_m'],
+        corners=corners, sectors=sectors, drs_zones=drs_zones,
+        fastf1_race_name=data.get('fastf1',{}).get('race_name',''),
     )
 
-    return track
 
-
-def list_tracks() -> List[str]:
-    """List all available track names."""
+def list_tracks():
     return sorted([f.stem for f in TRACKS_DIR.glob("*.json")])
 
 
-def auto_detect_track(track_length: float, tolerance: float = 200) -> Optional[Track]:
-    """
-    Auto-detect track from telemetry track length.
-
-    Args:
-        track_length: measured track length in meters
-        tolerance: matching tolerance in meters
-
-    Returns:
-        Track if matched, None otherwise
-    """
+def auto_detect_track(track_length, tolerance=200):
     best_match = None
     best_diff = float('inf')
-
     for name in list_tracks():
         try:
             track = load_track(name)
@@ -203,5 +135,4 @@ def auto_detect_track(track_length: float, tolerance: float = 200) -> Optional[T
                 best_match = track
         except Exception:
             continue
-
     return best_match
