@@ -1,0 +1,148 @@
+{
+  "name": "Autodromo Nazionale Monza",
+  "country": "Italy",
+  "short": "monza",
+  "length_m": 5798,
+  "corners": [
+    {
+      "id": 1,
+      "name": "Rettifilo 1",
+      "short": "RET1",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 780,
+      "apex_m": 870,
+      "exit_m": 1070
+    },
+    {
+      "id": 2,
+      "name": "Rettifilo 2",
+      "short": "RET2",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 920,
+      "apex_m": 979,
+      "exit_m": 998
+    },
+    {
+      "id": 3,
+      "name": "Rettifilo 3",
+      "short": "RET3",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 990,
+      "apex_m": 1020,
+      "exit_m": 1060
+    },
+    {
+      "id": 4,
+      "name": "Roggia 1",
+      "short": "ROG1",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 2020,
+      "apex_m": 2152,
+      "exit_m": 2227
+    },
+    {
+      "id": 5,
+      "name": "Roggia 2",
+      "short": "ROG2",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 2170,
+      "apex_m": 2196,
+      "exit_m": 2280
+    },
+    {
+      "id": 6,
+      "name": "Lesmo 1",
+      "short": "LES1",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 2492,
+      "apex_m": 2553,
+      "exit_m": 2664
+    },
+    {
+      "id": 7,
+      "name": "Lesmo 2",
+      "short": "LES2",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 2849,
+      "apex_m": 2900,
+      "exit_m": 2963
+    },
+    {
+      "id": 8,
+      "name": "Ascari 1",
+      "short": "ASC1",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 3830,
+      "apex_m": 3954,
+      "exit_m": 4101
+    },
+    {
+      "id": 9,
+      "name": "Ascari 2",
+      "short": "ASC2",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 4010,
+      "apex_m": 4059,
+      "exit_m": 4259
+    },
+    {
+      "id": 10,
+      "name": "Ascari 3",
+      "short": "ASC3",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 4100,
+      "apex_m": 4148,
+      "exit_m": 4250
+    },
+    {
+      "id": 11,
+      "name": "Parabolica",
+      "short": "PARA",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 5139,
+      "apex_m": 5220,
+      "exit_m": 5329
+    }
+  ],
+  "sectors": [
+    {
+      "id": 1,
+      "name": "Sector 1",
+      "start_m": 0,
+      "end_m": 2080
+    },
+    {
+      "id": 2,
+      "name": "Sector 2",
+      "start_m": 2080,
+      "end_m": 4200
+    },
+    {
+      "id": 3,
+      "name": "Sector 3",
+      "start_m": 4200,
+      "end_m": 5798
+    }
+  ],
+  "drs_zones": [
+    {
+      "start_m": 350,
+      "end_m": 780
+    },
+    {
+      "start_m": 1200,
+      "end_m": 2020
+    }
+  ]
+}

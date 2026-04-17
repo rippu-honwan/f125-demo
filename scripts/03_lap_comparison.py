@@ -260,7 +260,7 @@ def main():
              color=delta_color(td))
 
     # Save
-    out = OUTPUT_DIR / (f"step3_comparison_{args.driver}_"
+    out = OUTPUT_DIR / (f"comparison_{args.driver}_"
                         f"{args.year}_{args.session}.png")
     save_figure(fig, out, dpi=200)
 
