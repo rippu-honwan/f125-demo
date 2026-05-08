@@ -10,9 +10,9 @@
       "short": "RET1",
       "type": "medium_speed",
       "direction": "right",
-      "entry_m": 780,
-      "apex_m": 870,
-      "exit_m": 1070
+      "entry_m": 779,
+      "apex_m": 880,
+      "exit_m": 922
     },
     {
       "id": 2,
@@ -20,15 +20,15 @@
       "short": "RET2",
       "type": "low_speed",
       "direction": "right",
-      "entry_m": 920,
-      "apex_m": 979,
-      "exit_m": 998
+      "entry_m": 922,
+      "apex_m": 944,
+      "exit_m": 960
     },
     {
       "id": 3,
       "name": "Rettifilo 3",
       "short": "RET3",
-      "type": "low_speed",
+      "type": "high_speed",
       "direction": "left",
       "entry_m": 990,
       "apex_m": 1020,
