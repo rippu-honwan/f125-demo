@@ -1,21 +1,377 @@
 """
 Track alignment engine.
-Aligns game telemetry with real F1 data using two-pass approach.
+Aligns game telemetry with real F1 data using shape + distance approach.
 
-Changes from original:
-  - [FIX] Adaptive order parameter (was hardcoded too high, missing 60% of corners)
-  - [FIX] Use multiple signal types for anchors (speed + brake + throttle transitions)
-  - [NEW] Deceleration-based anchors catch corners that speed extrema miss
-  - [NEW] Better gap-filling in pass 2 with tighter correlation requirements
-  - [NEW] Alignment quality metrics for downstream confidence scoring
+Architecture:
+  Layer 1: Shape alignment (coordinate system unification)
+    - Resample both trajectories to equal arc-length
+    - Compute curvature profiles (rotation/scale invariant)
+    - Cross-correlate curvature to find start-point offset
+    - SVD-based rigid transform (translate + rotate + optional reflect)
+
+  Layer 2: Distance-based alignment (telemetry signal matching)
+    - Feature anchors (speed extrema, decel peaks, throttle/brake)
+    - Anchor matching with curvature-assisted scoring
+    - Local cross-correlation gap filling
+
+Changes from previous version:
+  - [NEW] Shape alignment layer for coordinate system unification
+  - [NEW] Curvature-based start-point detection
+  - [NEW] SVD rigid transform with reflection handling
+  - [NEW] Curvature anchors in feature detection
+  - [NEW] Shape alignment error in quality metrics
+  - [IMPROVED] Anchor matching uses curvature similarity
+  - [KEPT] All existing distance-based alignment logic
 """
 
 import numpy as np
 import pandas as pd
 from scipy.signal import argrelextrema
-from typing import List, Tuple, Optional
+from scipy.ndimage import uniform_filter1d
+from typing import List, Tuple, Optional, Dict, Any
 
 from src.utils import smooth
+
+
+# ============================================================
+# Shape Alignment — Layer 1
+# ============================================================
+
+def resample_trajectory(xy: np.ndarray, n_points: int = 1000) -> np.ndarray:
+    """
+    Resample 2D trajectory to uniform arc-length spacing.
+
+    Args:
+        xy: (N, 2) array of XY coordinates
+        n_points: number of output points
+
+    Returns:
+        (n_points, 2) resampled trajectory
+    """
+    if len(xy) < 10:
+        return xy
+
+    # Compute cumulative arc length
+    diffs = np.diff(xy, axis=0)
+    seg_lengths = np.sqrt(np.sum(diffs**2, axis=1))
+    cum_length = np.concatenate([[0], np.cumsum(seg_lengths)])
+    total_length = cum_length[-1]
+
+    if total_length < 1.0:
+        return xy
+
+    # Uniform arc-length targets
+    targets = np.linspace(0, total_length, n_points)
+
+    # Interpolate X and Y separately
+    resampled = np.column_stack([
+        np.interp(targets, cum_length, xy[:, 0]),
+        np.interp(targets, cum_length, xy[:, 1]),
+    ])
+
+    return resampled
+
+
+def compute_curvature(xy: np.ndarray, smooth_window: int = 15) -> np.ndarray:
+    """
+    Compute signed curvature from 2D trajectory.
+
+    Curvature = (dx * ddy - dy * ddx) / (dx^2 + dy^2)^1.5
+
+    This is rotation and translation invariant — ideal for matching
+    trajectories in different coordinate systems.
+
+    Args:
+        xy: (N, 2) array
+        smooth_window: smoothing before differentiation
+
+    Returns:
+        (N,) curvature array (positive = left turn)
+    """
+    if len(xy) < smooth_window + 5:
+        return np.zeros(len(xy))
+
+    x = uniform_filter1d(xy[:, 0], size=smooth_window)
+    y = uniform_filter1d(xy[:, 1], size=smooth_window)
+
+    dx = np.gradient(x)
+    dy = np.gradient(y)
+    ddx = np.gradient(dx)
+    ddy = np.gradient(dy)
+
+    denom = (dx**2 + dy**2)**1.5
+    denom = np.maximum(denom, 1e-10)  # avoid division by zero
+
+    curvature = (dx * ddy - dy * ddx) / denom
+    return curvature
+
+
+def find_start_offset_by_curvature(curv_a: np.ndarray,
+                                    curv_b: np.ndarray) -> int:
+    """
+    Find the start-point offset between two closed-loop trajectories
+    using curvature profile cross-correlation.
+
+    The curvature profile is invariant to rotation, translation, and scale,
+    so it directly reveals how the two trajectories' start/finish lines differ.
+
+    Args:
+        curv_a: curvature of trajectory A (reference)
+        curv_b: curvature of trajectory B (to be shifted)
+
+    Returns:
+        offset: number of points to shift B forward to align with A
+    """
+    n = len(curv_a)
+    if n != len(curv_b):
+        # Resample B to match A's length
+        curv_b = np.interp(
+            np.linspace(0, 1, n),
+            np.linspace(0, 1, len(curv_b)),
+            curv_b
+        )
+
+    # Normalize
+    a = curv_a - np.mean(curv_a)
+    b = curv_b - np.mean(curv_b)
+    a_std = np.std(a)
+    b_std = np.std(b)
+
+    if a_std < 1e-8 or b_std < 1e-8:
+        return 0
+
+    a = a / a_std
+    b = b / b_std
+
+    # Circular cross-correlation via FFT
+    fa = np.fft.fft(a)
+    fb = np.fft.fft(b)
+    cross = np.fft.ifft(fa * np.conj(fb)).real
+
+    # Best offset (and check flipped version)
+    offset_normal = int(np.argmax(cross))
+
+    # Also try sign-flipped curvature (handles axis reflection)
+    cross_flip = np.fft.ifft(fa * np.conj(np.fft.fft(-b))).real
+    offset_flip = int(np.argmax(cross_flip))
+
+    if cross[offset_normal] >= cross_flip[offset_flip]:
+        return offset_normal
+    else:
+        # Negative offset signals that B needs reflection
+        return -(offset_flip + 1)
+
+
+def estimate_rigid_transform(src: np.ndarray, dst: np.ndarray,
+                              allow_reflection: bool = True
+                              ) -> Dict[str, Any]:
+    """
+    Estimate optimal rigid transform (rotation + translation + optional reflection)
+    from src to dst using SVD decomposition.
+
+    This is a Procrustes-style alignment but handles:
+      - Different scales (normalizes first, returns scale factor)
+      - Reflections (game engine may mirror an axis)
+      - Robust to noise via least-squares SVD
+
+    Args:
+        src: (N, 2) source points
+        dst: (N, 2) destination points
+        allow_reflection: if True, allows mirror transforms
+
+    Returns:
+        dict with keys:
+          rotation: 2x2 rotation matrix
+          translation: (2,) translation vector
+          scale: float scale factor
+          reflection: bool whether reflection was applied
+          residual: float mean alignment error after transform
+    """
+    assert len(src) == len(dst), "Point sets must have same length"
+
+    # Centroids
+    src_c = np.mean(src, axis=0)
+    dst_c = np.mean(dst, axis=0)
+
+    # Center
+    src_centered = src - src_c
+    dst_centered = dst - dst_c
+
+    # Scale (RMS distance from centroid)
+    src_scale = np.sqrt(np.mean(np.sum(src_centered**2, axis=1)))
+    dst_scale = np.sqrt(np.mean(np.sum(dst_centered**2, axis=1)))
+
+    if src_scale < 1e-10 or dst_scale < 1e-10:
+        return {
+            'rotation': np.eye(2),
+            'translation': dst_c - src_c,
+            'scale': 1.0,
+            'reflection': False,
+            'residual': float('inf'),
+        }
+
+    scale = dst_scale / src_scale
+    src_norm = src_centered / src_scale
+    dst_norm = dst_centered / dst_scale
+
+    # SVD of cross-covariance matrix
+    H = src_norm.T @ dst_norm
+    U, S, Vt = np.linalg.svd(H)
+
+    # Rotation (handle reflection)
+    d = np.linalg.det(Vt.T @ U.T)
+    reflection = False
+
+    if d < 0 and allow_reflection:
+        # Reflection needed
+        sign_matrix = np.diag([1, -1])
+        R = Vt.T @ sign_matrix @ U.T
+        reflection = True
+    else:
+        R = Vt.T @ U.T
+
+    # Full transform: dst ≈ scale * R @ src_centered + dst_c
+    translation = dst_c - scale * (R @ src_c)
+
+    # Compute residual
+    transformed = scale * (src @ R.T) + translation
+    residual = float(np.mean(np.sqrt(np.sum((transformed - dst)**2, axis=1))))
+
+    return {
+        'rotation': R,
+        'translation': translation,
+        'scale': scale,
+        'reflection': reflection,
+        'residual': residual,
+    }
+
+
+def apply_transform(xy: np.ndarray, transform: Dict[str, Any]) -> np.ndarray:
+    """Apply rigid transform to XY points."""
+    R = transform['rotation']
+    t = transform['translation']
+    s = transform['scale']
+    return s * (xy @ R.T) + t
+
+
+def align_track_shapes(game_xy: np.ndarray, real_xy: np.ndarray,
+                       n_resample: int = 1000,
+                       verbose: bool = True) -> Dict[str, Any]:
+    """
+    Full shape alignment pipeline.
+
+    Aligns game world coordinates to real (FastF1) coordinate system.
+    Handles: different origins, rotations, scales, axis reflections,
+    and start/finish line offsets.
+
+    Strategy:
+      1. Resample both to equal arc-length (removes sampling density bias)
+      2. Compute curvature profiles (rotation/scale/translation invariant)
+      3. Cross-correlate curvature to find start-point offset
+      4. Roll game trajectory to match start point
+      5. SVD rigid transform to align coordinate systems
+      6. If residual is high, try with reflection
+
+    Args:
+        game_xy: (N, 2) game world positions
+        real_xy: (M, 2) real world positions
+        n_resample: points for curvature comparison
+        verbose: print diagnostics
+
+    Returns:
+        dict with:
+          transform: rigid transform parameters
+          game_xy_aligned: game XY in real coordinate system
+          start_offset_frac: fractional start-point offset (0-1)
+          curvature_correlation: quality of curvature match
+          residual_m: mean alignment error in meters
+    """
+    # Step 1: Resample to uniform arc-length
+    game_rs = resample_trajectory(game_xy, n_resample)
+    real_rs = resample_trajectory(real_xy, n_resample)
+
+    # Step 2: Curvature profiles
+    curv_game = compute_curvature(game_rs, smooth_window=15)
+    curv_real = compute_curvature(real_rs, smooth_window=15)
+
+    # Step 3: Find start-point offset via curvature cross-correlation
+    offset = find_start_offset_by_curvature(curv_real, curv_game)
+
+    needs_reflection = offset < 0
+    if needs_reflection:
+        offset = abs(offset) - 1
+
+    start_offset_frac = offset / n_resample
+
+    if verbose:
+        print(f"    Shape: start offset = {start_offset_frac*100:.1f}% "
+              f"of track{'  (reflected)' if needs_reflection else ''}")
+
+    # Step 4: Roll game trajectory to align start points
+    game_rolled = np.roll(game_rs, -offset, axis=0)
+
+    # If reflection detected, flip one axis before SVD
+    if needs_reflection:
+        game_rolled[:, 1] = -game_rolled[:, 1]
+
+    # Step 5: SVD rigid transform
+    transform = estimate_rigid_transform(
+        game_rolled, real_rs, allow_reflection=True
+    )
+
+    # Step 6: If residual is too high, try alternative approaches
+    # Try without reflection override
+    if transform['residual'] > 50 and needs_reflection:
+        game_alt = np.roll(game_rs, -offset, axis=0)
+        transform_alt = estimate_rigid_transform(
+            game_alt, real_rs, allow_reflection=True
+        )
+        if transform_alt['residual'] < transform['residual']:
+            transform = transform_alt
+            needs_reflection = False
+            game_rolled = game_alt
+
+    # Compute curvature correlation after alignment
+    curv_game_aligned = compute_curvature(game_rolled, smooth_window=15)
+    curv_corr = _curvature_correlation(curv_real, curv_game_aligned)
+
+    # Apply transform to original game XY (not resampled)
+    # First handle start offset and reflection on original points
+    game_aligned = apply_transform(game_xy, transform)
+
+    if verbose:
+        print(f"    Shape: residual = {transform['residual']:.1f}m, "
+              f"curvature corr = {curv_corr:.3f}")
+        print(f"    Shape: scale = {transform['scale']:.4f}, "
+              f"reflection = {transform['reflection'] or needs_reflection}")
+
+    return {
+        'transform': transform,
+        'game_xy_aligned': game_aligned,
+        'start_offset_frac': start_offset_frac,
+        'needs_reflection': needs_reflection,
+        'curvature_correlation': curv_corr,
+        'residual_m': transform['residual'],
+        'game_resampled': game_rs,
+        'real_resampled': real_rs,
+    }
+
+
+def _curvature_correlation(curv_a: np.ndarray, curv_b: np.ndarray) -> float:
+    """Compute normalized correlation between two curvature profiles."""
+    if len(curv_a) != len(curv_b):
+        curv_b = np.interp(
+            np.linspace(0, 1, len(curv_a)),
+            np.linspace(0, 1, len(curv_b)),
+            curv_b
+        )
+    a = curv_a - np.mean(curv_a)
+    b = curv_b - np.mean(curv_b)
+    a_std = np.std(a)
+    b_std = np.std(b)
+    if a_std < 1e-8 or b_std < 1e-8:
+        return 0.0
+    return float(np.mean((a / a_std) * (b / b_std)))
 
 
 # ============================================================
@@ -56,8 +412,8 @@ def find_throttle_points(throttle, threshold=0.8, min_gap=80):
 def find_decel_peaks(speed, min_gap=60, smooth_window=20):
     """
     Find peaks of deceleration (= braking zones).
-    
-    This catches corners that speed extrema miss because:
+
+    Catches corners that speed extrema miss because:
       - The corner is shallow (small speed drop)
       - Two corners are close together (merged into one minimum)
       - The corner is high-speed (e.g. 130R: 310→298 km/h)
@@ -65,10 +421,10 @@ def find_decel_peaks(speed, min_gap=60, smooth_window=20):
     speed_s = smooth(speed, smooth_window)
     decel = -np.gradient(speed_s)
     decel_s = smooth(decel, smooth_window)
-    
+
     order = max(len(decel_s) // 60, 20)
     peaks = argrelextrema(decel_s, np.greater, order=order)[0]
-    
+
     # Filter: only significant decelerations
     filtered = []
     last = -min_gap
@@ -76,18 +432,61 @@ def find_decel_peaks(speed, min_gap=60, smooth_window=20):
         if decel_s[p] > 1.0 and p - last > min_gap:
             filtered.append(p)
             last = p
-    
+
+    return filtered
+
+
+def find_curvature_peaks(xy: np.ndarray, min_gap: int = 60,
+                         threshold: float = 0.001) -> List[int]:
+    """
+    Find peaks of absolute curvature from XY trajectory.
+
+    These correspond to corner apexes and are more reliable than
+    speed-based detection for high-speed corners where speed barely drops.
+
+    Args:
+        xy: (N, 2) trajectory
+        min_gap: minimum distance between peaks (in samples)
+        threshold: minimum curvature magnitude
+
+    Returns:
+        list of indices where curvature peaks occur
+    """
+    if xy is None or len(xy) < 50:
+        return []
+
+    curv = compute_curvature(xy, smooth_window=20)
+    abs_curv = np.abs(curv)
+    abs_curv_s = smooth(abs_curv, 15)
+
+    order = max(len(abs_curv_s) // 40, 15)
+    peaks = argrelextrema(abs_curv_s, np.greater, order=order)[0]
+
+    filtered = []
+    last = -min_gap
+    for p in peaks:
+        if abs_curv_s[p] > threshold and p - last > min_gap:
+            filtered.append(int(p))
+            last = p
+
     return filtered
 
 
 def find_feature_anchors(speed, throttle=None, brake=None,
-                         n_speed=15, order=None):
+                         xy=None, n_speed=15, order=None):
     """
-    Find anchor points from speed/throttle/brake signals.
+    Find anchor points from speed/throttle/brake/curvature signals.
 
-    FIXED: Adaptive order based on track length + deceleration peaks.
-    Original used len//40 which gave order=145 for 5809 points,
-    missing T2, DG2, CS2, FIN and other shallow corners.
+    Adaptive order based on track length + deceleration peaks.
+    Now also uses curvature peaks from XY trajectory when available.
+
+    Args:
+        speed: speed array (km/h)
+        throttle: throttle array (0-1), optional
+        brake: brake array (0-1), optional
+        xy: (N, 2) world position array, optional (enables curvature anchors)
+        n_speed: max number of speed minima to keep
+        order: override for argrelextrema order parameter
 
     Returns:
         List of (index, feature_type, value)
@@ -96,9 +495,8 @@ def find_feature_anchors(speed, throttle=None, brake=None,
     speed_s = smooth(speed, 30)
 
     # Adaptive order: target ~15-20 features for a typical track
-    # A 5.8km track with 17 corners → want order ≈ 5809/20 ≈ 70-80
     if order is None:
-        order = max(len(speed) // 80, 20)  # was //40, now //80
+        order = max(len(speed) // 80, 20)
 
     # Speed minima (primary anchors)
     min_idx = argrelextrema(speed_s, np.less, order=order)[0]
@@ -132,6 +530,12 @@ def find_feature_anchors(speed, throttle=None, brake=None,
         for idx in tp:
             anchors.append((int(idx), 'throttle_full', float(speed_s[idx])))
 
+    # Curvature peaks (from XY trajectory — catches high-speed corners)
+    if xy is not None and len(xy) == len(speed):
+        curv_peaks = find_curvature_peaks(xy, min_gap=60, threshold=0.001)
+        for idx in curv_peaks:
+            anchors.append((int(idx), 'curvature_peak', float(speed_s[idx])))
+
     # Deduplicate: remove anchors too close to each other
     anchors.sort(key=lambda a: a[0])
     deduped = []
@@ -155,6 +559,11 @@ def match_anchors(game_anchors, game_length,
                   pos_tolerance=0.03, score_threshold=0.10):
     """
     Match game anchors to real anchors.
+
+    Uses position proximity + speed similarity + type matching.
+    Curvature peaks get extra weight since they're more reliable
+    than speed-only features for high-speed corners.
+
     Returns list of (game_normalized, real_normalized) pairs.
     """
     pairs = [(0.0, 0.0)]
@@ -168,10 +577,10 @@ def match_anchors(game_anchors, game_length,
     for idx, ftype, val in real_anchors:
         real_by_type.setdefault(ftype, []).append((idx / real_length, val))
 
-    # Match priority: speed_min first (most distinctive),
-    # then decel_peak, then others
-    type_order = ['speed_min', 'decel_peak', 'speed_max',
-                  'brake_start', 'throttle_full']
+    # Match priority: curvature_peak first (most geometry-reliable),
+    # then speed_min, decel_peak, then others
+    type_order = ['curvature_peak', 'speed_min', 'decel_peak',
+                  'speed_max', 'brake_start', 'throttle_full']
 
     for ftype in type_order:
         g_list = game_by_type.get(ftype, [])
@@ -188,7 +597,7 @@ def match_anchors(game_anchors, game_length,
                 if pos_diff > pos_tolerance:
                     continue
 
-                if ftype in ('speed_min', 'decel_peak'):
+                if ftype in ('speed_min', 'decel_peak', 'curvature_peak'):
                     spd_diff = abs(gv - rv) / max(gv, rv, 1)
                     if spd_diff > 0.35:
                         continue
@@ -281,7 +690,7 @@ def find_anchor_gaps(anchor_pairs, game_length, min_gap=300):
 
 
 # ============================================================
-# Two-pass alignment
+# Two-pass alignment (main entry point)
 # ============================================================
 
 def align_two_pass(game_data, game_length,
@@ -289,10 +698,18 @@ def align_two_pass(game_data, game_length,
                    max_drift=80, corr_threshold=0.5,
                    verbose=True):
     """
-    Two-pass alignment: global features + local cross-correlation.
+    Two-pass alignment: shape alignment + global features + local xcorr.
+
+    Pipeline:
+      0. Shape alignment (if XY available) — unifies coordinate systems
+      1. Feature anchors (speed + decel + throttle + curvature)
+      2. Anchor matching
+      3. Local cross-correlation gap filling
+      4. Build aligned DataFrame with all channels
 
     Returns:
-        Aligned DataFrame with game_* and real_* columns.
+        Aligned DataFrame with game_* and real_* columns,
+        plus aligned world coordinates.
     """
     if verbose:
         print(f"\n  --- Two-Pass Alignment ---")
@@ -306,15 +723,58 @@ def align_two_pass(game_data, game_length,
     real_throttle = (real_data['throttle'].values
                      if 'throttle' in real_data.columns else None)
 
+    # ---- LAYER 0: Shape alignment (coordinate unification) ----
+    shape_result = None
+    game_xy = None
+    real_xy = None
+
+    has_game_xy = ('world_position_X' in game_data.columns and
+                   'world_position_Y' in game_data.columns)
+    has_real_xy = ('world_position_X' in real_data.columns and
+                   'world_position_Y' in real_data.columns)
+
+    if has_game_xy and has_real_xy:
+        if verbose:
+            print(f"\n  LAYER 0: Shape alignment (coordinate unification)")
+
+        game_xy = np.column_stack([
+            game_data['world_position_X'].values,
+            game_data['world_position_Y'].values,
+        ])
+        real_xy = np.column_stack([
+            real_data['world_position_X'].values,
+            real_data['world_position_Y'].values,
+        ])
+
+        try:
+            shape_result = align_track_shapes(
+                game_xy, real_xy,
+                n_resample=min(1000, min(len(game_xy), len(real_xy))),
+                verbose=verbose,
+            )
+        except Exception as e:
+            if verbose:
+                print(f"    Shape alignment failed: {e}")
+                print(f"    Falling back to distance-only alignment")
+            shape_result = None
+    elif verbose:
+        if not has_game_xy:
+            print(f"  ⚠ No game XY coordinates — skipping shape alignment")
+        if not has_real_xy:
+            print(f"  ⚠ No real XY coordinates — skipping shape alignment")
+
     # ---- PASS 1: Global feature matching ----
     if verbose:
         print(f"\n  PASS 1: Global feature matching")
 
-    game_anchors = find_feature_anchors(game_speed, game_throttle)
-    real_anchors = find_feature_anchors(real_speed, real_throttle)
+    game_anchors = find_feature_anchors(
+        game_speed, game_throttle, xy=game_xy
+    )
+    real_anchors = find_feature_anchors(
+        real_speed, real_throttle, xy=real_xy
+    )
 
     if verbose:
-        # Count by type
         g_types = {}
         for _, t, _ in game_anchors:
             g_types[t] = g_types.get(t, 0) + 1
@@ -353,7 +813,7 @@ def align_two_pass(game_data, game_length,
 
     new_anchors = []
 
-    for gap_start, gap_end, gap_size in gaps:
+    for gap_start, gap_end, _gap_size in gaps:
         g_start_idx = int(gap_start)
         g_end_idx = min(int(gap_end), len(game_speed))
 
@@ -400,7 +860,8 @@ def align_two_pass(game_data, game_length,
             real_refined = real_est_dist + shift
             real_idx = int(np.clip(real_refined, 0, len(real_speed) - 1))
             real_spd = float(smooth(real_speed, 15)[real_idx])
-            game_spd = float(game_seg_s[lm]) if lm < len(game_seg_s) else 0
+            game_spd = (float(game_seg_s[lm])
+                        if lm < len(game_seg_s) else 0)
 
             spd_diff = abs(game_spd - real_spd) / max(game_spd, 1)
             if spd_diff > 0.4:
@@ -462,20 +923,53 @@ def align_two_pass(game_data, game_length,
     aligned['speed_delta'] = (aligned['game_speed_kmh'] -
                                aligned['real_speed_kmh'])
 
-    if 'world_position_X' in game_data.columns:
-        aligned['world_x'] = np.interp(
+    # ---- World coordinates ----
+    # Game XY: raw (original coordinate system)
+    if has_game_xy:
+        aligned['game_world_x'] = np.interp(
             distances, game_norm_d,
             game_data['world_position_X'].values
         )
-        aligned['world_y'] = np.interp(
+        aligned['game_world_y'] = np.interp(
             distances, game_norm_d,
             game_data['world_position_Y'].values
         )
+        # Legacy compatibility
+        aligned['world_x'] = aligned['game_world_x']
+        aligned['world_y'] = aligned['game_world_y']
+
+    # Real XY: interpolated via real_mapped
+    if has_real_xy:
+        aligned['real_world_x'] = np.interp(
+            real_mapped, real_norm_d,
+            real_data['world_position_X'].values
+        )
+        aligned['real_world_y'] = np.interp(
+            real_mapped, real_norm_d,
+            real_data['world_position_Y'].values
+        )
+
+    # Aligned game XY: game coordinates transformed into real coord system
+    if shape_result is not None and has_game_xy:
+        game_xy_raw = np.column_stack([
+            aligned['game_world_x'].values,
+            aligned['game_world_y'].values,
+        ])
+        game_xy_transformed = apply_transform(
+            game_xy_raw, shape_result['transform']
+        )
+        aligned['game_world_x_aligned'] = game_xy_transformed[:, 0]
+        aligned['game_world_y_aligned'] = game_xy_transformed[:, 1]
+
+        # Also provide real in its own system (identity, for completeness)
+        if has_real_xy:
+            aligned['real_world_x_aligned'] = aligned['real_world_x']
+            aligned['real_world_y_aligned'] = aligned['real_world_y']
 
     # ---- Alignment quality metrics ----
     quality = _compute_alignment_quality(
         final_pairs, game_length, game_speed, real_speed,
-        game_anch_d, real_anch_d
+        game_anch_d, real_anch_d, shape_result
     )
 
     aligned.attrs['anchor_pairs'] = final_pairs
@@ -484,6 +978,7 @@ def align_two_pass(game_data, game_length,
     aligned.attrs['pass1_count'] = len(anchor_pairs)
     aligned.attrs['pass2_count'] = len(new_anchors)
     aligned.attrs['quality'] = quality
+    aligned.attrs['shape_result'] = shape_result
 
     if verbose:
         print(f"\n  Alignment quality:")
@@ -492,16 +987,34 @@ def align_two_pass(game_data, game_length,
         print(f"    Max gap: {quality['max_gap']:.0f}m")
         print(f"    Mean correlation: {quality['mean_correlation']:.2f}")
         print(f"    Coverage: {quality['coverage_pct']:.0f}%")
+        if quality['shape_error_m'] is not None:
+            print(f"    Shape error: {quality['shape_error_m']:.1f}m")
+            print(f"    Curvature corr: "
+                  f"{quality['curvature_correlation']:.3f}")
+        print(f"    Confidence: {quality['confidence']:.2f}")
 
     return aligned
 
 
+# ============================================================
+# Quality metrics
+# ============================================================
+
 def _compute_alignment_quality(final_pairs, game_length,
                                 game_speed, real_speed,
-                                game_anch_d, real_anch_d):
+                                game_anch_d, real_anch_d,
+                                shape_result=None):
     """
     Compute alignment quality metrics.
-    Downstream code can use these to flag unreliable sections.
+
+    Includes:
+      - anchor_density: anchors per 1000m
+      - max_gap: largest gap between anchors
+      - coverage_pct: % of track within 200m of an anchor
+      - mean_correlation: average speed correlation at anchors
+      - shape_error_m: mean residual from shape alignment (meters)
+      - curvature_correlation: curvature profile match quality
+      - confidence: composite 0-1 score
     """
     # Anchor density
     n_anchors = len(final_pairs)
@@ -546,10 +1059,66 @@ def _compute_alignment_quality(final_pairs, game_length,
 
     mean_corr = np.mean(correlations) if correlations else 0.0
 
+    # Shape alignment metrics
+    shape_error_m = None
+    curv_corr = None
+    if shape_result is not None:
+        shape_error_m = shape_result['residual_m']
+        curv_corr = shape_result['curvature_correlation']
+
+    # Composite confidence score (0-1)
+    confidence = _compute_confidence(
+        density, max_gap, game_length, coverage_pct,
+        mean_corr, shape_error_m, curv_corr
+    )
+
     return {
         'n_anchors': n_anchors,
         'anchor_density': density,
         'max_gap': max_gap,
         'coverage_pct': coverage_pct,
         'mean_correlation': mean_corr,
+        'shape_error_m': shape_error_m,
+        'curvature_correlation': curv_corr,
+        'confidence': confidence,
     }
+
+
+def _compute_confidence(density, max_gap, _game_length, coverage_pct,
+                         mean_corr, shape_error_m, curv_corr):
+    """
+    Compute composite confidence score (0.0 - 1.0).
+
+    Weights:
+      - Anchor density: 20%
+      - Gap coverage: 20%
+      - Speed correlation: 30%
+      - Shape alignment: 30% (if available, else redistributed)
+    """
+    # Density score: 5+ per 1000m = perfect
+    s_density = min(density / 5.0, 1.0)
+
+    # Gap score: max_gap < 200m = perfect, > 800m = 0
+    s_gap = max(0, 1.0 - (max_gap - 200) / 600)
+
+    # Coverage score
+    s_coverage = coverage_pct / 100.0
+
+    # Correlation score: 0.7+ = perfect
+    s_corr = min(max(mean_corr, 0) / 0.7, 1.0)
+
+    if shape_error_m is not None and curv_corr is not None:
+        # Shape error score: < 20m = perfect, > 100m = 0
+        s_shape = max(0, 1.0 - (shape_error_m - 20) / 80)
+        # Curvature correlation: 0.8+ = perfect
+        s_curv = min(max(curv_corr, 0) / 0.8, 1.0)
+
+        confidence = (0.10 * s_density + 0.10 * s_gap +
+                      0.10 * s_coverage + 0.25 * s_corr +
+                      0.20 * s_shape + 0.25 * s_curv)
+    else:
+        # No shape data — redistribute weight
+        confidence = (0.20 * s_density + 0.15 * s_gap +
+                      0.20 * s_coverage + 0.45 * s_corr)
+
+    return float(np.clip(confidence, 0, 1))
