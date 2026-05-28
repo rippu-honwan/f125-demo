@@ -1,23 +1,15 @@
 #!/usr/bin/env python3
 """
-Step 3: Build suzuka.ground_truth.json from aggregated phase detection.
+Step 3: Build ground_truth.json from aggregated phase detection.
 
 Aggregates per-lap phase markers, scores confidence, flags corners
 requiring human review, and produces the final ground truth file.
 
-Reads:
-  output/suzuka_reference_laps.parquet
-  output/suzuka_segments_consensus.json
-  output/suzuka_phase_detection_per_lap.parquet
-  tracks/suzuka.json (for comparison only)
-
-Produces:
-  tracks/suzuka.ground_truth.json
-  output/suzuka_ground_truth_report.md
-  output/suzuka_ground_truth_validation.png
+Config-driven: works with any track via --track argument.
 """
 
 import sys
+import argparse
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -29,53 +21,79 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 
+from src.track_registry import get_gp_name, get_output_prefix, get_track_corners
 from src.track import load_track, TRACKS_DIR
 from src.plotting import COLORS, style_axis, save_figure
 from config import OUTPUT_DIR
 
 # ============================================================
-# Corner mapping: segment_id → list of corners to produce
-# Each entry: (corner_id, name, short, type, direction, complex)
-# For complexes, we decompose into sub-corners
-# For missing segments, we fall back to old values
+# Corner mapping is built dynamically from the track JSON.
+# No hardcoded corner names or complex labels.
 # ============================================================
-CORNER_MAP = {
-    1: [(1, "Turn 1", "T1", "medium_speed", "right", None)],
-    2: [(2, "Turn 2", "T2", "medium_speed", "right", None)],
-    3: [  # esses_complex → 4 sub-corners
-        (3, "S Curve 1", "S1", "high_speed", "left", "esses_complex"),
-        (4, "S Curve 2", "S2", "high_speed", "left", "esses_complex"),
-        (5, "S Curve 3", "S3", "high_speed", "right", "esses_complex"),
-        (6, "S Curve 4", "S4", "high_speed", "left", "esses_complex"),
-    ],
-    4: [(7, "Dunlop", "DUN", "high_speed", "left", None)],
-    5: [(8, "Degner 1", "DG1", "medium_speed", "right", None)],
-    6: [(9, "Degner 2", "DG2", "low_speed", "right", None)],
-    7: [(11, "Hairpin", "HAIR", "low_speed", "left", None)],
-    8: [  # spoon_complex → 2 sub-corners
-        (13, "Spoon Entry", "SP-E", "high_speed", "right", "spoon_complex"),
-        (14, "Spoon Apex", "SP-A", "medium_speed", "right", "spoon_complex"),
-    ],
-    9: [(15, "130R", "130R", "high_speed", "left", None)],
-    10: [  # casio_complex → 2 sub-corners
-        (16, "Casio Triangle 1", "CS1", "low_speed", "right", "casio_complex"),
-        (17, "Casio Triangle 2", "CS2", "low_speed", "right", "casio_complex"),
-    ],
-}
 
-# Corners not detected by segmentation — use old values with low confidence
-FALLBACK_CORNERS = [
-    (10, "Hairpin Approach", "HP-A", "high_speed", "left", None),
-    (12, "200R", "200R", "high_speed", "left", None),
-    (18, "Final Chicane", "FIN", "low_speed", "left", None),
-]
+def build_corner_map(segments, old_track):
+    """
+    Build segment_id -> corner list mapping from existing track corners.
+    Assigns each corner to the segment whose range contains its apex.
+    Returns (corner_map, fallback_corners).
+    """
+    corner_map = {}  # segment_id -> [(cid, name, short, type, dir, complex)]
+    assigned_ids = set()
+
+    for seg in segments:
+        seg_id = seg['segment_id']
+        seg_start = seg['consensus_start_m']
+        seg_end = seg['consensus_end_m']
+        corner_map[seg_id] = []
+
+        for corner in old_track.corners:
+            if seg_start - 50 <= corner.apex_m <= seg_end + 50:
+                # Read complex from track JSON data
+                complex_name = None
+                track_json = TRACKS_DIR / f"{old_track.short}.json"
+                if track_json.exists():
+                    with open(track_json) as f:
+                        tdata = json.load(f)
+                    for cj in tdata.get('corners', []):
+                        if cj['id'] == corner.id:
+                            complex_name = cj.get('complex', None)
+                            break
+
+                corner_map[seg_id].append((
+                    corner.id, corner.name, corner.short,
+                    corner.type, corner.direction, complex_name
+                ))
+                assigned_ids.add(corner.id)
+
+    # Fallback: corners not assigned to any segment
+    fallback_corners = []
+    for corner in old_track.corners:
+        if corner.id not in assigned_ids:
+            fallback_corners.append((
+                corner.id, corner.name, corner.short,
+                corner.type, corner.direction, None
+            ))
+
+    return corner_map, fallback_corners
+
+
+# ============================================================
+# Argument parsing
+# ============================================================
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Step 3: Build ground truth from aggregated phase detection."
+    )
+    parser.add_argument("--track", required=True, type=str,
+                        help="Track short name (e.g. suzuka, monza)")
+    return parser.parse_args()
 
 
 # ============================================================
 # Step 1: Aggregate phase markers
 # ============================================================
 
-def aggregate_marker(values):
+def aggregate_marker(values, n_laps):
     """Aggregate a single marker across laps with outlier removal."""
     vals = np.array([v for v in values if v is not None and not np.isnan(v)])
     if len(vals) == 0:
@@ -99,18 +117,18 @@ def aggregate_marker(values):
         'median_m': round(median, 1),
         'iqr_m': round(iqr, 1),
         'support_count': int(len(vals)),
-        'support_ratio': round(len(vals) / 71, 3),  # 71 laps total
+        'support_ratio': round(len(vals) / n_laps, 3),
     }
 
 
-def aggregate_segment_phases(phase_df, segment_id, n_laps=71):
+def aggregate_segment_phases(phase_df, segment_id, n_laps):
     """Aggregate all phase markers for one segment."""
     seg_data = phase_df[phase_df['segment_id'] == segment_id]
 
     result = {}
     for col in ['brake_start_m', 'turn_in_m', 'apex_zone_start_m',
                 'apex_zone_end_m', 'speed_minimum_m', 'exit_end_m']:
-        result[col] = aggregate_marker(seg_data[col].tolist())
+        result[col] = aggregate_marker(seg_data[col].tolist(), n_laps)
 
     # Collect signal types used
     signals = set()
@@ -133,7 +151,7 @@ def aggregate_segment_phases(phase_df, segment_id, n_laps=71):
 
 def compute_confidence(apex_support_ratio, apex_iqr_m, signal_count,
                        brake_support_ratio, source_laps):
-    """Compute confidence score per the rubric (0–7 points)."""
+    """Compute confidence score per the rubric (0-7 points)."""
     score = 0
 
     # Apex support ratio
@@ -159,7 +177,7 @@ def compute_confidence(apex_support_ratio, apex_iqr_m, signal_count,
     if brake_support_ratio >= 0.70:
         score += 1
 
-    # Override: fewer than 3 source laps → low
+    # Override: fewer than 3 source laps -> low
     if source_laps < 3:
         return 0, "low"
 
@@ -349,20 +367,21 @@ def build_fallback_corner(corner_def, old_track):
 # Report generation
 # ============================================================
 
-def generate_report(corners, old_track, output_path):
+def generate_report(corners, old_track, output_path, gp_name):
     """Generate markdown ground truth report."""
     high = sum(1 for c in corners if c['confidence'] == 'high')
     med = sum(1 for c in corners if c['confidence'] == 'medium')
     low = sum(1 for c in corners if c['confidence'] == 'low')
     review = [c for c in corners if c['requires_review']]
+    n_corners = len(corners)
 
     lines = [
-        "# Suzuka Ground Truth Report",
+        f"# {gp_name} Ground Truth Report",
         "",
         "## 1. Summary",
         "",
-        "- **Session**: 2025 Japanese Grand Prix — Qualifying",
-        "- **Reference laps**: 71",
+        f"- **Session**: {gp_name} — Qualifying",
+        f"- **Corners**: {n_corners}",
         "- **Method**: Curvature-based geometric segmentation + multi-signal phase detection",
         "- **Signals**: brake (boolean), deceleration gradient, curvature peaks, speed minima",
         "",
@@ -373,7 +392,7 @@ def generate_report(corners, old_track, output_path):
         f"| High  | {high} |",
         f"| Medium | {med} |",
         f"| Low   | {low} |",
-        f"| **Total** | **{len(corners)}** |",
+        f"| **Total** | **{n_corners}** |",
         "",
         "## 3. Corner Comparison",
         "",
@@ -417,7 +436,7 @@ def generate_report(corners, old_track, output_path):
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("\n".join(lines), encoding="utf-8")
-    print(f"  ✓ Report: {output_path}")
+    print(f"  Report: {output_path}")
 
 
 # ============================================================
@@ -431,11 +450,11 @@ def plot_validation(corners, df, all_curvatures, old_track, output_path):
         print("  No corners require review — skipping validation plot.")
         return
 
-    n_corners = len(review_corners)
-    fig, axes = plt.subplots(n_corners, 3, figsize=(28, 4 * n_corners))
+    n_panels = len(review_corners)
+    fig, axes = plt.subplots(n_panels, 3, figsize=(28, 4 * n_panels))
     fig.set_facecolor(COLORS['bg'])
 
-    if n_corners == 1:
+    if n_panels == 1:
         axes = [axes]
 
     lap_ids = df['lap_id'].unique()
@@ -444,7 +463,7 @@ def plot_validation(corners, df, all_curvatures, old_track, output_path):
         ax_spd, ax_curv, ax_brk = axes[row]
         cid = corner['id']
         center = corner['apex_zone_center_m']
-        window = 300  # show ±300m around apex
+        window = 300  # show +/-300m around apex
 
         old_c = old_track.get_corner(cid)
         old_apex = old_c.apex_m if old_c else center
@@ -473,8 +492,8 @@ def plot_validation(corners, df, all_curvatures, old_track, output_path):
                       labelcolor='white', edgecolor='white')
 
         # Curvature panel
-        style_axis(ax_curv, ylabel='|κ|')
-        for lap_id in lap_ids[:20]:  # limit for performance
+        style_axis(ax_curv, ylabel='|kappa|')
+        for lap_id in lap_ids[:20]:
             dist, kappa_mag, _ = all_curvatures[lap_id]
             mask = (dist >= center - window) & (dist <= center + window)
             ax_curv.plot(dist[mask], kappa_mag[mask], lw=0.5, alpha=0.3, color='#ffaa00')
@@ -496,25 +515,24 @@ def plot_validation(corners, df, all_curvatures, old_track, output_path):
 
     plt.tight_layout()
     save_figure(fig, output_path, dpi=150)
-    print(f"  ✓ Validation plot: {output_path}")
+    print(f"  Validation plot: {output_path}")
 
 
 # ============================================================
 # Backward compatibility check
 # ============================================================
 
-def verify_backward_compat(gt_path, old_track):
+def verify_backward_compat(gt_path, n_corners):
     """Verify ground truth JSON is loadable by existing corner loader."""
-    import json as _json
     from src.track import Corner, CORNER_COLORS
 
     with open(gt_path) as f:
-        data = _json.load(f)
+        data = json.load(f)
 
     # Check structure
     assert 'corners' in data, "Missing 'corners' key"
-    assert len(data['corners']) == old_track.n_corners, (
-        f"Corner count mismatch: {len(data['corners'])} vs {old_track.n_corners}"
+    assert len(data['corners']) == n_corners, (
+        f"Corner count mismatch: {len(data['corners'])} vs expected {n_corners}"
     )
 
     # Check each corner has required fields for the loader
@@ -537,9 +555,25 @@ def verify_backward_compat(gt_path, old_track):
         color=CORNER_COLORS[i % len(CORNER_COLORS)],
     ) for i, c in enumerate(data['corners'])]
 
-    assert len(corners) == 18, f"Expected 18 corners, got {len(corners)}"
-    print(f"  ✓ Backward compat: {len(corners)} corners loaded successfully")
+    assert len(corners) == n_corners, f"Expected {n_corners} corners, got {len(corners)}"
+    print(f"  Backward compat: {len(corners)} corners loaded successfully")
     return True
+
+
+# ============================================================
+# Helper
+# ============================================================
+
+def _compute_kappa(x, y):
+    """Helper: compute signed curvature from XY."""
+    x_s = gaussian_filter1d(x, sigma=5)
+    y_s = gaussian_filter1d(y, sigma=5)
+    dx = np.gradient(x_s)
+    dy = np.gradient(y_s)
+    ddx = np.gradient(dx)
+    ddy = np.gradient(dy)
+    denom = np.maximum((dx**2 + dy**2)**1.5, 1e-12)
+    return (dx * ddy - dy * ddx) / denom
 
 
 # ============================================================
@@ -547,22 +581,28 @@ def verify_backward_compat(gt_path, old_track):
 # ============================================================
 
 def main():
+    args = parse_args()
+
+    gp_name = get_gp_name(args.track)
+    prefix = get_output_prefix(args.track)
+
     print("=" * 60)
     print("  Step 3: Build Ground Truth")
-    print("  Suzuka 2025 Q — Confidence Scoring + Review Flags")
+    print(f"  {gp_name} — Confidence Scoring + Review Flags")
     print("=" * 60)
 
     # Load prerequisites
     print("\n  Loading data...")
-    df = pd.read_parquet(OUTPUT_DIR / "suzuka_reference_laps.parquet")
-    with open(OUTPUT_DIR / "suzuka_segments_consensus.json") as f:
+    df = pd.read_parquet(OUTPUT_DIR / f"{prefix}_reference_laps.parquet")
+    with open(OUTPUT_DIR / f"{prefix}_segments_consensus.json") as f:
         seg_data = json.load(f)
-    phase_df = pd.read_parquet(OUTPUT_DIR / "suzuka_phase_detection_per_lap.parquet")
-    old_track = load_track("suzuka")
+    phase_df = pd.read_parquet(OUTPUT_DIR / f"{prefix}_phase_detection_per_lap.parquet")
+    old_track = load_track(args.track)
 
     segments = seg_data['segments']
     n_laps = df['lap_id'].nunique()
-    print(f"  Laps: {n_laps}, Segments: {len(segments)}, Old corners: {old_track.n_corners}")
+    n_corners = old_track.n_corners
+    print(f"  Laps: {n_laps}, Segments: {len(segments)}, Old corners: {n_corners}")
 
     # Recompute curvatures for validation plot
     print("  Computing curvatures for validation...")
@@ -577,6 +617,9 @@ def main():
         ), sigma=5)
         all_curvatures[lap_id] = (dist, kappa, kappa)
 
+    # Build dynamic corner map from track data
+    corner_map, fallback_corners = build_corner_map(segments, old_track)
+
     # Build corners
     print("\n  [Step 1-2] Aggregating phases and scoring confidence...")
     corners = []
@@ -585,8 +628,8 @@ def main():
         seg_id = seg['segment_id']
         seg_agg = aggregate_segment_phases(phase_df, seg_id, n_laps)
 
-        if seg_id in CORNER_MAP:
-            corner_defs = CORNER_MAP[seg_id]
+        if seg_id in corner_map and corner_map[seg_id]:
+            corner_defs = corner_map[seg_id]
             n_sub = len(corner_defs)
             for sub_idx, cdef in enumerate(corner_defs):
                 if n_sub > 1:
@@ -598,8 +641,8 @@ def main():
                     c = build_corner_from_segment(seg_agg, cdef, seg, old_track)
                 corners.append(c)
 
-    # Add fallback corners
-    for cdef in FALLBACK_CORNERS:
+    # Add fallback corners (not assigned to any segment)
+    for cdef in fallback_corners:
         corners.append(build_fallback_corner(cdef, old_track))
 
     # Sort by id
@@ -609,9 +652,9 @@ def main():
     # Step 4A: Write ground truth JSON
     print("\n  [Step 4] Writing ground truth...")
     gt_data = {
-        "name": "Suzuka International Racing Course",
-        "country": "Japan",
-        "short": "suzuka",
+        "name": old_track.name,
+        "country": old_track.country if hasattr(old_track, 'country') else "",
+        "short": args.track,
         "length_m": old_track.length_m,
         "corners": corners,
         "sectors": [
@@ -629,30 +672,30 @@ def main():
         c['entry_m'] = c['apex_zone_start_m']
         c['exit_m'] = c['apex_zone_end_m']
 
-    gt_path = TRACKS_DIR / "suzuka.ground_truth.json"
+    gt_path = TRACKS_DIR / f"{args.track}.ground_truth.json"
     with open(gt_path, 'w', encoding='utf-8') as f:
         json.dump(gt_data, f, indent=2, ensure_ascii=False)
-    print(f"  ✓ Ground truth: {gt_path}")
+    print(f"  Ground truth: {gt_path}")
 
     # Step 4B: Report
-    report_path = OUTPUT_DIR / "suzuka_ground_truth_report.md"
-    generate_report(corners, old_track, report_path)
+    report_path = OUTPUT_DIR / f"{prefix}_ground_truth_report.md"
+    generate_report(corners, old_track, report_path, gp_name)
 
     # Step 4C: Validation plot
-    plot_path = OUTPUT_DIR / "suzuka_ground_truth_validation.png"
+    plot_path = OUTPUT_DIR / f"{prefix}_ground_truth_validation.png"
     plot_validation(corners, df, all_curvatures, old_track, plot_path)
 
     # Step 5: Backward compat
     print("\n  [Step 5] Backward compatibility check...")
     try:
-        verify_backward_compat(gt_path, old_track)
+        verify_backward_compat(gt_path, n_corners)
     except AssertionError as e:
-        print(f"  ✗ FAILED: {e}")
+        print(f"  FAILED: {e}")
         return
 
     # Step 6: Final diff
     print("\n  [Step 6] Final diff summary:")
-    print(f"  {'Corner':<20} {'Old→New apex':<20} {'Delta':>6} {'Conf':<8} {'Review'}")
+    print(f"  {'Corner':<20} {'Old->New apex':<20} {'Delta':>6} {'Conf':<8} {'Review'}")
     print(f"  {'-'*20} {'-'*20} {'-'*6} {'-'*8} {'-'*6}")
 
     diffs = []
@@ -665,7 +708,7 @@ def main():
     diffs.sort(key=lambda x: x[2], reverse=True)
     for c, old_apex, delta in diffs:
         rev = "YES" if c['requires_review'] else ""
-        print(f"  {c['name']:<20} {old_apex:>6.0f}→{c['apex_m']:<6.0f} "
+        print(f"  {c['name']:<20} {old_apex:>6.0f}->{c['apex_m']:<6.0f} "
               f"{delta:>5.0f}m {c['confidence']:<8} {rev}")
 
     # Summary
@@ -682,18 +725,6 @@ def main():
         print(f"  Delta > 30m: {len(large_delta)}")
         for c, d in large_delta:
             print(f"    - {c['name']}: {d:.0f}m")
-
-
-def _compute_kappa(x, y):
-    """Helper: compute signed curvature from XY."""
-    x_s = gaussian_filter1d(x, sigma=5)
-    y_s = gaussian_filter1d(y, sigma=5)
-    dx = np.gradient(x_s)
-    dy = np.gradient(y_s)
-    ddx = np.gradient(dx)
-    ddy = np.gradient(dy)
-    denom = np.maximum((dx**2 + dy**2)**1.5, 1e-12)
-    return (dx * ddy - dy * ddx) / denom
 
 
 if __name__ == "__main__":

@@ -1,0 +1,26 @@
+{
+  "name": "Autodromo Jose Carlos Pace",
+  "country": "Brazil",
+  "short": "interlagos",
+  "length_m": 4309,
+  "corners": [
+    {"id": 1, "name": "Senna S 1", "short": "T1", "type": "medium_speed", "direction": "left", "entry_m": 50, "apex_m": 120, "exit_m": 200},
+    {"id": 2, "name": "Senna S 2", "short": "T2", "type": "medium_speed", "direction": "right", "entry_m": 200, "apex_m": 280, "exit_m": 370},
+    {"id": 3, "name": "Curva do Sol", "short": "T3", "type": "medium_speed", "direction": "left", "entry_m": 450, "apex_m": 530, "exit_m": 620},
+    {"id": 4, "name": "Descida do Lago", "short": "T4", "type": "high_speed", "direction": "left", "entry_m": 750, "apex_m": 840, "exit_m": 940},
+    {"id": 5, "name": "Turn 5", "short": "T5", "type": "medium_speed", "direction": "right", "entry_m": 1000, "apex_m": 1080, "exit_m": 1160},
+    {"id": 6, "name": "Ferradura 1", "short": "T6", "type": "low_speed", "direction": "left", "entry_m": 1250, "apex_m": 1330, "exit_m": 1420},
+    {"id": 7, "name": "Ferradura 2", "short": "T7", "type": "low_speed", "direction": "left", "entry_m": 1420, "apex_m": 1500, "exit_m": 1590},
+    {"id": 8, "name": "Laranjinha", "short": "T8", "type": "medium_speed", "direction": "right", "entry_m": 1700, "apex_m": 1780, "exit_m": 1870},
+    {"id": 9, "name": "Pinheirinho", "short": "T9", "type": "medium_speed", "direction": "left", "entry_m": 1950, "apex_m": 2030, "exit_m": 2120},
+    {"id": 10, "name": "Bico de Pato", "short": "T10", "type": "medium_speed", "direction": "right", "entry_m": 2200, "apex_m": 2280, "exit_m": 2370},
+    {"id": 11, "name": "Mergulho", "short": "T11", "type": "high_speed", "direction": "left", "entry_m": 2500, "apex_m": 2590, "exit_m": 2690},
+    {"id": 12, "name": "Juncao", "short": "T12", "type": "low_speed", "direction": "left", "entry_m": 2800, "apex_m": 2880, "exit_m": 2970},
+    {"id": 13, "name": "Subida dos Boxes 1", "short": "T13", "type": "medium_speed", "direction": "right", "entry_m": 3100, "apex_m": 3180, "exit_m": 3270},
+    {"id": 14, "name": "Subida dos Boxes 2", "short": "T14", "type": "medium_speed", "direction": "left", "entry_m": 3350, "apex_m": 3430, "exit_m": 3520},
+    {"id": 15, "name": "Subida dos Boxes 3", "short": "T15", "type": "medium_speed", "direction": "right", "entry_m": 3600, "apex_m": 3680, "exit_m": 3770}
+  ],
+  "compound_zones": [],
+  "sectors": [],
+  "drs_zones": []
+}

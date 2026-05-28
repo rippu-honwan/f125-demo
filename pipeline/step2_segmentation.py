@@ -5,15 +5,11 @@ Step 2: Geometric track segmentation + per-lap phase detection.
 Part A — Curvature-based segmentation with cross-lap consensus.
 Part B — Per-lap, per-segment corner phase markers.
 
-Reads: output/suzuka_reference_laps.parquet
-       output/suzuka_reference_laps_metadata.json
-Produces:
-  output/suzuka_segments_consensus.json
-  output/suzuka_phase_detection_per_lap.parquet
-  output/suzuka_segmentation_overview.png
+Config-driven: compound zones loaded from tracks/{track}.json.
 """
 
 import sys
+import argparse
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -25,6 +21,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 
+from src.track_registry import get_gp_name, get_output_prefix, get_compound_zones
 from src.plotting import COLORS, style_axis, save_figure
 from config import OUTPUT_DIR
 
@@ -32,36 +29,24 @@ from config import OUTPUT_DIR
 # Configuration
 # ============================================================
 CURVATURE_SIGMA = 5          # Gaussian sigma in samples (= 10m effective)
-CURVATURE_THRESHOLD = 0.0008  # m⁻¹ — radius < 1250m; tuned for Suzuka's high-speed corners
+CURVATURE_THRESHOLD = 0.0008  # m^-1 — radius < 1250m
 MERGE_GAP_M = 30             # merge segments closer than this
 MIN_SEGMENT_LENGTH_M = 20    # discard shorter segments
 CLUSTER_TOLERANCE_M = 25     # group boundary points within this
 SUPPORT_RATIO_MIN = 0.7      # minimum fraction of laps agreeing
 IQR_MAX_M = 20               # maximum IQR for stable boundary
 
-# Label distance ranges (approximate, for initial assignment)
-LABEL_RANGES = [
-    ("T1",               650,  900),
-    ("T2",               800,  950),
-    ("esses_complex",    950, 1650),
-    ("dunlop",          1700, 1950),
-    ("degner1",         2150, 2350),
-    ("degner2",         2350, 2550),
-    ("hairpin_approach", 2600, 2800),
-    ("hairpin",         2800, 3050),
-    ("200r",            3050, 3300),
-    ("spoon_complex",   3700, 4100),
-    ("130r",            4800, 5100),
-    ("casio_complex",   5300, 5550),
-    ("final",           5550, 5750),
-]
 
-# Compound merge zones
-COMPOUND_ZONES = [
-    ("esses_complex",  950, 1650),
-    ("spoon_complex", 3700, 4100),
-    ("casio_complex", 5300, 5550),
-]
+# ============================================================
+# Argument parsing
+# ============================================================
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Step 2: Geometric segmentation + phase detection."
+    )
+    parser.add_argument("--track", required=True, type=str,
+                        help="Track short name (e.g. suzuka, monza)")
+    return parser.parse_args()
 
 
 # ============================================================
@@ -258,11 +243,14 @@ def build_consensus_segments(all_segments, n_laps):
 # Part A4: Merge compound corners + label assignment
 # ============================================================
 
-def merge_and_label_segments(segments, all_segments, all_curvatures):
+def merge_and_label_segments(segments, all_segments, all_curvatures, compound_zones):
     """Apply compound merging rules and assign labels."""
 
-    # Merge compound zones
-    for zone_label, zone_start, zone_end in COMPOUND_ZONES:
+    # Merge compound zones (config-driven)
+    for zone in compound_zones:
+        zone_label = zone["label"]
+        zone_start = zone["start_m"]
+        zone_end = zone["end_m"]
         inside = [s for s in segments
                   if s['consensus_start_m'] >= zone_start - 50
                   and s['consensus_end_m'] <= zone_end + 50]
@@ -294,17 +282,18 @@ def merge_and_label_segments(segments, all_segments, all_curvatures):
         if 'complex' not in seg:
             seg['complex'] = None
 
-        # Assign label from distance ranges
-        mid = (seg['consensus_start_m'] + seg['consensus_end_m']) / 2
-        label = f"segment_{i+1}"
-        for lbl, rng_start, rng_end in LABEL_RANGES:
-            if rng_start <= mid <= rng_end:
-                label = lbl
-                break
-        # If complex already set, use that as label
+        # If complex already set, use that as label; otherwise use segment_N
         if seg['complex']:
-            label = seg['complex']
-        seg['label'] = label
+            seg['label'] = seg['complex']
+        else:
+            seg['label'] = f"segment_{i+1}"
+
+        # Check if segment falls within a compound zone for labelling
+        mid = (seg['consensus_start_m'] + seg['consensus_end_m']) / 2
+        for zone in compound_zones:
+            if zone["start_m"] <= mid <= zone["end_m"]:
+                seg['label'] = zone["label"]
+                break
 
         # Compute mean kappa and direction from all laps
         kappas = []
@@ -348,13 +337,13 @@ def detect_brake_start(lap_data, seg_start, approach_window=200):
     if len(idx_range) < 5:
         return None, None
 
-    # Method 1: brake signal transition 0 → 1
+    # Method 1: brake signal transition 0 -> 1
     brake_window = brake[idx_range]
     for i in range(1, len(brake_window)):
         if brake_window[i] > 0.5 and brake_window[i - 1] < 0.5:
             return float(dist[idx_range[i]]), "boolean"
 
-    # Method 2: deceleration > 8 m/s²
+    # Method 2: deceleration > 8 m/s^2
     speed_ms = speed[idx_range] / 3.6
     dist_window = dist[idx_range]
     if len(speed_ms) > 3:
@@ -512,7 +501,8 @@ def run_phase_detection(df, segments, all_curvatures):
 # Visualization
 # ============================================================
 
-def plot_segmentation_overview(df, segments, all_curvatures, output_path):
+def plot_segmentation_overview(df, segments, all_curvatures, output_path,
+                               gp_name, year, session_type):
     """Plot speed + curvature with segment shading."""
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(28, 12),
                                     gridspec_kw={'height_ratios': [2, 1]})
@@ -535,7 +525,7 @@ def plot_segmentation_overview(df, segments, all_curvatures, output_path):
 
     # Top panel: speed
     style_axis(ax1, ylabel='Speed (km/h)',
-               title='Suzuka 2025 Q — Geometric Segmentation Overview')
+               title=f'{gp_name} {year} {session_type} — Geometric Segmentation Overview')
     ax1.plot(dist_axis, median_speed, color=COLORS['game'], lw=1.5)
 
     for i, seg in enumerate(segments):
@@ -548,7 +538,7 @@ def plot_segmentation_overview(df, segments, all_curvatures, output_path):
                  fontweight='bold')
 
     # Bottom panel: curvature
-    style_axis(ax2, ylabel='|Curvature| (m⁻¹)', xlabel='Distance (m)')
+    style_axis(ax2, ylabel='|Curvature| (m^-1)', xlabel='Distance (m)')
     ax2.plot(kappa_dist, median_kappa, color='#ffaa00', lw=1.2)
     ax2.axhline(CURVATURE_THRESHOLD, color='#ff4444', ls='--', lw=0.8,
                 alpha=0.6, label=f'threshold={CURVATURE_THRESHOLD}')
@@ -565,7 +555,7 @@ def plot_segmentation_overview(df, segments, all_curvatures, output_path):
 
     plt.tight_layout()
     save_figure(fig, output_path, dpi=200)
-    print(f"  ✓ Overview plot saved: {output_path}")
+    print(f"  Overview plot saved: {output_path}")
 
 
 # ============================================================
@@ -573,20 +563,33 @@ def plot_segmentation_overview(df, segments, all_curvatures, output_path):
 # ============================================================
 
 def main():
+    args = parse_args()
+
+    gp_name = get_gp_name(args.track)
+    prefix = get_output_prefix(args.track)
+    compound_zones = get_compound_zones(args.track)
+
     print("=" * 60)
     print("  Step 2: Geometric Segmentation + Phase Detection")
-    print("  Suzuka 2025 Q Reference Lap Pool")
+    print(f"  {gp_name} — Reference Lap Pool")
     print("=" * 60)
 
     # Load data
     print("\n  Loading reference laps...")
-    df = pd.read_parquet(OUTPUT_DIR / "suzuka_reference_laps.parquet")
-    with open(OUTPUT_DIR / "suzuka_reference_laps_metadata.json") as f:
+    df = pd.read_parquet(OUTPUT_DIR / f"{prefix}_reference_laps.parquet")
+    with open(OUTPUT_DIR / f"{prefix}_reference_laps_metadata.json") as f:
         meta = json.load(f)
 
     n_laps = df['lap_id'].nunique()
     track_length = meta['track_length_m']
     print(f"  Laps: {n_laps}, Track: {track_length:.0f}m")
+
+    if compound_zones:
+        print(f"  Compound zones: {len(compound_zones)}")
+        for z in compound_zones:
+            print(f"    {z['label']}: {z['start_m']}–{z['end_m']}m")
+    else:
+        print("  Compound zones: none defined")
 
     # Part A1-A2: Per-lap curvature + segments
     print("\n  [A1-A2] Computing per-lap curvature and segments...")
@@ -603,26 +606,27 @@ def main():
 
     # Part A4: Merge + label
     print("\n  [A4] Merging compound corners and assigning labels...")
-    segments = merge_and_label_segments(consensus, all_segments, all_curvatures)
+    segments = merge_and_label_segments(consensus, all_segments, all_curvatures,
+                                        compound_zones)
     print(f"  Final segments: {len(segments)}")
 
     for seg in segments:
         print(f"    {seg['segment_id']:>2}. {seg['label']:<20} "
               f"{seg['consensus_start_m']:>6.0f}–{seg['consensus_end_m']:<6.0f}m  "
-              f"κ={seg['mean_kappa']:.4f}  dir={seg['dominant_direction']}")
+              f"kappa={seg['mean_kappa']:.4f}  dir={seg['dominant_direction']}")
 
     # Save consensus JSON
-    consensus_path = OUTPUT_DIR / "suzuka_segments_consensus.json"
+    consensus_path = OUTPUT_DIR / f"{prefix}_segments_consensus.json"
     with open(consensus_path, 'w', encoding='utf-8') as f:
         json.dump({"segments": segments}, f, indent=2, ensure_ascii=False)
-    print(f"\n  ✓ Consensus JSON: {consensus_path}")
+    print(f"\n  Consensus JSON: {consensus_path}")
 
     # Part B: Phase detection
     print("\n  [B] Running per-lap phase detection...")
     phase_df = run_phase_detection(df, segments, all_curvatures)
-    phase_path = OUTPUT_DIR / "suzuka_phase_detection_per_lap.parquet"
+    phase_path = OUTPUT_DIR / f"{prefix}_phase_detection_per_lap.parquet"
     phase_df.to_parquet(phase_path, index=False)
-    print(f"  ✓ Phase parquet: {phase_path} ({len(phase_df)} rows)")
+    print(f"  Phase parquet: {phase_path} ({len(phase_df)} rows)")
 
     # Report: brake detection rate per segment
     print("\n  Brake detection rate per segment:")
@@ -643,8 +647,13 @@ def main():
 
     # Visualization
     print("\n  [Viz] Generating overview plot...")
-    plot_path = OUTPUT_DIR / "suzuka_segmentation_overview.png"
-    plot_segmentation_overview(df, segments, all_curvatures, plot_path)
+    plot_path = OUTPUT_DIR / f"{prefix}_segmentation_overview.png"
+    # Extract year from metadata session string
+    session_str = meta.get('session', '')
+    year = session_str.split()[0] if session_str else ''
+    session_type = session_str.split('-')[-1].strip() if '-' in session_str else 'Q'
+    plot_segmentation_overview(df, segments, all_curvatures, plot_path,
+                               gp_name, year, session_type)
 
     print("\n" + "=" * 60)
     print("  DONE")

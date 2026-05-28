@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Step 1: Build multi-lap reference dataset from FastF1 2025 Suzuka Qualifying.
+Step 1: Build multi-lap reference dataset from FastF1 qualifying data.
 
 Loads all valid flying laps, filters by quality criteria, resamples to
 uniform 2m distance axis, and outputs parquet + metadata + overview plot.
@@ -9,6 +9,7 @@ Output consumed by subsequent corner segmentation / phase detection scripts.
 """
 
 import sys
+import argparse
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -20,6 +21,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import fastf1
 
+from src.track_registry import get_gp_name, get_output_prefix
 from src.fastf1_loader import (
     CACHE_DIR, _normalize_brake, _normalize_throttle, resolve_gp_name
 )
@@ -27,37 +29,67 @@ from src.plotting import COLORS, style_axis, save_figure
 from config import OUTPUT_DIR
 
 # ============================================================
-# Configuration
+# Configuration (defaults — overridden by argparse)
 # ============================================================
-YEAR = 2025
-GP_NAME = "Japanese Grand Prix"
-SESSION_TYPE = "Q"
 RESAMPLE_STEP_M = 2
-LAP_TIME_TOLERANCE_PCT = 2.0  # within 2% of fastest
 MIN_TELEMETRY_COVERAGE = 0.95  # 95% of track length
-MAX_TELEMETRY_GAP_S = 2.0  # FastF1 car data has inherent ~0.8-1.2s max gaps at ~3.7Hz
+MAX_TELEMETRY_GAP_S = 2.0
 MAX_XY_JUMP_M = 50.0
 MIN_LAPS_ERROR = 3
 MIN_LAPS_WARNING = 5
 
 
 # ============================================================
+# Argument parsing
+# ============================================================
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Step 1: Build multi-lap reference dataset from FastF1."
+    )
+    parser.add_argument("--track", required=True, type=str,
+                        help="Track short name (e.g. suzuka, monza)")
+    parser.add_argument("--year", required=True, type=int,
+                        help="Season year (e.g. 2025)")
+    parser.add_argument("--session", default="Q", type=str,
+                        help="Session type (default: Q)")
+    parser.add_argument("--driver", default="ALL", type=str,
+                        help="Driver code or ALL (default: ALL)")
+    parser.add_argument("--tolerance", default=2.0, type=float,
+                        help="Percent above session best lap (default: 2.0)")
+    return parser.parse_args()
+
+
+# ============================================================
 # Step 2: Load session
 # ============================================================
-def load_session():
-    """Load 2025 Suzuka Qualifying session via FastF1."""
-    print(f"  Loading: {YEAR} {GP_NAME} - {SESSION_TYPE}")
+def load_session(year, gp_name, session_type):
+    """Load qualifying session via FastF1."""
+    print(f"  Loading: {year} {gp_name} - {session_type}")
     fastf1.Cache.enable_cache(str(CACHE_DIR))
 
-    session = fastf1.get_session(YEAR, GP_NAME, SESSION_TYPE)
+    session = fastf1.get_session(year, gp_name, session_type)
     session.load()
 
-    track_length = session.session_info.get('TrackLength', None)
+    # Get track length from session info or telemetry
+    track_length = None
+    try:
+        circuit_info = session.get_circuit_info()
+        if circuit_info is not None and hasattr(circuit_info, 'circuit_length'):
+            track_length = float(circuit_info.circuit_length)
+    except Exception:
+        pass
+
+    if track_length is None:
+        track_length = session.session_info.get('TrackLength', None)
+
     if track_length is None:
         # Estimate from fastest lap telemetry
         fastest = session.laps.pick_fastest()
         tel = fastest.get_telemetry()
-        track_length = float(tel['Distance'].max()) if tel is not None else 5807.0
+        track_length = float(tel['Distance'].max()) if tel is not None else None
+
+    if track_length is None:
+        raise RuntimeError("Could not determine track length from session data.")
 
     print(f"  Track length: {track_length:.0f}m")
     print(f"  Total laps in session: {len(session.laps)}")
@@ -67,23 +99,30 @@ def load_session():
 # ============================================================
 # Step 3: Filter laps
 # ============================================================
-def filter_laps(session, track_length):
+def filter_laps(session, track_length, year, session_type, tolerance_pct, driver_filter):
     """
     Filter laps by quality criteria. Returns list of (lap, status, reason) tuples.
     """
     all_laps = session.laps
+
+    # Filter by driver if specified
+    if driver_filter != "ALL":
+        all_laps = all_laps[all_laps['Driver'] == driver_filter]
+        if all_laps.empty:
+            raise RuntimeError(f"No laps found for driver '{driver_filter}'")
+
     fastest_time = all_laps.pick_fastest()['LapTime'].total_seconds()
-    max_allowed_time = fastest_time * (1 + LAP_TIME_TOLERANCE_PCT / 100)
+    max_allowed_time = fastest_time * (1 + tolerance_pct / 100)
 
     print(f"  Session fastest: {fastest_time:.3f}s")
-    print(f"  Max allowed: {max_allowed_time:.3f}s ({LAP_TIME_TOLERANCE_PCT}% tolerance)")
+    print(f"  Max allowed: {max_allowed_time:.3f}s ({tolerance_pct}% tolerance)")
 
     results = []
 
     for idx, lap in all_laps.iterrows():
         driver = lap['Driver']
         lap_num = int(lap['LapNumber'])
-        lap_id = f"2025_Q_{driver}_{lap_num}"
+        lap_id = f"{year}_{session_type}_{driver}_{lap_num}"
 
         # Check: timed flying lap
         if pd.isna(lap['LapTime']):
@@ -92,8 +131,7 @@ def filter_laps(session, track_length):
 
         lap_time_s = lap['LapTime'].total_seconds()
 
-        # Check: not pit lap (PitOutTime = this lap started from pit,
-        # PitInTime = this lap ended in pit)
+        # Check: not pit lap
         try:
             if pd.notna(lap.get('PitOutTime')) or pd.notna(lap.get('PitInTime')):
                 results.append((lap, "excluded", "pit lap", lap_id))
@@ -103,13 +141,12 @@ def filter_laps(session, track_length):
 
         # Check: lap time within tolerance
         pct_above = ((lap_time_s - fastest_time) / fastest_time) * 100
-        if pct_above > LAP_TIME_TOLERANCE_PCT:
+        if pct_above > tolerance_pct:
             results.append((lap, "excluded",
                            f"too slow ({pct_above:.2f}% above best)", lap_id))
             continue
 
-        # Check: no track status issues (yellow/red flag)
-        # FastF1 marks deleted laps; also check IsAccurate
+        # Check: no track status issues
         is_accurate = lap.get('IsAccurate', True)
         if is_accurate is False:
             results.append((lap, "excluded", "marked inaccurate by FastF1", lap_id))
@@ -134,7 +171,7 @@ def filter_laps(session, track_length):
                            f"low coverage ({coverage:.1%})", lap_id))
             continue
 
-        # Check: no telemetry gaps > 0.5s
+        # Check: no telemetry gaps > threshold
         if 'Time' in tel.columns:
             time_vals = tel['Time'].dt.total_seconds().values
             time_diffs = np.diff(time_vals)
@@ -143,11 +180,6 @@ def filter_laps(session, track_length):
                 results.append((lap, "excluded",
                                f"telemetry gap ({max_gap:.2f}s)", lap_id))
                 continue
-
-        # Note: XY discontinuity check removed. At FastF1's ~7.6Hz sampling
-        # and F1 speeds (300 km/h = 83 m/s), consecutive XY points are naturally
-        # ~11m apart, and interpolation artifacts push many above 50m.
-        # Coverage + time gap checks are sufficient quality gates.
 
         # Passed all checks
         results.append((lap, "included", None, lap_id))
@@ -165,7 +197,7 @@ def filter_laps(session, track_length):
             f"Cannot build reference dataset."
         )
     if len(included) < MIN_LAPS_WARNING:
-        print(f"  ⚠ WARNING: Only {len(included)} laps (< {MIN_LAPS_WARNING})")
+        print(f"  WARNING: Only {len(included)} laps (< {MIN_LAPS_WARNING})")
 
     return results, fastest_time
 
@@ -240,8 +272,6 @@ def build_parquet(results, track_length, fastest_time):
     Resample all included laps and build combined parquet DataFrame.
     Returns (combined_df, metadata_laps_list).
     """
-    included = [(lap, s, r, lid) for lap, s, r, lid in results if s == "included"]
-
     all_frames = []
     meta_laps = []
 
@@ -300,7 +330,7 @@ def build_parquet(results, track_length, fastest_time):
 # ============================================================
 # Step 5C: Overview plot
 # ============================================================
-def plot_overview(combined_df, output_path):
+def plot_overview(combined_df, output_path, year, gp_name, session_type):
     """Plot all included laps overlaid with median speed trace."""
     lap_ids = combined_df['lap_id'].unique()
     n_laps = len(lap_ids)
@@ -308,7 +338,7 @@ def plot_overview(combined_df, output_path):
     fig, ax = plt.subplots(1, 1, figsize=(28, 8))
     fig.set_facecolor(COLORS['bg'])
     style_axis(ax, ylabel='Speed (km/h)', xlabel='Distance (m)',
-               title=f'Suzuka 2025 Q — Reference Lap Pool (N={n_laps})')
+               title=f'{gp_name} {year} {session_type} — Reference Lap Pool (N={n_laps})')
 
     # Individual laps (thin, semi-transparent)
     for lap_id in lap_ids:
@@ -334,25 +364,33 @@ def plot_overview(combined_df, output_path):
 
     plt.tight_layout()
     save_figure(fig, output_path, dpi=200)
-    print(f"  ✓ Overview plot saved: {output_path}")
+    print(f"  Overview plot saved: {output_path}")
 
 
 # ============================================================
 # Main
 # ============================================================
 def main():
+    args = parse_args()
+
+    gp_name = get_gp_name(args.track)
+    prefix = get_output_prefix(args.track)
+
     print("=" * 60)
     print("  Step 1: Build Reference Lap Pool")
-    print("  2025 Suzuka Qualifying — FastF1")
+    print(f"  {args.year} {gp_name} — {args.session}")
     print("=" * 60)
 
     # Step 2: Load session
     print("\n  [Step 2] Loading session...")
-    session, track_length = load_session()
+    session, track_length = load_session(args.year, gp_name, args.session)
 
     # Step 3: Filter laps
     print("\n  [Step 3] Filtering laps...")
-    results, fastest_time = filter_laps(session, track_length)
+    results, fastest_time = filter_laps(
+        session, track_length, args.year, args.session,
+        args.tolerance, args.driver
+    )
 
     # Step 4 + 5A: Resample and build parquet
     print("\n  [Step 4] Resampling included laps...")
@@ -363,27 +401,27 @@ def main():
 
     # 5A: Save parquet
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    parquet_path = OUTPUT_DIR / "suzuka_reference_laps.parquet"
+    parquet_path = OUTPUT_DIR / f"{prefix}_reference_laps.parquet"
     combined_df.to_parquet(parquet_path, index=False)
-    print(f"  ✓ Parquet saved: {parquet_path} ({len(combined_df)} rows)")
+    print(f"  Parquet saved: {parquet_path} ({len(combined_df)} rows)")
 
     # 5B: Save metadata JSON
     metadata = {
-        "session": f"{YEAR} {GP_NAME} - Qualifying",
+        "session": f"{args.year} {gp_name} - {args.session}",
         "track_length_m": float(track_length),
         "resample_step_m": RESAMPLE_STEP_M,
         "total_laps": len(included_laps),
         "laps": meta_laps,
     }
-    meta_path = OUTPUT_DIR / "suzuka_reference_laps_metadata.json"
+    meta_path = OUTPUT_DIR / f"{prefix}_reference_laps_metadata.json"
     with open(meta_path, 'w', encoding='utf-8') as f:
         json.dump(metadata, f, indent=2, ensure_ascii=False)
-    print(f"  ✓ Metadata saved: {meta_path}")
+    print(f"  Metadata saved: {meta_path}")
 
     # 5C: Overview plot
     print("\n  [Step 5C] Generating overview plot...")
-    plot_path = OUTPUT_DIR / "suzuka_reference_laps_overview.png"
-    plot_overview(combined_df, plot_path)
+    plot_path = OUTPUT_DIR / f"{prefix}_reference_laps_overview.png"
+    plot_overview(combined_df, plot_path, args.year, gp_name, args.session)
 
     # Final report
     print("\n" + "=" * 60)
@@ -403,7 +441,7 @@ def main():
     # Verify parquet is readable
     verify_df = pd.read_parquet(parquet_path)
     assert len(verify_df) == len(combined_df), "Parquet verification failed"
-    print(f"\n  ✓ Parquet verified: {len(verify_df)} rows, "
+    print(f"\n  Parquet verified: {len(verify_df)} rows, "
           f"{len(verify_df.columns)} columns")
     print(f"    Columns: {list(verify_df.columns)}")
 

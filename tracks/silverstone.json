@@ -1,0 +1,29 @@
+{
+  "name": "Silverstone Circuit",
+  "country": "United Kingdom",
+  "short": "silverstone",
+  "length_m": 5891,
+  "corners": [
+    {"id": 1, "name": "Abbey", "short": "T1", "type": "high_speed", "direction": "right", "entry_m": 80, "apex_m": 150, "exit_m": 230},
+    {"id": 2, "name": "Farm", "short": "T2", "type": "medium_speed", "direction": "left", "entry_m": 310, "apex_m": 370, "exit_m": 430},
+    {"id": 3, "name": "Village", "short": "T3", "type": "medium_speed", "direction": "right", "entry_m": 620, "apex_m": 700, "exit_m": 780},
+    {"id": 4, "name": "The Loop 1", "short": "T4", "type": "low_speed", "direction": "left", "entry_m": 850, "apex_m": 920, "exit_m": 990},
+    {"id": 5, "name": "The Loop 2", "short": "T5", "type": "low_speed", "direction": "left", "entry_m": 990, "apex_m": 1060, "exit_m": 1130},
+    {"id": 6, "name": "Aintree", "short": "T6", "type": "medium_speed", "direction": "right", "entry_m": 1200, "apex_m": 1280, "exit_m": 1370},
+    {"id": 7, "name": "Wellington Straight Kink", "short": "T7", "type": "high_speed", "direction": "left", "entry_m": 1600, "apex_m": 1660, "exit_m": 1720},
+    {"id": 8, "name": "Brooklands", "short": "T8", "type": "low_speed", "direction": "left", "entry_m": 1850, "apex_m": 1930, "exit_m": 2010},
+    {"id": 9, "name": "Luffield", "short": "T9", "type": "low_speed", "direction": "right", "entry_m": 2010, "apex_m": 2100, "exit_m": 2200},
+    {"id": 10, "name": "Woodcote", "short": "T10", "type": "high_speed", "direction": "right", "entry_m": 2350, "apex_m": 2440, "exit_m": 2540},
+    {"id": 11, "name": "Copse", "short": "T11", "type": "high_speed", "direction": "right", "entry_m": 2900, "apex_m": 2990, "exit_m": 3090},
+    {"id": 12, "name": "Maggotts", "short": "T12", "type": "high_speed", "direction": "left", "entry_m": 3400, "apex_m": 3480, "exit_m": 3560},
+    {"id": 13, "name": "Becketts", "short": "T13", "type": "high_speed", "direction": "right", "entry_m": 3560, "apex_m": 3640, "exit_m": 3720},
+    {"id": 14, "name": "Chapel", "short": "T14", "type": "high_speed", "direction": "left", "entry_m": 3720, "apex_m": 3810, "exit_m": 3910},
+    {"id": 15, "name": "Stowe", "short": "T15", "type": "medium_speed", "direction": "right", "entry_m": 4600, "apex_m": 4690, "exit_m": 4780},
+    {"id": 16, "name": "Vale", "short": "T16", "type": "low_speed", "direction": "left", "entry_m": 4900, "apex_m": 4980, "exit_m": 5060},
+    {"id": 17, "name": "Club 1", "short": "T17", "type": "low_speed", "direction": "right", "entry_m": 5100, "apex_m": 5180, "exit_m": 5260},
+    {"id": 18, "name": "Club 2", "short": "T18", "type": "low_speed", "direction": "right", "entry_m": 5260, "apex_m": 5350, "exit_m": 5450}
+  ],
+  "compound_zones": [],
+  "sectors": [],
+  "drs_zones": []
+}

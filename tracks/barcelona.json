@@ -1,0 +1,27 @@
+{
+  "name": "Circuit de Barcelona-Catalunya",
+  "country": "Spain",
+  "short": "barcelona",
+  "length_m": 4675,
+  "corners": [
+    {"id": 1, "name": "Elf", "short": "T1", "type": "medium_speed", "direction": "right", "entry_m": 50, "apex_m": 120, "exit_m": 200},
+    {"id": 2, "name": "Renault", "short": "T2", "type": "medium_speed", "direction": "right", "entry_m": 250, "apex_m": 320, "exit_m": 400},
+    {"id": 3, "name": "Repsol", "short": "T3", "type": "high_speed", "direction": "right", "entry_m": 500, "apex_m": 580, "exit_m": 670},
+    {"id": 4, "name": "Seat", "short": "T4", "type": "medium_speed", "direction": "right", "entry_m": 750, "apex_m": 830, "exit_m": 910},
+    {"id": 5, "name": "Chicane", "short": "T5", "type": "low_speed", "direction": "left", "entry_m": 1000, "apex_m": 1070, "exit_m": 1150},
+    {"id": 6, "name": "Caixa", "short": "T6", "type": "low_speed", "direction": "right", "entry_m": 1150, "apex_m": 1220, "exit_m": 1300},
+    {"id": 7, "name": "Wurth", "short": "T7", "type": "high_speed", "direction": "right", "entry_m": 1500, "apex_m": 1590, "exit_m": 1690},
+    {"id": 8, "name": "Campsa", "short": "T8", "type": "high_speed", "direction": "right", "entry_m": 1690, "apex_m": 1780, "exit_m": 1880},
+    {"id": 9, "name": "La Caixa", "short": "T9", "type": "high_speed", "direction": "right", "entry_m": 1950, "apex_m": 2040, "exit_m": 2140},
+    {"id": 10, "name": "Banc de Sabadell", "short": "T10", "type": "low_speed", "direction": "right", "entry_m": 2600, "apex_m": 2680, "exit_m": 2760},
+    {"id": 11, "name": "Turn 11", "short": "T11", "type": "medium_speed", "direction": "right", "entry_m": 2900, "apex_m": 2980, "exit_m": 3060},
+    {"id": 12, "name": "Turn 12", "short": "T12", "type": "medium_speed", "direction": "left", "entry_m": 3100, "apex_m": 3180, "exit_m": 3260},
+    {"id": 13, "name": "Turn 13", "short": "T13", "type": "medium_speed", "direction": "right", "entry_m": 3350, "apex_m": 3430, "exit_m": 3510},
+    {"id": 14, "name": "Turn 14", "short": "T14", "type": "low_speed", "direction": "right", "entry_m": 3700, "apex_m": 3780, "exit_m": 3860},
+    {"id": 15, "name": "Turn 15", "short": "T15", "type": "low_speed", "direction": "left", "entry_m": 3860, "apex_m": 3940, "exit_m": 4020},
+    {"id": 16, "name": "Turn 16", "short": "T16", "type": "medium_speed", "direction": "right", "entry_m": 4200, "apex_m": 4290, "exit_m": 4380}
+  ],
+  "compound_zones": [],
+  "sectors": [],
+  "drs_zones": []
+}

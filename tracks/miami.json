@@ -1,0 +1,30 @@
+{
+  "name": "Miami International Autodrome",
+  "country": "United States",
+  "short": "miami",
+  "length_m": 5412,
+  "corners": [
+    {"id": 1, "name": "Turn 1", "short": "T1", "type": "medium_speed", "direction": "right", "entry_m": 80, "apex_m": 150, "exit_m": 230},
+    {"id": 2, "name": "Turn 2", "short": "T2", "type": "medium_speed", "direction": "right", "entry_m": 280, "apex_m": 350, "exit_m": 430},
+    {"id": 3, "name": "Turn 3", "short": "T3", "type": "medium_speed", "direction": "right", "entry_m": 500, "apex_m": 570, "exit_m": 650},
+    {"id": 4, "name": "Turn 4", "short": "T4", "type": "low_speed", "direction": "left", "entry_m": 750, "apex_m": 830, "exit_m": 910},
+    {"id": 5, "name": "Turn 5", "short": "T5", "type": "low_speed", "direction": "left", "entry_m": 910, "apex_m": 980, "exit_m": 1060},
+    {"id": 6, "name": "Turn 6", "short": "T6", "type": "medium_speed", "direction": "right", "entry_m": 1150, "apex_m": 1230, "exit_m": 1310},
+    {"id": 7, "name": "Turn 7", "short": "T7", "type": "high_speed", "direction": "right", "entry_m": 1500, "apex_m": 1590, "exit_m": 1690},
+    {"id": 8, "name": "Turn 8", "short": "T8", "type": "medium_speed", "direction": "left", "entry_m": 1900, "apex_m": 1980, "exit_m": 2060},
+    {"id": 9, "name": "Turn 9", "short": "T9", "type": "medium_speed", "direction": "right", "entry_m": 2100, "apex_m": 2180, "exit_m": 2260},
+    {"id": 10, "name": "Turn 10", "short": "T10", "type": "low_speed", "direction": "right", "entry_m": 2400, "apex_m": 2480, "exit_m": 2560},
+    {"id": 11, "name": "Turn 11", "short": "T11", "type": "low_speed", "direction": "right", "entry_m": 2700, "apex_m": 2780, "exit_m": 2870},
+    {"id": 12, "name": "Turn 12", "short": "T12", "type": "medium_speed", "direction": "left", "entry_m": 3000, "apex_m": 3080, "exit_m": 3160},
+    {"id": 13, "name": "Turn 13", "short": "T13", "type": "medium_speed", "direction": "right", "entry_m": 3300, "apex_m": 3380, "exit_m": 3460},
+    {"id": 14, "name": "Turn 14", "short": "T14", "type": "high_speed", "direction": "left", "entry_m": 3600, "apex_m": 3690, "exit_m": 3790},
+    {"id": 15, "name": "Turn 15", "short": "T15", "type": "high_speed", "direction": "left", "entry_m": 3900, "apex_m": 3990, "exit_m": 4090},
+    {"id": 16, "name": "Turn 16", "short": "T16", "type": "medium_speed", "direction": "right", "entry_m": 4200, "apex_m": 4280, "exit_m": 4360},
+    {"id": 17, "name": "Turn 17", "short": "T17", "type": "low_speed", "direction": "right", "entry_m": 4600, "apex_m": 4680, "exit_m": 4760},
+    {"id": 18, "name": "Turn 18", "short": "T18", "type": "medium_speed", "direction": "left", "entry_m": 4900, "apex_m": 4980, "exit_m": 5060},
+    {"id": 19, "name": "Turn 19", "short": "T19", "type": "medium_speed", "direction": "right", "entry_m": 5100, "apex_m": 5180, "exit_m": 5270}
+  ],
+  "compound_zones": [],
+  "sectors": [],
+  "drs_zones": []
+}

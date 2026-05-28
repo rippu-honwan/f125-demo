@@ -1,0 +1,31 @@
+{
+  "name": "Circuit of the Americas",
+  "country": "United States",
+  "short": "austin",
+  "length_m": 5513,
+  "corners": [
+    {"id": 1, "name": "Turn 1", "short": "T1", "type": "low_speed", "direction": "left", "entry_m": 100, "apex_m": 180, "exit_m": 270},
+    {"id": 2, "name": "Turn 2", "short": "T2", "type": "medium_speed", "direction": "right", "entry_m": 350, "apex_m": 430, "exit_m": 510},
+    {"id": 3, "name": "Turn 3", "short": "T3", "type": "high_speed", "direction": "right", "entry_m": 560, "apex_m": 640, "exit_m": 730},
+    {"id": 4, "name": "Turn 4", "short": "T4", "type": "high_speed", "direction": "right", "entry_m": 730, "apex_m": 810, "exit_m": 900},
+    {"id": 5, "name": "Turn 5", "short": "T5", "type": "high_speed", "direction": "right", "entry_m": 900, "apex_m": 980, "exit_m": 1070},
+    {"id": 6, "name": "Turn 6", "short": "T6", "type": "high_speed", "direction": "right", "entry_m": 1070, "apex_m": 1150, "exit_m": 1240},
+    {"id": 7, "name": "Turn 7", "short": "T7", "type": "medium_speed", "direction": "left", "entry_m": 1350, "apex_m": 1430, "exit_m": 1510},
+    {"id": 8, "name": "Turn 8", "short": "T8", "type": "medium_speed", "direction": "right", "entry_m": 1600, "apex_m": 1680, "exit_m": 1760},
+    {"id": 9, "name": "Turn 9", "short": "T9", "type": "medium_speed", "direction": "left", "entry_m": 1800, "apex_m": 1880, "exit_m": 1960},
+    {"id": 10, "name": "Turn 10", "short": "T10", "type": "medium_speed", "direction": "right", "entry_m": 2000, "apex_m": 2080, "exit_m": 2160},
+    {"id": 11, "name": "Turn 11", "short": "T11", "type": "low_speed", "direction": "left", "entry_m": 2350, "apex_m": 2430, "exit_m": 2520},
+    {"id": 12, "name": "Turn 12", "short": "T12", "type": "low_speed", "direction": "right", "entry_m": 2700, "apex_m": 2780, "exit_m": 2870},
+    {"id": 13, "name": "Turn 13", "short": "T13", "type": "medium_speed", "direction": "right", "entry_m": 2950, "apex_m": 3030, "exit_m": 3120},
+    {"id": 14, "name": "Turn 14", "short": "T14", "type": "medium_speed", "direction": "right", "entry_m": 3200, "apex_m": 3280, "exit_m": 3370},
+    {"id": 15, "name": "Turn 15", "short": "T15", "type": "high_speed", "direction": "left", "entry_m": 3500, "apex_m": 3590, "exit_m": 3690},
+    {"id": 16, "name": "Turn 16", "short": "T16", "type": "medium_speed", "direction": "right", "entry_m": 3800, "apex_m": 3880, "exit_m": 3960},
+    {"id": 17, "name": "Turn 17", "short": "T17", "type": "medium_speed", "direction": "left", "entry_m": 4050, "apex_m": 4130, "exit_m": 4210},
+    {"id": 18, "name": "Turn 18", "short": "T18", "type": "medium_speed", "direction": "left", "entry_m": 4300, "apex_m": 4380, "exit_m": 4460},
+    {"id": 19, "name": "Turn 19", "short": "T19", "type": "low_speed", "direction": "right", "entry_m": 4700, "apex_m": 4790, "exit_m": 4880},
+    {"id": 20, "name": "Turn 20", "short": "T20", "type": "low_speed", "direction": "left", "entry_m": 5000, "apex_m": 5090, "exit_m": 5180}
+  ],
+  "compound_zones": [],
+  "sectors": [],
+  "drs_zones": []
+}

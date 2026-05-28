@@ -1,0 +1,27 @@
+{
+  "name": "Shanghai International Circuit",
+  "country": "China",
+  "short": "shanghai",
+  "length_m": 5451,
+  "corners": [
+    {"id": 1, "name": "Turn 1", "short": "T1", "type": "medium_speed", "direction": "right", "entry_m": 100, "apex_m": 180, "exit_m": 270},
+    {"id": 2, "name": "Turn 2", "short": "T2", "type": "medium_speed", "direction": "right", "entry_m": 270, "apex_m": 360, "exit_m": 460},
+    {"id": 3, "name": "Turn 3", "short": "T3", "type": "medium_speed", "direction": "right", "entry_m": 460, "apex_m": 550, "exit_m": 650},
+    {"id": 4, "name": "Turn 4", "short": "T4", "type": "medium_speed", "direction": "right", "entry_m": 650, "apex_m": 740, "exit_m": 840},
+    {"id": 5, "name": "Turn 5", "short": "T5", "type": "low_speed", "direction": "left", "entry_m": 900, "apex_m": 970, "exit_m": 1050},
+    {"id": 6, "name": "Turn 6", "short": "T6", "type": "medium_speed", "direction": "right", "entry_m": 1200, "apex_m": 1290, "exit_m": 1380},
+    {"id": 7, "name": "Turn 7", "short": "T7", "type": "high_speed", "direction": "right", "entry_m": 1600, "apex_m": 1700, "exit_m": 1810},
+    {"id": 8, "name": "Turn 8", "short": "T8", "type": "high_speed", "direction": "right", "entry_m": 1810, "apex_m": 1910, "exit_m": 2020},
+    {"id": 9, "name": "Turn 9", "short": "T9", "type": "medium_speed", "direction": "left", "entry_m": 2200, "apex_m": 2290, "exit_m": 2380},
+    {"id": 10, "name": "Turn 10", "short": "T10", "type": "medium_speed", "direction": "right", "entry_m": 2500, "apex_m": 2580, "exit_m": 2660},
+    {"id": 11, "name": "Turn 11", "short": "T11", "type": "low_speed", "direction": "left", "entry_m": 2900, "apex_m": 2980, "exit_m": 3060},
+    {"id": 12, "name": "Turn 12", "short": "T12", "type": "medium_speed", "direction": "right", "entry_m": 3200, "apex_m": 3290, "exit_m": 3380},
+    {"id": 13, "name": "Turn 13", "short": "T13", "type": "high_speed", "direction": "left", "entry_m": 3600, "apex_m": 3700, "exit_m": 3810},
+    {"id": 14, "name": "Turn 14", "short": "T14", "type": "low_speed", "direction": "left", "entry_m": 4400, "apex_m": 4480, "exit_m": 4560},
+    {"id": 15, "name": "Turn 15", "short": "T15", "type": "medium_speed", "direction": "right", "entry_m": 4700, "apex_m": 4780, "exit_m": 4860},
+    {"id": 16, "name": "Turn 16", "short": "T16", "type": "medium_speed", "direction": "right", "entry_m": 5000, "apex_m": 5090, "exit_m": 5180}
+  ],
+  "compound_zones": [],
+  "sectors": [],
+  "drs_zones": []
+}

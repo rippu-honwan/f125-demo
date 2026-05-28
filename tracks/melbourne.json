@@ -1,0 +1,27 @@
+{
+  "name": "Albert Park Circuit",
+  "country": "Australia",
+  "short": "melbourne",
+  "length_m": 5278,
+  "corners": [
+    {"id": 1, "name": "Turn 1", "short": "T1", "type": "medium_speed", "direction": "right", "entry_m": 80, "apex_m": 150, "exit_m": 230},
+    {"id": 2, "name": "Turn 2", "short": "T2", "type": "low_speed", "direction": "left", "entry_m": 350, "apex_m": 420, "exit_m": 500},
+    {"id": 3, "name": "Turn 3", "short": "T3", "type": "medium_speed", "direction": "right", "entry_m": 650, "apex_m": 730, "exit_m": 820},
+    {"id": 4, "name": "Turn 4", "short": "T4", "type": "medium_speed", "direction": "right", "entry_m": 900, "apex_m": 980, "exit_m": 1060},
+    {"id": 5, "name": "Turn 5", "short": "T5", "type": "medium_speed", "direction": "right", "entry_m": 1150, "apex_m": 1230, "exit_m": 1320},
+    {"id": 6, "name": "Turn 6", "short": "T6", "type": "low_speed", "direction": "right", "entry_m": 1500, "apex_m": 1580, "exit_m": 1670},
+    {"id": 7, "name": "Turn 7", "short": "T7", "type": "medium_speed", "direction": "right", "entry_m": 1800, "apex_m": 1880, "exit_m": 1970},
+    {"id": 8, "name": "Turn 8", "short": "T8", "type": "medium_speed", "direction": "left", "entry_m": 2100, "apex_m": 2180, "exit_m": 2270},
+    {"id": 9, "name": "Turn 9", "short": "T9", "type": "high_speed", "direction": "right", "entry_m": 2500, "apex_m": 2590, "exit_m": 2690},
+    {"id": 10, "name": "Turn 10", "short": "T10", "type": "low_speed", "direction": "right", "entry_m": 2850, "apex_m": 2930, "exit_m": 3020},
+    {"id": 11, "name": "Turn 11", "short": "T11", "type": "high_speed", "direction": "left", "entry_m": 3200, "apex_m": 3290, "exit_m": 3390},
+    {"id": 12, "name": "Turn 12", "short": "T12", "type": "high_speed", "direction": "right", "entry_m": 3500, "apex_m": 3590, "exit_m": 3690},
+    {"id": 13, "name": "Turn 13", "short": "T13", "type": "low_speed", "direction": "right", "entry_m": 3850, "apex_m": 3930, "exit_m": 4020},
+    {"id": 14, "name": "Turn 14", "short": "T14", "type": "low_speed", "direction": "right", "entry_m": 4150, "apex_m": 4230, "exit_m": 4320},
+    {"id": 15, "name": "Turn 15", "short": "T15", "type": "medium_speed", "direction": "left", "entry_m": 4500, "apex_m": 4580, "exit_m": 4670},
+    {"id": 16, "name": "Turn 16", "short": "T16", "type": "medium_speed", "direction": "right", "entry_m": 4800, "apex_m": 4880, "exit_m": 4970}
+  ],
+  "compound_zones": [],
+  "sectors": [],
+  "drs_zones": []
+}

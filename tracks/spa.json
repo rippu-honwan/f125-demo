@@ -1,0 +1,30 @@
+{
+  "name": "Circuit de Spa-Francorchamps",
+  "country": "Belgium",
+  "short": "spa",
+  "length_m": 7004,
+  "corners": [
+    {"id": 1, "name": "La Source", "short": "T1", "type": "low_speed", "direction": "right", "entry_m": 50, "apex_m": 120, "exit_m": 200},
+    {"id": 2, "name": "Eau Rouge Entry", "short": "T2", "type": "high_speed", "direction": "left", "entry_m": 520, "apex_m": 580, "exit_m": 640},
+    {"id": 3, "name": "Eau Rouge", "short": "T3", "type": "high_speed", "direction": "right", "entry_m": 640, "apex_m": 700, "exit_m": 760},
+    {"id": 4, "name": "Raidillon", "short": "T4", "type": "high_speed", "direction": "left", "entry_m": 760, "apex_m": 840, "exit_m": 930},
+    {"id": 5, "name": "Kemmel Kink", "short": "T5", "type": "high_speed", "direction": "right", "entry_m": 1450, "apex_m": 1520, "exit_m": 1590},
+    {"id": 6, "name": "Les Combes 1", "short": "T6", "type": "medium_speed", "direction": "left", "entry_m": 1900, "apex_m": 1970, "exit_m": 2040},
+    {"id": 7, "name": "Les Combes 2", "short": "T7", "type": "medium_speed", "direction": "right", "entry_m": 2040, "apex_m": 2110, "exit_m": 2180},
+    {"id": 8, "name": "Malmedy", "short": "T8", "type": "medium_speed", "direction": "right", "entry_m": 2250, "apex_m": 2330, "exit_m": 2420},
+    {"id": 9, "name": "Rivage", "short": "T9", "type": "low_speed", "direction": "right", "entry_m": 2550, "apex_m": 2630, "exit_m": 2720},
+    {"id": 10, "name": "Pouhon Entry", "short": "T10", "type": "high_speed", "direction": "left", "entry_m": 3200, "apex_m": 3300, "exit_m": 3400},
+    {"id": 11, "name": "Pouhon Exit", "short": "T11", "type": "high_speed", "direction": "left", "entry_m": 3400, "apex_m": 3500, "exit_m": 3600},
+    {"id": 12, "name": "Fagnes", "short": "T12", "type": "high_speed", "direction": "right", "entry_m": 3800, "apex_m": 3880, "exit_m": 3960},
+    {"id": 13, "name": "Campus", "short": "T13", "type": "medium_speed", "direction": "right", "entry_m": 4100, "apex_m": 4180, "exit_m": 4260},
+    {"id": 14, "name": "Speaker's Corner", "short": "T14", "type": "medium_speed", "direction": "left", "entry_m": 4400, "apex_m": 4480, "exit_m": 4560},
+    {"id": 15, "name": "Stavelot 1", "short": "T15", "type": "medium_speed", "direction": "right", "entry_m": 4650, "apex_m": 4730, "exit_m": 4810},
+    {"id": 16, "name": "Stavelot 2", "short": "T16", "type": "medium_speed", "direction": "right", "entry_m": 4810, "apex_m": 4900, "exit_m": 5000},
+    {"id": 17, "name": "Blanchimont", "short": "T17", "type": "high_speed", "direction": "left", "entry_m": 5500, "apex_m": 5620, "exit_m": 5750},
+    {"id": 18, "name": "Bus Stop 1", "short": "T18", "type": "low_speed", "direction": "right", "entry_m": 6400, "apex_m": 6470, "exit_m": 6540},
+    {"id": 19, "name": "Bus Stop 2", "short": "T19", "type": "low_speed", "direction": "left", "entry_m": 6540, "apex_m": 6620, "exit_m": 6710}
+  ],
+  "compound_zones": [],
+  "sectors": [],
+  "drs_zones": []
+}

@@ -634,5 +634,31 @@
       "start_m": 4200,
       "end_m": 5200
     }
+  ],
+  "compound_zones": [
+    {
+      "label": "esses_complex",
+      "start_m": 950,
+      "end_m": 1650,
+      "subapex_method": "curvature_peaks",
+      "prominence_threshold": 0.0003,
+      "expected_peaks": 4
+    },
+    {
+      "label": "spoon_complex",
+      "start_m": 3700,
+      "end_m": 4100,
+      "subapex_method": "speed_minima",
+      "prominence_threshold": null,
+      "expected_peaks": 2
+    },
+    {
+      "label": "casio_complex",
+      "start_m": 5200,
+      "end_m": 5600,
+      "subapex_method": "speed_minima",
+      "prominence_threshold": null,
+      "expected_peaks": 2
+    }
   ]
 }
