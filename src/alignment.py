@@ -219,23 +219,26 @@ def estimate_rigid_transform(src: np.ndarray, dst: np.ndarray,
     U, S, Vt = np.linalg.svd(H)
 
     # Rotation (handle reflection)
-    d = np.linalg.det(Vt.T @ U.T)
-    reflection = False
+    # Compute both options and pick the one with lower residual
 
-    if d < 0 and allow_reflection:
-        # Reflection needed
-        sign_matrix = np.diag([1, -1])
-        R = Vt.T @ sign_matrix @ U.T
-        reflection = True
+    # No-reflection
+    R_no = Vt.T @ U.T
+    t_no = dst_c - scale * (R_no @ src_c)
+    res_no = float(np.mean(np.sqrt(np.sum(
+        (scale * (src @ R_no.T) + t_no - dst)**2, axis=1))))
+
+    # With-reflection
+    sign_matrix = np.diag([1.0, -1.0])
+    R_ref = Vt.T @ sign_matrix @ U.T
+    t_ref = dst_c - scale * (R_ref @ src_c)
+    res_ref = float(np.mean(np.sqrt(np.sum(
+        (scale * (src @ R_ref.T) + t_ref - dst)**2, axis=1))))
+
+    # Pick the one with lower residual
+    if allow_reflection and res_ref < res_no:
+        R, translation, residual, reflection = R_ref, t_ref, res_ref, True
     else:
-        R = Vt.T @ U.T
-
-    # Full transform: dst ≈ scale * R @ src_centered + dst_c
-    translation = dst_c - scale * (R @ src_c)
-
-    # Compute residual
-    transformed = scale * (src @ R.T) + translation
-    residual = float(np.mean(np.sqrt(np.sum((transformed - dst)**2, axis=1))))
+        R, translation, residual, reflection = R_no, t_no, res_no, False
 
     return {
         'rotation': R,
@@ -950,7 +953,20 @@ def align_two_pass(game_data, game_length,
         )
 
     # Aligned game XY: game coordinates transformed into real coord system
-    if shape_result is not None and has_game_xy:
+    # GATING: only use shape result if quality is acceptable
+    shape_accepted = False
+    if shape_result is not None:
+        _curv_corr = shape_result.get('curvature_correlation', 0)
+        _residual = shape_result.get('residual_m', float('inf'))
+        # Thresholds: curvature correlation >= 0.4 AND residual < 150m
+        shape_accepted = (_curv_corr >= 0.4 and _residual < 150)
+        if not shape_accepted and verbose:
+            print(f"    ⚠ Shape alignment REJECTED "
+                  f"(curv_corr={_curv_corr:.3f}, residual={_residual:.1f}m)")
+            print(f"    → Aligned coordinates will NOT be written. "
+                  f"Distance-based alignment still active.")
+
+    if shape_accepted and has_game_xy:
         game_xy_raw = np.column_stack([
             aligned['game_world_x'].values,
             aligned['game_world_y'].values,
@@ -972,6 +988,18 @@ def align_two_pass(game_data, game_length,
         game_anch_d, real_anch_d, shape_result
     )
 
+    # Recompute confidence with shape_accepted gating
+    quality['confidence'] = _compute_confidence(
+        quality['anchor_density'],
+        quality['max_gap'],
+        game_length,
+        quality['coverage_pct'],
+        quality['mean_correlation'],
+        quality['shape_error_m'],
+        quality['curvature_correlation'],
+        shape_accepted=shape_accepted
+    )
+
     aligned.attrs['anchor_pairs'] = final_pairs
     aligned.attrs['game_anch_d'] = game_anch_d
     aligned.attrs['real_anch_d'] = real_anch_d
@@ -979,6 +1007,7 @@ def align_two_pass(game_data, game_length,
     aligned.attrs['pass2_count'] = len(new_anchors)
     aligned.attrs['quality'] = quality
     aligned.attrs['shape_result'] = shape_result
+    aligned.attrs['shape_accepted'] = shape_accepted
 
     if verbose:
         print(f"\n  Alignment quality:")
@@ -1085,7 +1114,8 @@ def _compute_alignment_quality(final_pairs, game_length,
 
 
 def _compute_confidence(density, max_gap, _game_length, coverage_pct,
-                         mean_corr, shape_error_m, curv_corr):
+                         mean_corr, shape_error_m, curv_corr,
+                         shape_accepted=True):
     """
     Compute composite confidence score (0.0 - 1.0).
 
@@ -1107,7 +1137,7 @@ def _compute_confidence(density, max_gap, _game_length, coverage_pct,
     # Correlation score: 0.7+ = perfect
     s_corr = min(max(mean_corr, 0) / 0.7, 1.0)
 
-    if shape_error_m is not None and curv_corr is not None:
+    if shape_accepted and shape_error_m is not None and curv_corr is not None:
         # Shape error score: < 20m = perfect, > 100m = 0
         s_shape = max(0, 1.0 - (shape_error_m - 20) / 80)
         # Curvature correlation: 0.8+ = perfect
