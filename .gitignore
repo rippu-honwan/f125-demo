@@ -208,3 +208,16 @@ __marimo__/
 .DS_Store
 cache/
 tests/
+
+# FastF1 cache (regeneratable)
+data/fastf1_cache/
+*.ff1pkl
+*.sqlite
+
+# Generated outputs
+graphify-out/
+src/graphify-out/
+output/
+
+# Misc
+note.md

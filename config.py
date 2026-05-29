@@ -17,7 +17,7 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 # ============================================================
 # Default Settings
 # ============================================================
-DEFAULT_CSV = str(DATA_DIR / "f1_telemetry.csv")
+DEFAULT_CSV = str(DATA_DIR / "my_lap.csv")
 DEFAULT_TRACK = "suzuka"
 
 # ============================================================
