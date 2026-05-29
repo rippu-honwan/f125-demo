@@ -1,7 +1,7 @@
 """
 F1 Lap Insight - Step 3: Lap Comparison  (v2 - Graded Visual)
-One-page dashboard: WHERE and HOW MUCH you lose time vs a real F1 driver.
-python scripts/03_lap_comparison.py data/my_lap.csv --lap 0 \--driver VER --year 2025 --session Q --track suzuka
+One-page dashboard: WHERE and HOW MUCH you lose time vs a real F1 driver.suzuka
+
 
 Layout:
   [HEADER]  Your time  vs  Pro time  |  Delta
