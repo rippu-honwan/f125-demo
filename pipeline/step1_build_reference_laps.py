@@ -26,7 +26,7 @@ from src.fastf1_loader import (
     CACHE_DIR, _normalize_brake, _normalize_throttle, resolve_gp_name
 )
 from src.plotting import COLORS, style_axis, save_figure
-from config import OUTPUT_DIR
+from config import OUTPUT_DIR, ensure_output_dir
 
 # ============================================================
 # Configuration (defaults — overridden by argparse)
@@ -447,4 +447,5 @@ def main():
 
 
 if __name__ == "__main__":
+    ensure_output_dir()
     main()

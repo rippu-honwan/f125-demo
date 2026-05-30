@@ -24,7 +24,8 @@ from scipy.ndimage import gaussian_filter1d
 from src.track_registry import get_gp_name, get_output_prefix, get_track_corners
 from src.track import load_track, TRACKS_DIR
 from src.plotting import COLORS, style_axis, save_figure
-from config import OUTPUT_DIR
+from src.utils import signed_curvature_from_smoothed
+from config import OUTPUT_DIR, ensure_output_dir
 
 # ============================================================
 # Corner mapping is built dynamically from the track JSON.
@@ -40,6 +41,23 @@ def build_corner_map(segments, old_track):
     corner_map = {}  # segment_id -> [(cid, name, short, type, dir, complex)]
     assigned_ids = set()
 
+    # Build {corner_id: complex_name} once, before the loop
+    complex_by_id = {}
+    track_json = TRACKS_DIR / f"{old_track.short}.json"
+    if track_json.exists():
+        with open(track_json) as f:
+            tdata = json.load(f)
+        for cj in tdata.get('corners', []):
+            complex_by_id[cj['id']] = cj.get('complex', None)
+
+    # First pass: collect all (corner, segment) candidate pairs with distances
+    seg_centers = {
+        seg['segment_id']: (seg['consensus_start_m'] + seg['consensus_end_m']) / 2
+        for seg in segments
+    }
+    # corner_id -> (best_seg_id, best_dist)
+    best_seg_for_corner: dict[int, tuple[int, float]] = {}
+
     for seg in segments:
         seg_id = seg['segment_id']
         seg_start = seg['consensus_start_m']
@@ -48,22 +66,26 @@ def build_corner_map(segments, old_track):
 
         for corner in old_track.corners:
             if seg_start - 50 <= corner.apex_m <= seg_end + 50:
-                # Read complex from track JSON data
-                complex_name = None
-                track_json = TRACKS_DIR / f"{old_track.short}.json"
-                if track_json.exists():
-                    with open(track_json) as f:
-                        tdata = json.load(f)
-                    for cj in tdata.get('corners', []):
-                        if cj['id'] == corner.id:
-                            complex_name = cj.get('complex', None)
-                            break
+                dist = abs(corner.apex_m - seg_centers[seg_id])
+                prev = best_seg_for_corner.get(corner.id)
+                if prev is None or dist < prev[1]:
+                    best_seg_for_corner[corner.id] = (seg_id, dist)
 
-                corner_map[seg_id].append((
-                    corner.id, corner.name, corner.short,
-                    corner.type, corner.direction, complex_name
-                ))
-                assigned_ids.add(corner.id)
+    # Second pass: assign each corner to its nearest segment only
+    for seg in segments:
+        seg_id = seg['segment_id']
+        seg_start = seg['consensus_start_m']
+        seg_end = seg['consensus_end_m']
+
+        for corner in old_track.corners:
+            if seg_start - 50 <= corner.apex_m <= seg_end + 50:
+                if best_seg_for_corner.get(corner.id, (None,))[0] == seg_id:
+                    complex_name = complex_by_id.get(corner.id)
+                    corner_map[seg_id].append((
+                        corner.id, corner.name, corner.short,
+                        corner.type, corner.direction, complex_name
+                    ))
+                    assigned_ids.add(corner.id)
 
     # Fallback: corners not assigned to any segment
     fallback_corners = []
@@ -568,12 +590,7 @@ def _compute_kappa(x, y):
     """Helper: compute signed curvature from XY."""
     x_s = gaussian_filter1d(x, sigma=5)
     y_s = gaussian_filter1d(y, sigma=5)
-    dx = np.gradient(x_s)
-    dy = np.gradient(y_s)
-    ddx = np.gradient(dx)
-    ddy = np.gradient(dy)
-    denom = np.maximum((dx**2 + dy**2)**1.5, 1e-12)
-    return (dx * ddy - dy * ddx) / denom
+    return signed_curvature_from_smoothed(x_s, y_s, eps=1e-12)
 
 
 # ============================================================
@@ -728,4 +745,5 @@ def main():
 
 
 if __name__ == "__main__":
+    ensure_output_dir()
     main()

@@ -30,7 +30,7 @@ from scipy.signal import argrelextrema
 from scipy.ndimage import uniform_filter1d
 from typing import List, Tuple, Optional, Dict, Any
 
-from src.utils import smooth
+from src.utils import smooth, signed_curvature_from_smoothed
 
 
 # ============================================================
@@ -94,16 +94,7 @@ def compute_curvature(xy: np.ndarray, smooth_window: int = 15) -> np.ndarray:
     x = uniform_filter1d(xy[:, 0], size=smooth_window)
     y = uniform_filter1d(xy[:, 1], size=smooth_window)
 
-    dx = np.gradient(x)
-    dy = np.gradient(y)
-    ddx = np.gradient(dx)
-    ddy = np.gradient(dy)
-
-    denom = (dx**2 + dy**2)**1.5
-    denom = np.maximum(denom, 1e-10)  # avoid division by zero
-
-    curvature = (dx * ddy - dy * ddx) / denom
-    return curvature
+    return signed_curvature_from_smoothed(x, y, eps=1e-10)
 
 
 def find_start_offset_by_curvature(curv_a: np.ndarray,
@@ -696,45 +687,23 @@ def find_anchor_gaps(anchor_pairs, game_length, min_gap=300):
 # Two-pass alignment (main entry point)
 # ============================================================
 
-def align_two_pass(game_data, game_length,
-                   real_data, real_length,
-                   max_drift=80, corr_threshold=0.5,
-                   verbose=True):
+def _layer0_shape_align(game_data, real_data, verbose=True):
     """
-    Two-pass alignment: shape alignment + global features + local xcorr.
-
-    Pipeline:
-      0. Shape alignment (if XY available) — unifies coordinate systems
-      1. Feature anchors (speed + decel + throttle + curvature)
-      2. Anchor matching
-      3. Local cross-correlation gap filling
-      4. Build aligned DataFrame with all channels
+    LAYER 0: Shape alignment (coordinate unification).
 
     Returns:
-        Aligned DataFrame with game_* and real_* columns,
-        plus aligned world coordinates.
+        (has_game_xy, has_real_xy, game_xy, real_xy, shape_result)
+        where game_xy/real_xy are (N,2) arrays or None,
+        and shape_result is the dict from align_track_shapes or None.
     """
-    if verbose:
-        print(f"\n  --- Two-Pass Alignment ---")
-        print(f"  Game: {game_length:.0f}m  |  Real: {real_length:.0f}m")
-
-    game_speed = game_data['speed_kmh'].values
-    real_speed = real_data['speed_kmh'].values
-
-    game_throttle = (game_data['throttle'].values
-                     if 'throttle' in game_data.columns else None)
-    real_throttle = (real_data['throttle'].values
-                     if 'throttle' in real_data.columns else None)
-
-    # ---- LAYER 0: Shape alignment (coordinate unification) ----
-    shape_result = None
-    game_xy = None
-    real_xy = None
-
     has_game_xy = ('world_position_X' in game_data.columns and
                    'world_position_Y' in game_data.columns)
     has_real_xy = ('world_position_X' in real_data.columns and
                    'world_position_Y' in real_data.columns)
+
+    game_xy = None
+    real_xy = None
+    shape_result = None
 
     if has_game_xy and has_real_xy:
         if verbose:
@@ -765,6 +734,48 @@ def align_two_pass(game_data, game_length,
             print(f"  ⚠ No game XY coordinates — skipping shape alignment")
         if not has_real_xy:
             print(f"  ⚠ No real XY coordinates — skipping shape alignment")
+
+    return has_game_xy, has_real_xy, game_xy, real_xy, shape_result
+
+
+def align_two_pass(game_data, game_length,
+                   real_data, real_length,
+                   max_drift=80, corr_threshold=0.5,
+                   verbose=True):
+    """
+    Two-pass alignment: shape alignment + global features + local xcorr.
+
+    Pipeline:
+      0. Shape alignment (if XY available) — unifies coordinate systems
+      1. Feature anchors (speed + decel + throttle + curvature)
+      2. Anchor matching
+      3. Local cross-correlation gap filling
+      4. Build aligned DataFrame with all channels
+
+    Returns:
+        Aligned DataFrame with game_* and real_* columns,
+        plus aligned world coordinates.
+    """
+    if verbose:
+        print(f"\n  --- Two-Pass Alignment ---")
+        print(f"  Game: {game_length:.0f}m  |  Real: {real_length:.0f}m")
+
+    game_speed = game_data['speed_kmh'].values
+    real_speed = real_data['speed_kmh'].values
+
+    # Cache smoothed speeds — reused in gap fill loop and quality metrics
+    game_speed_s = smooth(game_speed, 15)
+    real_speed_s = smooth(real_speed, 15)
+
+    game_throttle = (game_data['throttle'].values
+                     if 'throttle' in game_data.columns else None)
+    real_throttle = (real_data['throttle'].values
+                     if 'throttle' in real_data.columns else None)
+
+    # ---- LAYER 0: Shape alignment (coordinate unification) ----
+    has_game_xy, has_real_xy, game_xy, real_xy, shape_result = (
+        _layer0_shape_align(game_data, real_data, verbose=verbose)
+    )
 
     # ---- PASS 1: Global feature matching ----
     if verbose:
@@ -816,6 +827,10 @@ def align_two_pass(game_data, game_length,
 
     new_anchors = []
 
+    # Precompute anchor arrays for np.interp (avoids list comp per candidate)
+    anchor_g_arr = np.array([a[0] for a in anchor_pairs])
+    anchor_r_arr = np.array([a[1] for a in anchor_pairs])
+
     for gap_start, gap_end, _gap_size in gaps:
         g_start_idx = int(gap_start)
         g_end_idx = min(int(gap_end), len(game_speed))
@@ -829,8 +844,8 @@ def align_two_pass(game_data, game_length,
         local_order = max(len(game_seg) // 8, 15)
         local_min = argrelextrema(game_seg_s, np.less, order=local_order)[0]
 
-        # Also try deceleration peaks in gaps
-        decel = -np.gradient(smooth(game_seg, 15))
+        # Also try deceleration peaks in gaps (reuse cached game_seg_s)
+        decel = -np.gradient(game_seg_s)
         decel_peaks = argrelextrema(smooth(decel, 10), np.greater,
                                      order=local_order)[0]
         candidates = list(local_min) + list(decel_peaks)
@@ -841,9 +856,7 @@ def align_two_pass(game_data, game_length,
             game_norm = game_dist / game_length
 
             real_est_norm = np.interp(
-                game_norm,
-                [a[0] for a in anchor_pairs],
-                [a[1] for a in anchor_pairs]
+                game_norm, anchor_g_arr, anchor_r_arr
             )
             real_est_dist = real_est_norm * real_length
 
@@ -862,7 +875,7 @@ def align_two_pass(game_data, game_length,
 
             real_refined = real_est_dist + shift
             real_idx = int(np.clip(real_refined, 0, len(real_speed) - 1))
-            real_spd = float(smooth(real_speed, 15)[real_idx])
+            real_spd = float(real_speed_s[real_idx])
             game_spd = (float(game_seg_s[lm])
                         if lm < len(game_seg_s) else 0)
 
@@ -985,7 +998,8 @@ def align_two_pass(game_data, game_length,
     # ---- Alignment quality metrics ----
     quality = _compute_alignment_quality(
         final_pairs, game_length, game_speed, real_speed,
-        game_anch_d, real_anch_d, shape_result
+        game_anch_d, real_anch_d, shape_result,
+        game_speed_s=game_speed_s, real_speed_s=real_speed_s
     )
 
     # Recompute confidence with shape_accepted gating
@@ -1032,7 +1046,8 @@ def align_two_pass(game_data, game_length,
 def _compute_alignment_quality(final_pairs, game_length,
                                 game_speed, real_speed,
                                 game_anch_d, real_anch_d,
-                                shape_result=None):
+                                shape_result=None,
+                                game_speed_s=None, real_speed_s=None):
     """
     Compute alignment quality metrics.
 
@@ -1066,8 +1081,8 @@ def _compute_alignment_quality(final_pairs, game_length,
 
     # Local speed correlation at anchor points
     correlations = []
-    game_spd_s = smooth(game_speed, 15)
-    real_spd_s = smooth(real_speed, 15)
+    game_spd_s = game_speed_s if game_speed_s is not None else smooth(game_speed, 15)
+    real_spd_s = real_speed_s if real_speed_s is not None else smooth(real_speed, 15)
 
     for gd, rd in zip(game_anch_d[1:-1], real_anch_d[1:-1]):
         gi = int(np.clip(gd, 0, len(game_spd_s) - 1))

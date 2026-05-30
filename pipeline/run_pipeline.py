@@ -3,6 +3,8 @@
 F1 Ground Truth Pipeline — Orchestrator.
 
 Runs step1 through step5 sequentially for a given track.
+python pipeline/run_pipeline.py \
+  --track silverstone --year 2025 --session Q
 """
 
 import sys

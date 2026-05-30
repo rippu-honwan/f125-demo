@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Tuple, Dict, Any, Optional
 import warnings
 
+from src.utils import resample_to_distance, normalize_pedal_array
+
 # Cache directory
 CACHE_DIR = Path(__file__).parent.parent / "cache" / "fastf1"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -115,38 +117,14 @@ def resolve_gp_name(track_hint: str, year: int) -> str:
 
 
 def _normalize_brake(brake_raw: np.ndarray) -> Tuple[np.ndarray, str]:
-    """
-    Normalize brake data to continuous 0.0-1.0.
-
-    FastF1 brake data varies by source:
-      - Some years: boolean (True/False → 0/1)
-      - Some years: 0-100 percentage
-      - Some years: 0-1 float
-
-    Returns:
-        (normalized_array, format_description)
-    """
-    brake = brake_raw.astype(float)
-    unique_vals = np.unique(brake[~np.isnan(brake)])
-
-    # Case 1: Boolean (only 0 and 1, or True/False)
-    if len(unique_vals) <= 2 and set(unique_vals).issubset({0.0, 1.0}):
-        return brake, "boolean"
-
-    # Case 2: 0-100 range
-    if np.nanmax(brake) > 1.5:
-        return brake / 100.0, "percentage_0_100"
-
-    # Case 3: Already 0-1 continuous
-    return brake.clip(0.0, 1.0), "continuous_0_1"
+    """Normalize brake data to continuous 0.0-1.0, detect format."""
+    return normalize_pedal_array(brake_raw, detect_boolean=True)
 
 
 def _normalize_throttle(throttle_raw: np.ndarray) -> np.ndarray:
     """Normalize throttle to 0-1 range."""
-    throttle = throttle_raw.astype(float)
-    if np.nanmax(throttle) > 1.5:
-        return throttle / 100.0
-    return throttle.clip(0.0, 1.0)
+    normalized, _ = normalize_pedal_array(throttle_raw)
+    return normalized
 
 
 def load_real_telemetry(driver: str, year: int, session: str = 'Q',
@@ -260,22 +238,7 @@ def load_real_telemetry(driver: str, year: int, session: str = 'Q',
             data['world_position_Z'] = tel['Z'].values.astype(float)
 
     # Resample to 1m intervals
-    distances = np.arange(0, track_length, 1.0)
-    resampled = pd.DataFrame({'lap_distance': distances})
-
-    src_dist = data['lap_distance'].values
-    sort_idx = np.argsort(src_dist)
-    src_sorted = src_dist[sort_idx]
-
-    # Remove duplicates
-    unique_mask = np.concatenate([[True], np.diff(src_sorted) > 0.01])
-    src_unique = src_sorted[unique_mask]
-
-    for col in data.columns:
-        if col == 'lap_distance':
-            continue
-        vals = data[col].values[sort_idx][unique_mask]
-        resampled[col] = np.interp(distances, src_unique, vals)
+    resampled = resample_to_distance(data, track_length, step_m=1.0)
 
     meta = {
         'driver': driver,

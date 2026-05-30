@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.patches import FancyBboxPatch
 
-from config import DEFAULT_CSV, OUTPUT_DIR, DPI_SAVE
+from config import DEFAULT_CSV, OUTPUT_DIR, DPI_SAVE, ensure_output_dir
 from src.loader import load_and_prepare, get_lap_summary
 from src.track import auto_detect_track, load_track
 from src.utils import smooth, format_laptime
@@ -265,4 +265,5 @@ def main():
 
 
 if __name__ == "__main__":
+    ensure_output_dir()
     main()

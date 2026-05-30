@@ -4,12 +4,10 @@ F1 Lap Insight – Step 5: Track Map Visualization
 Generates a 2D track layout with per-corner problem indicators.
 
 Usage:
-    python scripts/05_track_map.py data/my_lap.csv \
-        --driver VER --year 2025 --session Q --track suzuka
+    python scripts/05_track_map.py data/my_lap.csv \--driver VER --year 2025 --session Q --track suzuka
 
     # Also draw speed-delta heatmap:
-    python scripts/05_track_map.py data/my_lap.csv \
-        --driver VER --year 2025 --session Q --track suzuka --mode both
+    python scripts/05_track_map.py data/my_lap.csv \--driver VER --year 2025 --session Q --track suzuka --mode both
 
 Modes:
     issues   (default) – colour each corner by problem severity
@@ -28,7 +26,7 @@ matplotlib.rcParams['font.family'] = 'DejaVu Sans'
 
 from src.pipeline import make_parser, run_pipeline
 from src.track_map import draw_all_modes, draw_track_map
-from config import OUTPUT_DIR
+from config import OUTPUT_DIR, ensure_output_dir
 
 
 def main():
@@ -93,4 +91,5 @@ def main():
 
 
 if __name__ == "__main__":
+    ensure_output_dir()
     main()

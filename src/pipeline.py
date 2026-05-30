@@ -13,7 +13,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Tuple, Dict, Any, Optional, List
 
-from src.loader import load_and_prepare
+from src.loader import load_and_prepare, detect_separator
 from src.fastf1_loader import load_real_telemetry
 from src.alignment import align_two_pass
 from src.utils import calculate_time_delta
@@ -49,7 +49,8 @@ def make_parser(description: str) -> argparse.ArgumentParser:
 def auto_detect_track(csv_path: str) -> Optional[str]:
     """Try to detect track name from CSV metadata."""
     try:
-        raw = pd.read_csv(csv_path, sep='\t', nrows=1)
+        sep = detect_separator(csv_path)
+        raw = pd.read_csv(csv_path, sep=sep, nrows=1)
         if 'trackId' in raw.columns:
             return str(raw['trackId'].iloc[0]).strip().lower()
     except Exception:
@@ -57,32 +58,33 @@ def auto_detect_track(csv_path: str) -> Optional[str]:
     return None
 
 
+def _read_corners(json_path: Path) -> Optional[List[Dict]]:
+    """Read corner list from a track JSON. Returns None if no corners."""
+    with open(json_path) as f:
+        data = json.load(f)
+    corners = data.get('corners', None)
+    if corners:
+        print(f"  Loaded {len(corners)} corners from {json_path.name}")
+    return corners
+
+
 def load_corners(track_name: Optional[str]) -> Optional[List[Dict]]:
-    """Load corner definitions from track JSON."""
+    """Load corner definitions from track JSON (exact then partial match)."""
     if track_name is None:
         return None
 
     track_dir = PROJECT_ROOT / "tracks"
+    key = track_name.lower()
 
     # Exact match
-    json_path = track_dir / f"{track_name.lower()}.json"
+    json_path = track_dir / f"{key}.json"
     if json_path.exists():
-        with open(json_path) as f:
-            data = json.load(f)
-        corners = data.get('corners', None)
-        if corners:
-            print(f"  Loaded {len(corners)} corners from {json_path.name}")
-        return corners
+        return _read_corners(json_path)
 
     # Partial match
     for p in track_dir.glob("*.json"):
-        if track_name.lower() in p.stem.lower():
-            with open(p) as f:
-                data = json.load(f)
-            corners = data.get('corners', None)
-            if corners:
-                print(f"  Loaded {len(corners)} corners from {p.name}")
-            return corners
+        if key in p.stem.lower():
+            return _read_corners(p)
 
     print(f"  ⚠ No track JSON for '{track_name}'")
     return None

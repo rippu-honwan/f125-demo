@@ -12,7 +12,10 @@ DATA_DIR = PROJECT_ROOT / "data"
 OUTPUT_DIR = PROJECT_ROOT / "output"
 TRACKS_DIR = PROJECT_ROOT / "tracks"
 
-OUTPUT_DIR.mkdir(exist_ok=True)
+
+def ensure_output_dir():
+    """Create OUTPUT_DIR if missing. Call from entry points, not on import."""
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ============================================================
 # Default Settings

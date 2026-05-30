@@ -20,7 +20,7 @@ import pandas as pd
 
 from src.track_registry import get_gp_name, get_output_prefix
 from src.track import load_track, TRACKS_DIR
-from config import OUTPUT_DIR
+from config import OUTPUT_DIR, ensure_output_dir
 
 
 # ============================================================
@@ -323,4 +323,5 @@ def main():
 
 
 if __name__ == "__main__":
+    ensure_output_dir()
     main()

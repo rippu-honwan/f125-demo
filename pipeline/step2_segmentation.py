@@ -23,7 +23,8 @@ from scipy.ndimage import gaussian_filter1d
 
 from src.track_registry import get_gp_name, get_output_prefix, get_compound_zones
 from src.plotting import COLORS, style_axis, save_figure
-from config import OUTPUT_DIR
+from src.utils import signed_curvature_from_smoothed
+from config import OUTPUT_DIR, ensure_output_dir
 
 # ============================================================
 # Configuration
@@ -57,16 +58,7 @@ def compute_curvature(x, y, sigma=CURVATURE_SIGMA):
     """Compute smoothed signed curvature from XY trajectory."""
     x_s = gaussian_filter1d(x, sigma=sigma)
     y_s = gaussian_filter1d(y, sigma=sigma)
-
-    dx = np.gradient(x_s)
-    dy = np.gradient(y_s)
-    ddx = np.gradient(dx)
-    ddy = np.gradient(dy)
-
-    denom = (dx**2 + dy**2)**1.5
-    denom = np.maximum(denom, 1e-12)
-    kappa = (dx * ddy - dy * ddx) / denom
-    return kappa
+    return signed_curvature_from_smoothed(x_s, y_s, eps=1e-12)
 
 
 def find_segments_for_lap(distance, kappa_mag, threshold=CURVATURE_THRESHOLD,
@@ -661,4 +653,5 @@ def main():
 
 
 if __name__ == "__main__":
+    ensure_output_dir()
     main()

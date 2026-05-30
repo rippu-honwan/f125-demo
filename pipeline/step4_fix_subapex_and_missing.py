@@ -21,20 +21,11 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks
 
-from src.track_registry import get_gp_name, get_output_prefix, get_compound_zones
+from src.track_registry import get_gp_name, get_output_prefix, get_compound_zones, get_missing_windows
 from src.track import load_track, TRACKS_DIR
 from src.plotting import COLORS, style_axis, save_figure
-from config import OUTPUT_DIR
-
-# IDs for missing corners (speed-profile detection)
-MISSING_IDS = [10, 12, 18]  # HP-A, 200R, FIN
-
-# Search windows for missing corners
-MISSING_WINDOWS = {
-    10: (2600, 2840),   # HP-A
-    12: (3050, 3350),   # 200R
-    18: (5500, 5760),   # FIN
-}
+from src.utils import signed_curvature_from_smoothed
+from config import OUTPUT_DIR, ensure_output_dir
 
 
 # ============================================================
@@ -53,12 +44,7 @@ def compute_kappa(x, y, sigma=5):
     """Compute signed curvature with Gaussian smoothing."""
     x_s = gaussian_filter1d(x, sigma=sigma)
     y_s = gaussian_filter1d(y, sigma=sigma)
-    dx = np.gradient(x_s)
-    dy = np.gradient(y_s)
-    ddx = np.gradient(dx)
-    ddy = np.gradient(dy)
-    denom = np.maximum((dx**2 + dy**2)**1.5, 1e-12)
-    return (dx * ddy - dy * ddx) / denom
+    return signed_curvature_from_smoothed(x_s, y_s, eps=1e-12)
 
 
 # ============================================================
@@ -499,6 +485,8 @@ def main():
     gp_name = get_gp_name(args.track)
     prefix = get_output_prefix(args.track)
     compound_zones = get_compound_zones(args.track)
+    missing_windows = get_missing_windows(args.track)
+    missing_ids = list(missing_windows.keys())
 
     print("=" * 60)
     print("  Step 4: Fix Sub-Apexes + Missing Corners")
@@ -527,7 +515,7 @@ def main():
             if c.get('complex') == zone_label:
                 fix_ids.add(c['id'])
     # Also include missing corner IDs if they exist in this track
-    for mid in MISSING_IDS:
+    for mid in missing_ids:
         for c in gt_data['corners']:
             if c['id'] == mid:
                 fix_ids.add(mid)
@@ -589,7 +577,7 @@ def main():
     # Part B: Fix missing corners
     print("\n  [Part B] Fixing missing corners...")
     missing_results = {}
-    for cid, (w_start, w_end) in MISSING_WINDOWS.items():
+    for cid, (w_start, w_end) in missing_windows.items():
         # Only fix if this corner exists in the track
         corner_exists = any(c['id'] == cid for c in gt_data['corners'])
         if not corner_exists:
@@ -669,4 +657,5 @@ def main():
 
 
 if __name__ == "__main__":
+    ensure_output_dir()
     main()

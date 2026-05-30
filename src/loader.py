@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Tuple, Dict, Any, List, Optional
 import warnings
 
+from src.utils import resample_to_distance, normalize_pedal_array
+
 
 # ============================================================
 # Column mapping: SRT CSV → standard names
@@ -187,11 +189,9 @@ def normalize_inputs(df: pd.DataFrame) -> pd.DataFrame:
         if col not in df.columns:
             continue
 
-        vals = df[col].values.astype(float)
-
-        # Detect 0-100 range
-        if np.nanmax(vals) > 1.5:
-            df[col] = vals / 100.0
+        normalized, fmt = normalize_pedal_array(df[col].values)
+        df[col] = normalized
+        if fmt == "percentage_0_100":
             print(f"  Normalized {col}: 0-100 → 0-1")
 
         # Clamp to valid range
@@ -244,6 +244,19 @@ def validate_data(df: pd.DataFrame, context: str = "data") -> pd.DataFrame:
 # CSV loading
 # ============================================================
 
+def _read_and_standardize(csv_path: str) -> Tuple[pd.DataFrame, str]:
+    """Read CSV, standardize column names, calculate speed.
+
+    Returns (defragmented dataframe, separator used).
+    """
+    sep = detect_separator(csv_path)
+    df = pd.read_csv(csv_path, sep=sep)
+    df = standardize_columns(df)
+    df = df.copy()  # defragment after column renames
+    df = calculate_speed(df)
+    return df, sep
+
+
 def load_csv(csv_path: str) -> pd.DataFrame:
     """
     Load raw telemetry CSV with auto-detection.
@@ -252,17 +265,11 @@ def load_csv(csv_path: str) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"CSV not found: {path}")
 
-    sep = detect_separator(str(path))
+    df, sep = _read_and_standardize(str(path))
     sep_name = {'\t': 'TAB', ',': 'COMMA', ';': 'SEMICOLON'}.get(sep, sep)
-
-    df = pd.read_csv(path, sep=sep)
     print(f"  Loaded: {path.name} "
           f"({len(df)} rows, {len(df.columns)} cols, sep={sep_name})")
 
-    # Standardize
-    df = standardize_columns(df)
-    df = df.copy()  # defragment after rename (266 cols → many renames)
-    df = calculate_speed(df)
     df = normalize_inputs(df)
 
     # Validate required
@@ -426,39 +433,24 @@ def get_car_id(lap_data: pd.DataFrame) -> Optional[str]:
     return None
 
 
+RESAMPLE_COLUMNS = [
+    'speed_kmh', 'throttle', 'brake', 'steering', 'gear',
+    'world_position_X', 'world_position_Y', 'world_position_Z',
+    # Extra columns if available
+    'tyre_wear_fl', 'tyre_wear_fr', 'tyre_wear_rl', 'tyre_wear_rr',
+    'tyre_temp_fl', 'tyre_temp_fr', 'tyre_temp_rl', 'tyre_temp_rr',
+    'gforce_longitudinal', 'gforce_lateral',
+    'rpm', 'drs', 'ers_store',
+]
+
+
 def resample_lap(lap_data: pd.DataFrame, track_length: float,
                  step_m: float = 1.0) -> pd.DataFrame:
     """Resample telemetry to uniform distance intervals."""
-    distances = np.arange(0, track_length, step_m)
-    resampled = pd.DataFrame({'lap_distance': distances})
-
-    src_dist = lap_data['lap_distance'].values
-
-    # Sort by distance (mandatory for interpolation)
-    sort_idx = np.argsort(src_dist)
-    src_dist_sorted = src_dist[sort_idx]
-
-    # Remove duplicate distances (can happen with SRT bins)
-    unique_mask = np.concatenate([[True], np.diff(src_dist_sorted) > 0.01])
-    src_dist_unique = src_dist_sorted[unique_mask]
-
-    # Columns to resample
-    resample_cols = [
-        'speed_kmh', 'throttle', 'brake', 'steering', 'gear',
-        'world_position_X', 'world_position_Y', 'world_position_Z',
-        # Extra columns if available
-        'tyre_wear_fl', 'tyre_wear_fr', 'tyre_wear_rl', 'tyre_wear_rr',
-        'tyre_temp_fl', 'tyre_temp_fr', 'tyre_temp_rl', 'tyre_temp_rr',
-        'gforce_longitudinal', 'gforce_lateral',
-        'rpm', 'drs', 'ers_store',
-    ]
-
-    for col in resample_cols:
-        if col in lap_data.columns:
-            src_vals = lap_data[col].values[sort_idx][unique_mask]
-            resampled[col] = np.interp(distances, src_dist_unique, src_vals)
-
-    return resampled
+    return resample_to_distance(
+        lap_data, track_length,
+        columns=RESAMPLE_COLUMNS, step_m=step_m,
+    )
 
 
 # ============================================================
@@ -475,11 +467,7 @@ def get_lap_summary(csv_path: str,
         {lap_index, lap_number, lap_time, sector_times: [s1, s2, s3],
          max_speed, valid}
     """
-    sep = detect_separator(csv_path)
-    df = pd.read_csv(csv_path, sep=sep)
-    df = standardize_columns(df)
-    df = calculate_speed(df)
-    df = df.copy()
+    df, _ = _read_and_standardize(csv_path)
 
     # Default sectors if none provided
     if sectors is None:
@@ -621,13 +609,12 @@ def load_and_prepare(csv_path: str,
     if 'lap_index' in selected_lap.columns:
         selected_lap_index = int(selected_lap['lap_index'].iloc[0])
 
-    # Validate before resample
-    selected_lap = validate_data(selected_lap, context=f"lap #{lap_num}")
-
     resampled = resample_lap(selected_lap, track_length)
 
-    # Validate after resample
-    resampled = validate_data(resampled, context="resampled")
+    # Validate after resample (post-resample validation handles NaN via
+    # interp + ffill/bfill and clips outliers; pre-resample validate was
+    # redundant since resample_to_distance excludes NaN distances anyway)
+    resampled = validate_data(resampled, context=f"lap #{lap_num} resampled")
 
     meta = {
         'csv_path': str(csv_path),

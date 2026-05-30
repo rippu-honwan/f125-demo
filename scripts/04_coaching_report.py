@@ -4,8 +4,7 @@ F1 Lap Insight - Step 4: Visual Coaching Report
 Generates multi-page visual coaching report.
 
 Usage:
-    python scripts/04_coaching_report.py data/my_lap.csv --lap 0 \
-        --driver VER --year 2025 --session Q --track suzuka
+    python scripts/04_coaching_report.py data/my_lap.csv --lap 0 \--driver VER --year 2025 --session Q --track suzuka
 
 Changes from original:
   - Uses pipeline.py (single function call for all data loading)
@@ -36,7 +35,7 @@ from src.plotting import (
     COLORS, GRADE_COLORS, grade_color, delta_color,
     style_axis, style_card, save_figure, wrap_text,
 )
-from config import OUTPUT_DIR
+from config import OUTPUT_DIR, ensure_output_dir
 
 
 # ============================================================
@@ -747,4 +746,5 @@ def main():
 
 
 if __name__ == "__main__":
+    ensure_output_dir()
     main()

@@ -1,6 +1,7 @@
 """
 F1 Lap Insight - Step 3: Lap Comparison  (v2 - Graded Visual)
 One-page dashboard: WHERE and HOW MUCH you lose time vs a real F1 driver.suzuka
+python scripts/03_lap_comparison.py data/my_lap.csv --lap 1 \--driver VER --year 2025 --session Q --track suzuka
 
 
 Layout:
@@ -36,7 +37,7 @@ from matplotlib.collections import LineCollection
 from src.pipeline import make_parser, run_pipeline
 from src.utils import smooth, format_laptime, format_delta
 from src.plotting import COLORS, style_axis, save_figure, delta_color
-from config import OUTPUT_DIR
+from config import OUTPUT_DIR, ensure_output_dir
 
 
 # ============================================================
@@ -495,4 +496,5 @@ def main():
 
 
 if __name__ == '__main__':
+    ensure_output_dir()
     main()

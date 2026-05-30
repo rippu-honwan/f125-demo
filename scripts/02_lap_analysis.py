@@ -4,7 +4,7 @@ F1 Lap Insight - Step 2: Lap Analysis
 Corner-by-corner analysis of your game lap.
 
 Usage:
-    python scripts/02_lap_analysis.py [csv_path] [--lap 0] [--track suzuka]
+    python scripts/02_lap_analysis.py data/my_lap.csv --lap 1 --track suzuka
 """
 
 import sys
@@ -17,7 +17,7 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 
-from config import DEFAULT_CSV, OUTPUT_DIR, DPI_SAVE
+from config import DEFAULT_CSV, OUTPUT_DIR, DPI_SAVE, ensure_output_dir
 from src.loader import load_and_prepare
 from src.track import load_track, auto_detect_track
 from src.corners import analyze_solo, summarize_corners
@@ -198,4 +198,5 @@ def main():
 
 
 if __name__ == "__main__":
+    ensure_output_dir()
     main()

@@ -88,6 +88,24 @@ def get_compound_zones(track_short: str) -> list[dict]:
         return []
 
 
+def get_missing_windows(track_short: str) -> dict[int, tuple[float, float]]:
+    """Load missing_windows from tracks/{track_short}.json.
+
+    Returns {} if file not found or key absent.
+    Format: {corner_id: (window_start_m, window_end_m)}
+    """
+    json_path = TRACKS_DIR / f"{track_short}.json"
+    if not json_path.exists():
+        return {}
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        raw = data.get("missing_windows", {})
+        return {int(k): tuple(v) for k, v in raw.items()}
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
 def get_track_corners(track_short: str) -> list[dict]:
     """Load corners list from tracks/{track_short}.json.
 
