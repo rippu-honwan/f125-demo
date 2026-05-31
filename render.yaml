@@ -11,12 +11,21 @@
 #   * The backend runs from the repo checkout, so tracks/, data/ and the FastF1
 #     cache live alongside the code. The start command pre-creates the FastF1
 #     cache dir because src/fastf1_loader.py enables it at import time.
+#
+# IMPORTANT — Root Directory must be the REPO ROOT (blank), NOT "app/".
+#   requirements.txt lives at the repo root, and the app runs as the module
+#   `app.main` while importing `src/` and reading tracks/ data/ cache/ — all of
+#   which only resolve from the repo root. `rootDir: .` below pins this for
+#   Blueprint deploys. If you created the service manually and see
+#   "Could not open requirements file: requirements.txt", clear the service's
+#   Root Directory in the dashboard (Settings -> Build & Deploy -> Root Directory).
 services:
   - type: web
     name: f1-ai-driver-coach-api
     runtime: python
     plan: free
     region: oregon
+    rootDir: .                       # repo root — where requirements.txt lives
     buildCommand: pip install -r requirements.txt
     startCommand: mkdir -p cache/fastf1 && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health

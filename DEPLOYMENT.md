@@ -64,6 +64,15 @@ clicks.
 5. Copy your service URL, e.g. `https://f1-ai-driver-coach-api.onrender.com`.
    Test it: opening `…/health` should return `{"status":"ok"}`.
 
+> ⚠️ **Root Directory must be blank (the repo root) — do NOT set it to `app/`.**
+> `requirements.txt` is at the repo root, and the backend runs as the module
+> `app.main` while importing `src/` and reading `tracks/`, `data/` and `cache/`,
+> all of which only resolve from the repo root. The Blueprint pins this with
+> `rootDir: .`. If you created the service **manually** and the build fails with
+> `Could not open requirements file: requirements.txt`, the Root Directory is set
+> to a subfolder — clear it under **Settings → Build & Deploy → Root Directory**
+> (leave it empty) and redeploy.
+
 **Free-tier note:** the service sleeps after ~15 min of inactivity. The next
 request wakes it and can take ~30–60s — the UI shows a loading state, and the
 error message tells you to wait if it times out.
@@ -158,6 +167,8 @@ preflight `OPTIONS`) work cross-origin.
 
 | Symptom | Likely cause / fix |
 |---------|--------------------|
+| Build fails: `Could not open requirements file: requirements.txt` | Render **Root Directory** is set to a subfolder (e.g. `app/`). `requirements.txt` is at the repo root — clear Root Directory (leave it blank) under Settings → Build & Deploy, or redeploy via the Blueprint (`rootDir: .`). |
+| Build OK but start crashes (`ModuleNotFoundError: app`/`src`) | Same root-dir cause: run from the repo root so `app.main` and `src/` resolve. Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`. |
 | "Set PROD_API_BASE…" error on the live site | Backend URL not configured — do step 3. |
 | First analysis hangs ~30–60s then works | Render free service was asleep; it woke up. Normal. |
 | "Couldn't reach the backend…" | Backend down or wrong URL. Check `…/health` returns `{"status":"ok"}`. |
