@@ -1,0 +1,76 @@
+name: Deploy static site to GitHub Pages
+
+# Publishes the self-contained frontend (app/static/index.html) to GitHub Pages.
+#
+# Why a workflow instead of a committed /docs copy:
+#   - Single source of truth: the page lives only in app/static/, so there is
+#     no duplicate index.html to keep in sync (least manual maintenance).
+#   - Nothing in app/ or src/ is modified; the page is copied at build time
+#     into the Pages artifact only.
+#
+# Note: the Pages site is STATIC. It serves the UI, but the in-page "Analyze"
+# features call the FastAPI backend (/laps, /analyze), which does not run on
+# GitHub Pages. See DEPLOYMENT.md.
+
+on:
+  # Auto-deploy whenever the published page (or this workflow) changes on main.
+  push:
+    branches: [main]
+    paths:
+      - "app/static/**"
+      - ".github/workflows/deploy-pages.yml"
+  # Allow manual runs from the Actions tab.
+  workflow_dispatch:
+
+# Grant the workflow the permissions GitHub Pages deployment requires.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deployment at a time; don't cancel an in-flight one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        # enablement: true turns on Pages (source = GitHub Actions) on first run,
+        # so no manual repo setting is required.
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Assemble publish directory
+        run: |
+          set -euo pipefail
+          rm -rf _site
+          mkdir -p _site
+          # Copy the entire static frontend (index.html is the site root).
+          cp -R app/static/. _site/
+          # Disable Jekyll so files/dirs are served exactly as-is.
+          touch _site/.nojekyll
+          echo "Published files:"
+          ls -la _site
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
