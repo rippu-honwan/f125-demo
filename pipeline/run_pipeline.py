@@ -22,7 +22,7 @@ STEPS = [
     (2, "step2_segmentation.py"),
     (3, "step3_build_ground_truth.py"),
     (4, "step4_fix_subapex_and_missing.py"),
-    (5, "step5_finalize.py"),
+    (5, "step5_finalize.py"),2
 ]
 
 
