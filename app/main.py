@@ -549,6 +549,193 @@ def _corner_markers(aligned, corners) -> "list[dict]":
     return markers
 
 
+def _sample_channel(d_target, d_full, values, digits) -> "list":
+    """Interpolate a telemetry channel onto the explorer's sampled distances.
+
+    NaN-safe and order-safe: drops non-finite pairs and sorts by distance so
+    ``np.interp`` (which requires increasing x) behaves on any lap. Returns a
+    list of rounded floats the same length as ``d_target`` (or all-None when the
+    channel has too few valid points).
+    """
+    target = np.asarray(d_target, dtype=float)
+    xp = np.asarray(d_full, dtype=float)
+    fp = np.asarray(values, dtype=float)
+    good = np.isfinite(xp) & np.isfinite(fp)
+    if good.sum() < 2:
+        return [None] * target.size
+    xp, fp = xp[good], fp[good]
+    order = np.argsort(xp)
+    xp, fp = xp[order], fp[order]
+    out = np.interp(target, xp, fp)
+    return [round(float(v), digits) for v in out]
+
+
+# --- Track Explorer path diagnostics ---------------------------------------
+# Maintenance-only knob: set the env var F1_EXPLORER_DEBUG to a truthy value
+# (1/true/yes/on) to log, on stderr, how each lap's polyline is classified
+# (closed loop vs open path) plus the seam metrics behind that decision and the
+# final point count. This is purely for future debugging — it is never surfaced
+# in the /analyze payload or the UI.
+_EXPLORER_DEBUG = os.environ.get("F1_EXPLORER_DEBUG", "").strip().lower() in (
+    "1", "true", "yes", "on")
+
+
+def _explorer_debug(msg: str) -> None:
+    """Emit a Track Explorer path diagnostic when F1_EXPLORER_DEBUG is set."""
+    if _EXPLORER_DEBUG:
+        print(f"[track-explorer] {msg}", file=sys.stderr)
+
+
+def _smooth_loop_xy(x, y, window: int = 12):
+    """Endpoint-safe moving-average smoothing for the explorer's track polyline.
+
+    ``src``'s ``_smooth_xy`` smooths with ``np.convolve(mode="same")``, which
+    implicitly zero-pads the ends and so drags the first/last ~window/2 points
+    toward the origin — the visible hook/spike right at the lap start-finish
+    seam. This local copy (``app/`` only; ``src`` is never touched) pads the
+    signal *before* convolving: wrap-around when the lap is a closed loop, so the
+    start/finish junction stays continuous, otherwise edge-replicate so open
+    paths don't curl inward. Returns ``(xs, ys, closed)``.
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    n = x.size
+    if n == 0:
+        return x, y, False
+    span = max(float(np.ptp(x)), float(np.ptp(y))) or 1.0
+    closed = bool(np.hypot(x[0] - x[-1], y[0] - y[-1]) < 0.05 * span)
+    if n < window * 2:
+        return x, y, closed                  # too short to smooth meaningfully
+    mode = "wrap" if closed else "edge"
+    pad_l, pad_r = (window - 1) // 2, window // 2
+    kernel = np.ones(window) / window
+    xs = np.convolve(np.pad(x, (pad_l, pad_r), mode=mode), kernel, mode="valid")
+    ys = np.convolve(np.pad(y, (pad_l, pad_r), mode=mode), kernel, mode="valid")
+    return xs, ys, closed
+
+
+def _build_track_explorer(aligned, corners, n_points: int = 300,
+                          pad: float = 40.0) -> Optional[dict]:
+    """Geometry + your-lap telemetry for the interactive Track Explorer.
+
+    Builds an aspect-ratio-preserving SVG polyline of the circuit from the same
+    GPS pipeline the static map used (``_extract_track_xy`` -> ``_smooth_xy``,
+    both imported read-only from ``src``), downsampled to ``n_points``. Each
+    polyline point carries the driver's own speed / throttle / brake / gear,
+    interpolated onto that point's lap distance, so a single hovered index can
+    drive both the marker on the map and every cursor in the chart below.
+
+    Returns ``None`` when GPS isn't available (the UI then shows a fallback).
+    """
+    x, y, dist = _extract_track_xy(aligned)
+    if x is None or len(x) < 10:
+        return None
+    # Raw start/end gap (pre-smoothing) — this is what drives the closed/open
+    # decision in _smooth_loop_xy; kept here only for the debug log below.
+    raw_gap = float(np.hypot(x[0] - x[-1], y[0] - y[-1]))
+    # Endpoint-safe smoothing (app-local) so the start-finish seam stays clean;
+    # ``closed`` says whether the lap is a loop the SVG should close itself.
+    x, y, closed = _smooth_loop_xy(x, y, window=12)
+    dist = np.asarray(dist, dtype=float)
+    n = x.size
+    if n < 2:
+        return None
+
+    # Bounding box -> uniform scale (longest side = 1000) so the SVG never
+    # distorts. Y is flipped to SVG's top-left origin (so north stays up).
+    xmin, xmax = float(np.min(x)), float(np.max(x))
+    ymin, ymax = float(np.min(y)), float(np.max(y))
+    span = max(xmax - xmin, ymax - ymin) or 1.0
+    scale = 1000.0 / span
+
+    # Evenly spaced sample indices along the lap-ordered polyline.
+    k = min(int(n_points), n)
+    sel = np.unique(np.linspace(0, n - 1, k).round().astype(int))
+    xs, ys, ds = x[sel], y[sel], dist[sel]
+
+    # Drop consecutive near-duplicate points so the polyline is geometrically
+    # clean, then drop a trailing point that coincides with the first. A closed
+    # lap is closed by the SVG's own Z, so a coincident vertex would be a doubled
+    # segment / seam spike; an OPEN path must likewise never duplicate its start.
+    # Either way the coincident endpoint is removed here, so the path never
+    # carries a duplicate closing point. Points and telemetry stay index-aligned.
+    eps = 1e-3 * span
+    keep = [0]
+    for i in range(1, xs.size):
+        if np.hypot(xs[i] - xs[keep[-1]], ys[i] - ys[keep[-1]]) > eps:
+            keep.append(i)
+    if (len(keep) > 3 and
+            np.hypot(xs[keep[-1]] - xs[keep[0]], ys[keep[-1]] - ys[keep[0]]) <= eps):
+        keep.pop()
+    if len(keep) < 2:
+        return None
+    keep = np.asarray(keep, dtype=int)
+    xs, ys, ds = xs[keep], ys[keep], ds[keep]
+
+    def to_vb(px, py):
+        return [round((px - xmin) * scale + pad, 1),
+                round((ymax - py) * scale + pad, 1)]
+
+    points = [to_vb(px, py) for px, py in zip(xs, ys)]
+    vb_w = round((xmax - xmin) * scale + 2 * pad, 1)
+    vb_h = round((ymax - ymin) * scale + 2 * pad, 1)
+
+    # --- Path sanity (maintenance) ---------------------------------------
+    # Invariant enforced by the dedup above: an OPEN path must not begin and end
+    # at (nearly) the same point, and neither path carries a duplicate closing
+    # vertex. A CLOSED lap intentionally ends near the start — the SVG adds the
+    # closing Z itself (a small seam is expected there), so the check is scoped
+    # to open paths. We only log a regression; we never alter the geometry here.
+    seam_vb = (float(np.hypot(points[0][0] - points[-1][0],
+                              points[0][1] - points[-1][1]))
+               if len(points) >= 2 else 0.0)
+    if not closed and seam_vb <= 0.5:
+        _explorer_debug(
+            f"WARNING: open path endpoints nearly identical (seam={seam_vb:.3f} "
+            f"vb-units) — unexpected after dedup")
+    _explorer_debug(
+        f"lap classified {'CLOSED' if closed else 'OPEN'}: raw_gap={raw_gap:.2f} "
+        f"span={span:.1f} thresh={0.05 * span:.1f} | points={len(points)} "
+        f"seam_vb={seam_vb:.2f} closing={'Z' if closed else 'none'}")
+
+    d_full = aligned["lap_distance"].values
+    cols = aligned.columns
+
+    def chan(name, digits):
+        return (_sample_channel(ds, d_full, aligned[name].values, digits)
+                if name in cols else [])
+
+    gear_raw = chan("game_gear", 0)
+    telemetry = {
+        "dist": [round(float(v), 1) for v in ds],
+        "speed": chan("game_speed_kmh", 1),
+        "throttle": chan("game_throttle", 3),
+        "brake": chan("game_brake", 3),
+        "gear": [None if v is None else int(round(v)) for v in gear_raw],
+    }
+
+    markers = []
+    for i, c in enumerate(corners or []):
+        cid = int(c.get("id", i + 1))
+        cx, cy = _find_corner_xy(c, x, y, dist)
+        vx, vy = to_vb(cx, cy)
+        markers.append({
+            "corner_id": cid,
+            "short": c.get("short", f"T{cid}"),
+            "name": c.get("name", ""),
+            "x": vx,
+            "y": vy,
+            "dist": _num(c.get("apex_m", c.get("apex_dist")), 1),
+        })
+
+    return {
+        "track_path": {"viewbox_w": vb_w, "viewbox_h": vb_h,
+                       "closed": closed, "points": points},
+        "telemetry": telemetry,
+        "corner_markers": markers,
+    }
+
+
 def _run_comparison(csv_path: str, mode: str, driver: str, year: int,
                     session: str, track: str, lap: Optional[int]) -> dict:
     """
@@ -560,8 +747,9 @@ def _run_comparison(csv_path: str, mode: str, driver: str, year: int,
     * ``comparison`` -> you-vs-pro timing + per-corner delta cards + track map.
     * ``coaching``   -> grade, consistency, braking/throttle tendencies, an
       action plan and prioritised corner fixes (no map).
-    * ``track_map``  -> the track map as the primary output + a compact corner
-      severity strip (no coaching prose, no full corner grid).
+    * ``track_map``  -> the interactive Track Explorer: an SVG circuit polyline
+      plus your-lap telemetry sampled along it, so hovering the map drives the
+      linked telemetry chart (no static PNG, no coaching prose).
     """
     args = SimpleNamespace(
         csv=csv_path,
@@ -700,11 +888,11 @@ def _run_comparison(csv_path: str, mode: str, driver: str, year: int,
             if (potential is not None and report.game_time) else None)
         return payload
 
-    # ---- Track Map: the visualisation is the product. ----
-    b64, positions = _render_track_map_and_positions(
-        aligned, corners, report, _map_title(track, report))
-    payload["track_map_base64"] = b64
-    payload["corner_positions"] = positions
+    # ---- Interactive Track Explorer: your-lap telemetry mapped onto the
+    #      circuit. Replaces the static PNG track map (script 05). The old
+    #      _render_track_map_and_positions() helper stays in the module as a
+    #      dormant fallback but is intentionally no longer called here. ----
+    payload["track_explorer"] = _build_track_explorer(aligned, corners)
     payload["corner_severities"] = [
         {
             "corner_id": int(ci.corner_id),

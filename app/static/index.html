@@ -1119,6 +1119,119 @@
   }
 
   /* ============================================================
+     Interactive Track Explorer (Track Map mode)
+     ============================================================ */
+  .tx-wrap { margin-top: 30px; }
+  .tx-frame {
+    position: relative;
+    padding: 16px 16px 14px;
+    border-radius: var(--radius);
+    background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+    border: 1px solid var(--border);
+    transition: box-shadow .3s var(--ease), border-color .3s var(--ease);
+  }
+  .tx-frame.is-active {
+    border-color: rgba(232,0,45,0.4);
+    box-shadow: 0 0 0 1px var(--accent-glow), 0 30px 80px -30px var(--accent-glow);
+  }
+  .tx-stage { max-width: 860px; margin: 0 auto; display: block; line-height: 0; }
+  .tx-svg {
+    width: 100%; height: auto; display: block;
+    touch-action: none; cursor: crosshair;
+    filter: drop-shadow(0 24px 40px rgba(0,0,0,0.45));
+  }
+  /* Track surface + interactive layers (children set by JS). */
+  .tx-track {
+    fill: none; stroke: rgba(255,255,255,0.13);
+    stroke-width: 26; stroke-linejoin: round; stroke-linecap: round;
+  }
+  .tx-track-core {
+    fill: none; stroke: var(--accent);
+    stroke-width: 5; stroke-linejoin: round; stroke-linecap: round; opacity: .85;
+  }
+  .tx-corner-dot { fill: rgba(255,255,255,0.32); transition: fill .15s var(--ease); }
+  .tx-corner-dot.near { fill: #fff; }
+  .tx-marker-halo { fill: var(--accent); opacity: .22; }
+  .tx-marker { fill: #fff; stroke: var(--accent); stroke-width: 4; }
+  .tx-hint {
+    margin-top: 12px; text-align: center;
+    color: var(--text-mute); font-size: .8rem; letter-spacing: .04em;
+  }
+  .tx-empty { text-align: center; color: var(--text-dim); padding: 44px 20px; font-size: .95rem; }
+
+  /* Live readout strip */
+  .tx-readout { display: flex; flex-wrap: wrap; align-items: stretch; gap: 12px; margin-top: 18px; }
+  .tx-pos {
+    flex: none; min-width: 156px; display: flex; flex-direction: column; justify-content: center;
+    font-family: var(--font-display); font-weight: 700; font-size: .95rem;
+    letter-spacing: .02em; color: var(--text);
+    padding: 10px 15px; border-radius: 10px;
+    background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+  }
+  .tx-pos .txp-sub {
+    display: block; color: var(--text-mute); font-weight: 600; font-size: .64rem;
+    letter-spacing: .12em; text-transform: uppercase; margin-top: 4px;
+  }
+  .tx-vals { display: flex; flex: 1; flex-wrap: wrap; gap: 10px; }
+  .tx-val { flex: 1; min-width: 108px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 9px 14px; }
+  .txv-k {
+    display: block; font-family: var(--font-display); font-weight: 600; font-size: .64rem;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--text-mute);
+  }
+  .txv-v {
+    display: block; margin-top: 4px;
+    font-family: var(--font-display); font-weight: 700; font-size: 1.45rem;
+    color: #fff; font-variant-numeric: tabular-nums; line-height: 1.05;
+    transition: color .12s var(--ease);
+  }
+  .txv-v i { font-style: normal; font-size: .7rem; color: var(--text-mute); font-weight: 600; margin-left: 3px; }
+  .txv-v.brake-on { color: var(--major); }
+  .txv-v.thr-on { color: var(--ok); }
+
+  /* Telemetry traces (single shared cursor across all rows) */
+  .tx-charts { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .tx-legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 0 0 2px 92px; }
+  .tx-legend .lg {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-family: var(--font-display); font-weight: 600; font-size: .72rem;
+    letter-spacing: .04em; color: var(--text-dim);
+  }
+  .tx-legend .sw { width: 14px; height: 3px; border-radius: 2px; flex: none; }
+  .tx-legend .sw.spd { background: #5ea0ff; box-shadow: 0 0 8px #5ea0ff; }
+  .tx-legend .sw.thr { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .tx-legend .sw.brk { background: var(--major); box-shadow: 0 0 8px var(--major); }
+  .tx-legend .sw.gr  { background: #c89bff; box-shadow: 0 0 8px #c89bff; }
+  .tx-row { display: flex; align-items: center; gap: 14px; }
+  .tx-rk {
+    flex: none; width: 78px; text-align: right;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+    font-family: var(--font-display); font-weight: 600; font-size: .68rem;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--text-dim);
+  }
+  .tx-rk .tx-unit { font-size: .58rem; letter-spacing: .06em; color: var(--text-mute); }
+  .tx-plot { flex: 1; min-width: 0; position: relative; }
+  .tx-trace {
+    display: block; width: 100%; height: 92px;
+    background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px;
+  }
+  .tx-trace.tall { height: 104px; }
+  .tx-trace path { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+  .tx-trace .tx-line-spd { stroke: #5ea0ff; }
+  .tx-trace .tx-line-thr { stroke: var(--ok); }
+  .tx-trace .tx-line-brk { stroke: var(--major); }
+  .tx-trace .tx-line-gr  { stroke: #c89bff; }
+  .tx-cursor {
+    position: absolute; top: 0; bottom: 0; left: 0; width: 1px;
+    background: var(--accent); opacity: .7; pointer-events: none; transform: translateX(-0.5px);
+  }
+
+  @media (max-width: 640px) {
+    .tx-rk { width: 52px; }
+    .tx-legend { margin-left: 66px; }
+    .txv-v { font-size: 1.2rem; }
+  }
+
+  /* ============================================================
      Lap Comparison — visual comparison charts (You vs Pro)
      ============================================================ */
   :root { --cmp-you: #2fe3a8; --cmp-pro: #ff3b63; }
@@ -1421,7 +1534,7 @@
           </button>
           <button type="button" class="mode-btn" data-mode="track_map" role="tab" aria-selected="false">
             <span class="mb-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg></span>
-            <span class="mb-name">Track<br>Map</span>
+            <span class="mb-name">Track<br>Explorer</span>
             <span class="mb-tag">vs Pro</span>
           </button>
         </div>
@@ -1647,6 +1760,30 @@
         </div>
       </div>
 
+      <!-- Interactive Track Explorer (replaces the static Track Map for this mode) -->
+      <div class="result-block tx-wrap" id="blkExplorer">
+        <div class="section-label" id="explorerLabel">Interactive Track Map</div>
+        <div class="tx-frame" id="txFrame">
+          <div class="tx-stage" id="txStage">
+            <svg id="txSvg" class="tx-svg" role="img"
+                 aria-label="Interactive circuit map — move your cursor along the track to inspect telemetry"></svg>
+          </div>
+          <div class="tx-hint" id="txHint">Move your cursor along the track to inspect your telemetry · the chart below follows the marker</div>
+        </div>
+
+        <div class="tx-readout" id="txReadout">
+          <div class="tx-pos" id="txPos">Start / Idle<span class="txp-sub">Lap start</span></div>
+          <div class="tx-vals">
+            <div class="tx-val"><span class="txv-k">Speed</span><span class="txv-v" id="txSpeed">—<i>km/h</i></span></div>
+            <div class="tx-val"><span class="txv-k">Throttle</span><span class="txv-v" id="txThrottle">—<i>%</i></span></div>
+            <div class="tx-val"><span class="txv-k">Brake</span><span class="txv-v" id="txBrake">—<i>%</i></span></div>
+            <div class="tx-val"><span class="txv-k">Gear</span><span class="txv-v" id="txGear">—</span></div>
+          </div>
+        </div>
+
+        <div class="tx-charts" id="txCharts"></div>
+      </div>
+
       <!-- Corner cards -->
       <div class="result-block corners" id="blkCorners">
         <div class="section-label" id="cornersLabel">Corner Breakdown</div>
@@ -1801,16 +1938,16 @@
       blocks: ["blkTiming", "blkSummary", "blkActionPlan"],
     },
     track_map: {
-      label: "Run Track Map",
+      label: "Run Track Explorer",
       tag: "vs Pro",
       needsReference: true,
-      desc: "Track Map — the speed-delta heatmap and corner-severity overlay as the primary output, with a corner-severity strip you can hover to spotlight each apex.",
-      blocks: ["blkMap", "blkSeverity"],
+      desc: "Interactive Track Map — an SVG of the circuit you can hover point by point. The marker is the controller: it drives the telemetry panel below, reading out your speed, throttle, brake and gear at the hovered position, with every chart cursor moving together.",
+      blocks: ["blkExplorer"],
     },
   };
   const ALL_BLOCKS = [
     "blkOverview", "blkSolo", "blkTiming", "blkLapChart", "blkCompStrip",
-    "blkMap", "blkCorners", "blkKeyCorners", "blkSummary", "blkActionPlan", "blkSeverity",
+    "blkMap", "blkExplorer", "blkCorners", "blkKeyCorners", "blkSummary", "blkActionPlan", "blkSeverity",
   ];
   let currentMode = "overview";
 
@@ -2601,31 +2738,229 @@
     }
   }
 
-  // -------- Track Map (script 05): the visualisation is the product --------
-  function renderTrackMap(data) {
-    renderMap(data);
+  // -------- Track Map (script 05): the Interactive Track Explorer ----------
+  // The SVG circuit is the controller. A single hovered index drives the moving
+  // marker on the map AND every cursor / value in the telemetry panel below.
+  // The old static-PNG renderer (renderMap + the <canvas> overlay) stays in the
+  // file as a dormant fallback but is no longer wired into this mode.
+  const CORNER_NEAR_M = 35;          // hover this close (m) to an apex -> label it
+  let txState = {
+    points: [], telemetry: {}, markers: [], n: 0,
+    cursorEls: [], idx: 0, nearCid: undefined,
+  };
+  let txRaf = 0, txPendingEvt = null;
 
-    const sev = data.corner_severities || [];
-    const strip = $("sevStrip");
-    strip.innerHTML = "";
-    if (!sev.length) {
-      strip.innerHTML = `<div class="empty-corners" style="border:none;background:none">No corner definitions for this track.</div>`;
+  function renderTrackMap(data) {
+    txRender(data.track_explorer);
+  }
+
+  function txAt(arr, i) {
+    const v = arr && arr[i];
+    return (v == null || isNaN(v)) ? null : v;
+  }
+
+  // One trace path, normalised over index (x) and value (y) into a 0..100 × h
+  // viewBox; the SVG itself stretches to the plot width (preserveAspectRatio
+  // none) while vector-effect keeps the stroke crisp.
+  function txTracePath(arr, n, cls, opts) {
+    opts = opts || {};
+    const h = opts.h || 92, w = 100, padX = 2, padY = 8;
+    const vals = [];
+    (arr || []).forEach((v) => { if (v != null && !isNaN(v)) vals.push(v); });
+    let lo = (opts.min != null) ? opts.min : (vals.length ? Math.min.apply(null, vals) : 0);
+    let hi = (opts.max != null) ? opts.max : (vals.length ? Math.max.apply(null, vals) : 1);
+    if (!isFinite(lo) || !isFinite(hi)) { lo = 0; hi = 1; }
+    if (hi <= lo) hi = lo + 1;
+    const X = (i) => padX + (w - 2 * padX) * (n > 1 ? i / (n - 1) : 0);
+    const Y = (v) => (h - padY) - (h - 2 * padY) * ((v - lo) / (hi - lo));
+    return `<path class="${cls}" d="${_svgPath(arr, X, Y, opts.step)}"/>`;
+  }
+
+  function txChartRow(label, unit, inner, h) {
+    const u = unit ? `<span class="tx-unit">${escapeHtml(unit)}</span>` : "";
+    return `<div class="tx-row"><div class="tx-rk">${escapeHtml(label)}${u}</div>` +
+      `<div class="tx-plot">` +
+      `<svg class="tx-trace" viewBox="0 0 100 ${h}" preserveAspectRatio="none" aria-hidden="true">${inner}</svg>` +
+      `<span class="tx-cursor" aria-hidden="true"></span></div></div>`;
+  }
+
+  function txBuildCharts(t) {
+    const n = (t.speed && t.speed.length) || (t.dist && t.dist.length) || 0;
+    const h = 92;
+    const legend =
+      `<div class="tx-legend">` +
+      `<span class="lg"><i class="sw spd"></i>Speed</span>` +
+      `<span class="lg"><i class="sw thr"></i>Throttle</span>` +
+      `<span class="lg"><i class="sw brk"></i>Brake</span>` +
+      `<span class="lg"><i class="sw gr"></i>Gear</span></div>`;
+    const speed = txChartRow("Speed", "km/h",
+      txTracePath(t.speed, n, "tx-line-spd", { h }), h);
+    const tb = txChartRow("Thr / Brk", "0–100%",
+      txTracePath(t.throttle, n, "tx-line-thr", { h, min: 0, max: 1 }) +
+      txTracePath(t.brake, n, "tx-line-brk", { h, min: 0, max: 1 }), h);
+    let gMax = 8;
+    (t.gear || []).forEach((v) => { if (v != null && v > gMax) gMax = v; });
+    const gear = txChartRow("Gear", "",
+      txTracePath(t.gear, n, "tx-line-gr", { h, min: 0, max: gMax, step: true }), h);
+    return legend + speed + tb + gear;
+  }
+
+  function txBuildSvg(ex) {
+    const svg = $("txSvg");
+    const tp = ex.track_path;
+    const pts = tp.points;
+    svg.setAttribute("viewBox", `0 0 ${tp.viewbox_w} ${tp.viewbox_h}`);
+    let d = "";
+    for (let i = 0; i < pts.length; i++) d += (i ? "L" : "M") + pts[i][0] + " " + pts[i][1];
+    if (tp.closed) d += "Z";                    // close only a genuine lap loop
+    const span = Math.min(tp.viewbox_w, tp.viewbox_h);
+    const r = Math.max(6, span * 0.013);
+    let corners = "";
+    (ex.corner_markers || []).forEach((m) => {
+      const t = escapeHtml((m.short || "") + (m.name ? " — " + m.name : ""));
+      corners += `<circle class="tx-corner-dot" data-cid="${m.corner_id}" cx="${m.x}" cy="${m.y}" r="${(r * 0.72).toFixed(1)}"><title>${t}</title></circle>`;
+    });
+    svg.innerHTML =
+      `<path class="tx-track" d="${d}"/>` +
+      `<path class="tx-track-core" d="${d}"/>` +
+      `<g id="txCorners">${corners}</g>` +
+      `<circle id="txMarkerHalo" class="tx-marker-halo" r="${(r * 2.6).toFixed(1)}" cx="${pts[0][0]}" cy="${pts[0][1]}"/>` +
+      `<circle id="txMarker" class="tx-marker" r="${(r * 1.25).toFixed(1)}" cx="${pts[0][0]}" cy="${pts[0][1]}"/>`;
+  }
+
+  // Pointer/touch client coords -> SVG viewBox coords (robust to letterboxing).
+  function txClientToVb(evt) {
+    const svg = $("txSvg");
+    if (!svg.createSVGPoint) return null;
+    const pt = svg.createSVGPoint();
+    pt.x = evt.clientX; pt.y = evt.clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    const p = pt.matrixTransform(ctm.inverse());
+    return { x: p.x, y: p.y };
+  }
+
+  function txNearestIndex(vx, vy) {
+    const pts = txState.points;
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const dx = pts[i][0] - vx, dy = pts[i][1] - vy;
+      const dd = dx * dx + dy * dy;
+      if (dd < bd) { bd = dd; best = i; }
+    }
+    return best;
+  }
+
+  function txNearestCorner(dist) {
+    if (dist == null) return null;
+    let best = null, bd = Infinity;
+    (txState.markers || []).forEach((m) => {
+      if (m.dist == null) return;
+      const d = Math.abs(m.dist - dist);
+      if (d < bd) { bd = d; best = m; }
+    });
+    return (best && bd <= CORNER_NEAR_M) ? best : null;
+  }
+
+  function txHighlightDot(cid) {
+    if (txState.nearCid === cid) return;
+    txState.nearCid = cid;
+    const g = $("txCorners");
+    if (!g) return;
+    g.querySelectorAll(".tx-corner-dot").forEach((d) => {
+      d.classList.toggle("near", cid != null && +d.getAttribute("data-cid") === cid);
+    });
+  }
+
+  // Shared cursor state: move the marker, the readout and every chart cursor to
+  // the same sampled index. `idle` is the resting state shown on mouse-leave.
+  function txSetIndex(i, idle) {
+    const t = txState.telemetry, pts = txState.points, n = txState.n;
+    if (!pts.length) return;
+    i = Math.max(0, Math.min(i, pts.length - 1));
+    txState.idx = i;
+
+    const mk = $("txMarker"), hl = $("txMarkerHalo");
+    if (mk) { mk.setAttribute("cx", pts[i][0]); mk.setAttribute("cy", pts[i][1]); }
+    if (hl) { hl.setAttribute("cx", pts[i][0]); hl.setAttribute("cy", pts[i][1]); }
+
+    const spd = txAt(t.speed, i), thr = txAt(t.throttle, i),
+          brk = txAt(t.brake, i), gr = txAt(t.gear, i);
+    $("txSpeed").innerHTML = (spd == null ? "—" : Math.round(spd)) + "<i>km/h</i>";
+    const thrEl = $("txThrottle");
+    thrEl.innerHTML = (thr == null ? "—" : Math.round(thr * 100)) + "<i>%</i>";
+    thrEl.classList.toggle("thr-on", thr != null && thr > 0.02);
+    const brkEl = $("txBrake");
+    brkEl.innerHTML = (brk == null ? "—" : Math.round(brk * 100)) + "<i>%</i>";
+    brkEl.classList.toggle("brake-on", brk != null && brk > 0.02);
+    $("txGear").innerHTML = (gr == null ? "—" : String(gr));
+
+    const leftPct = (n > 1) ? (2 + 96 * (i / (n - 1))) : 2;
+    txState.cursorEls.forEach((c) => { c.style.left = leftPct + "%"; });
+
+    const dist = txAt(t.dist, i);
+    const near = txNearestCorner(dist);
+    txHighlightDot(near ? near.corner_id : null);
+    const posEl = $("txPos");
+    if (idle) {
+      posEl.innerHTML = `Start / Idle<span class="txp-sub">Lap start · move cursor to explore</span>`;
+    } else if (near) {
+      const sub = (dist == null ? "" : Math.round(dist) + " m · ") + "apex";
+      posEl.innerHTML = `${escapeHtml(near.short || "")}` +
+        `${near.name ? " · " + escapeHtml(near.name) : ""}` +
+        `<span class="txp-sub">${sub}</span>`;
+    } else {
+      posEl.innerHTML = (dist == null ? "On track" : Math.round(dist) + " m") +
+        `<span class="txp-sub">Lap distance</span>`;
+    }
+  }
+
+  // rAF-throttled so rapid mousemove stays smooth and visually stable.
+  function txOnMove(evt) {
+    txPendingEvt = evt;
+    if (txRaf) return;
+    txRaf = requestAnimationFrame(() => {
+      txRaf = 0;
+      const e = txPendingEvt; txPendingEvt = null;
+      if (!e || !txState.points.length) return;
+      const c = txClientToVb(e);
+      if (!c) return;
+      txSetIndex(txNearestIndex(c.x, c.y), false);
+    });
+  }
+
+  function txRender(ex) {
+    const svg = $("txSvg"), charts = $("txCharts"), stage = $("txStage"),
+          readout = $("txReadout"), hint = $("txHint"), frame = $("txFrame");
+    frame.classList.remove("is-active");
+    if (!ex || !ex.track_path || !(ex.track_path.points || []).length ||
+        ex.track_path.points.length < 2) {
+      // GPS unavailable for this lap — graceful, non-distorting fallback.
+      svg.removeAttribute("viewBox");
+      svg.innerHTML = "";
+      stage.style.display = "none";
+      readout.style.display = "none";
+      charts.innerHTML = "";
+      hint.innerHTML = `<div class="tx-empty">No GPS telemetry was available for this lap, so the interactive map can't be drawn. Try a lap exported with position data.</div>`;
+      txState = { points: [], telemetry: {}, markers: [], n: 0, cursorEls: [], idx: 0, nearCid: undefined };
       return;
     }
-    sev.forEach((c) => {
-      const s = (c.severity in SEV_VAR) ? c.severity : "ok";
-      const chip = document.createElement("div");
-      chip.className = "sev-chip";
-      chip.style.setProperty("--sev", SEV_VAR[s]);
-      chip.innerHTML =
-        `<span class="sv-dot" aria-hidden="true"></span>` +
-        `<span class="sv-short">${escapeHtml(c.short || ("C" + c.corner_id))}</span>` +
-        `<span class="sv-delta">${fmtDelta(c.time_delta)}</span>`;
-      const glow = SEV_HEX[s] || "#6f7494";
-      chip.addEventListener("mouseenter", () => highlightCorner(c.corner_id, glow, false));
-      chip.addEventListener("mouseleave", () => clearHighlight());
-      strip.appendChild(chip);
-    });
+    stage.style.display = "";
+    readout.style.display = "";
+    hint.textContent = "Move your cursor along the track to inspect your telemetry · the chart below follows the marker";
+    txBuildSvg(ex);
+    charts.innerHTML = txBuildCharts(ex.telemetry);
+    const t = ex.telemetry;
+    txState = {
+      points: ex.track_path.points,
+      telemetry: t,
+      markers: ex.corner_markers || [],
+      n: (t.speed && t.speed.length) || (t.dist && t.dist.length) || ex.track_path.points.length,
+      cursorEls: Array.from(charts.querySelectorAll(".tx-cursor")),
+      idx: 0,
+      nearCid: undefined,
+    };
+    txSetIndex(0, true);          // resting state: marker parked at the lap start
   }
 
   // -------- Solo: Telemetry Overview (script 01) --------
@@ -2993,6 +3328,25 @@
 
   mapImg.addEventListener("load", sizeMapCanvas);
   window.addEventListener("resize", sizeMapCanvas);
+
+  // -------- Interactive Track Explorer wiring (attached once) --------
+  (() => {
+    const svg = $("txSvg"), frame = $("txFrame");
+    if (!svg) return;
+    svg.addEventListener("mousemove", txOnMove);
+    svg.addEventListener("mouseenter", () => frame.classList.add("is-active"));
+    svg.addEventListener("mouseleave", () => {
+      frame.classList.remove("is-active");
+      txSetIndex(0, true);                 // Design B: return to lap-start idle
+    });
+    svg.addEventListener("touchmove", (e) => {
+      if (e.touches && e.touches[0]) { txOnMove(e.touches[0]); e.preventDefault(); }
+    }, { passive: false });
+    svg.addEventListener("touchend", () => {
+      frame.classList.remove("is-active");
+      txSetIndex(0, true);
+    });
+  })();
 
   // -------- Lightbox --------
   const lightbox = $("lightbox");
