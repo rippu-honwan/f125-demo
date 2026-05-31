@@ -1,66 +1,176 @@
-# Deployment — GitHub Pages
+# Deployment Guide
 
-The frontend (`app/static/index.html`) is published to GitHub Pages as a static
-site by the workflow [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml).
+This project runs as **two independent pieces** so it can be fully hosted for
+free — no need to keep your own computer running:
 
-## How it works
+| Piece | What it is | Where it's hosted | Cost |
+|-------|------------|-------------------|------|
+| **Frontend** | `app/static/index.html` (the UI) | **GitHub Pages** (static) | Free |
+| **Backend** | FastAPI API in `app/main.py` (`/laps`, `/analyze`) | **Render** (or any free Python host) | Free |
 
-1. On every push to `main` that touches `app/static/**` (or the workflow file),
-   the workflow copies `app/static/` into a `_site/` publish directory, adds a
-   `.nojekyll` marker, and deploys it to GitHub Pages.
-2. `app/static/index.html` becomes the **root `index.html`** of the published
-   site, which is what fixes the previous `404 — File not found`.
-3. It can also be run manually from the repo's **Actions** tab
-   (`Deploy static site to GitHub Pages` → **Run workflow**).
+The frontend is just a web page. All the heavy work (reading your CSV, running
+the comparison pipeline, downloading real F1 telemetry) happens in the backend.
+The page calls the backend over HTTP, so the two can live on different servers.
 
-**Published site root:** `index.html` (lowercase — matches the URL GitHub Pages
-serves at `/`). No casing or path mismatch.
-
-**Source of truth:** the page lives only in `app/static/`. There is no second
-copy to keep in sync, so there is no ongoing manual maintenance.
-
-## One-time GitHub setup
-
-The workflow self-enables Pages (`actions/configure-pages` with
-`enablement: true`), so in most cases no manual step is needed. If the first run
-fails to enable it, set it once:
-
-- **Settings → Pages → Build and deployment → Source = `GitHub Actions`**
-
-Do **not** set the source to "Deploy from a branch" — that mode would look for an
-`index.html` at the branch root (which is why the 404 happened) and would ignore
-this workflow.
-
-After a successful run, the site URL is shown in the workflow's `deploy` job and
-under **Settings → Pages** (typically
-`https://rippu-honwan.github.io/f125-demo/`).
-
-## Verifying the deployment
-
-1. Push to `main` (or trigger the workflow manually).
-2. Open the **Actions** tab and confirm both `build` and `deploy` jobs are green.
-3. Open the Pages URL — the F1 AI Driver Coach UI should load (no 404).
-
-## Important: static site vs. backend
-
-GitHub Pages serves **static files only**. The published page renders the full
-UI, but its interactive analysis calls a Python/FastAPI backend that does **not**
-run on GitHub Pages:
-
-- `POST /laps` and `POST /analyze` (in `app/main.py`) require a running server.
-- On the Pages URL these requests will fail; the page itself still loads.
-
-To use the full analysis pipeline, run the backend locally (unchanged):
-
-```bash
-pip install -e ".[web]"
-python -m app.main            # or: uvicorn app.main:app --reload
+```text
+  Browser ──► GitHub Pages (index.html)
+                   │  fetch(API_BASE + "/laps" | "/analyze")
+                   ▼
+            Render (FastAPI backend)  ──► FastF1 / analysis pipeline
 ```
 
-## Custom domain (CNAME)
+---
 
-A `CNAME` file was previously added and then removed from this repo. If you want
-a custom domain again, add the domain under **Settings → Pages → Custom domain**
-(or add a `CNAME` file inside `app/static/` so it is included in `_site/`).
-The site works without one — it will be served from the default
-`*.github.io` URL.
+## TL;DR (the 3 things you do once)
+
+1. **Deploy the backend** to Render → you get a URL like
+   `https://f1-ai-driver-coach-api.onrender.com`.
+2. **Set that URL in the frontend**: open `app/static/index.html`, find
+   `PROD_API_BASE` near the top of the `<script>`, and paste your backend URL.
+3. **Push to `main`** → GitHub Pages redeploys the frontend automatically.
+
+That's it. The site at `https://<you>.github.io/<repo>/` now works on its own.
+
+---
+
+## 1. Run it locally (development)
+
+Everything on one machine, one origin — no API URL or CORS setup needed.
+
+```bash
+pip install -e ".[web]"          # installs FastAPI + the analysis pipeline
+python -m app.main               # serves UI + API at http://127.0.0.1:8000
+# or:  uvicorn app.main:app --reload
+```
+
+Open <http://127.0.0.1:8000>. The backend serves the page itself, so the
+frontend's API base is `""` (same origin) automatically — nothing to configure.
+
+---
+
+## 2. Deploy the backend to a free host (Render)
+
+A [`render.yaml`](render.yaml) Blueprint is included, so deployment is mostly
+clicks.
+
+1. Push this repo to GitHub (if it isn't already).
+2. Go to <https://render.com> and sign up (free).
+3. **New + → Blueprint → select this repository.** Render reads `render.yaml`
+   and creates a **free web service** that:
+   - installs deps with `pip install -r requirements.txt`,
+   - starts with `uvicorn app.main:app --host 0.0.0.0 --port $PORT`,
+   - health-checks `GET /health`.
+4. Wait for the first build (a few minutes — it installs numpy/pandas/FastF1).
+5. Copy your service URL, e.g. `https://f1-ai-driver-coach-api.onrender.com`.
+   Test it: opening `…/health` should return `{"status":"ok"}`.
+
+**Free-tier note:** the service sleeps after ~15 min of inactivity. The next
+request wakes it and can take ~30–60s — the UI shows a loading state, and the
+error message tells you to wait if it times out.
+
+> Prefer a different host? Any platform that runs a Python web process works.
+> Use the same two commands:
+> - build: `pip install -r requirements.txt`
+> - start: `mkdir -p cache/fastf1 && uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+>
+> The `mkdir` is needed because `src/fastf1_loader.py` enables its FastF1 cache
+> at import time. Render's start command (in `render.yaml`) already does this.
+
+---
+
+## 3. Point the frontend at your backend
+
+The frontend needs to know your backend URL. Two ways:
+
+### Option A — set it in the file (recommended for the public site)
+
+Edit `app/static/index.html`, near the top of the `<script>` block:
+
+```js
+const PROD_API_BASE = "https://f1-ai-driver-coach-api.onrender.com";
+```
+
+Commit and push to `main`. GitHub Pages rebuilds, and the live site now calls
+your backend. (When `PROD_API_BASE` is empty, a remotely-hosted page has no
+backend and analysis shows a clear "set PROD_API_BASE" error.)
+
+### Option B — override at runtime (no edit, great for testing)
+
+Append `?api=` to the Pages URL:
+
+```text
+https://<you>.github.io/<repo>/?api=https://f1-ai-driver-coach-api.onrender.com
+```
+
+The value is remembered in the browser (localStorage) for next time. You can
+also run `localStorage.setItem("apiBase", "https://…")` in the dev console, or
+`localStorage.removeItem("apiBase")` to clear it.
+
+**Resolution order:** `?api=` → stored value → `PROD_API_BASE` (only on a remote
+host) → `""` (same origin, i.e. local dev).
+
+---
+
+## 4. GitHub Pages (frontend) — already automated
+
+The workflow [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml)
+publishes the frontend on every push to `main` that touches `app/static/**`:
+
+1. It copies `app/static/` into a `_site/` folder (so `index.html` is the site
+   root), adds a `.nojekyll` marker, and deploys to Pages.
+2. You can also run it manually: **Actions → "Deploy static site to GitHub
+   Pages" → Run workflow.**
+
+**One-time setup:** the workflow self-enables Pages (source = *GitHub Actions*).
+If the first run doesn't enable it, set it once under **Settings → Pages →
+Build and deployment → Source = GitHub Actions**. Do **not** pick "Deploy from a
+branch".
+
+After a green run, the URL appears in the workflow's `deploy` job and under
+**Settings → Pages** (typically `https://<you>.github.io/<repo>/`).
+
+**Custom domain:** add it under **Settings → Pages → Custom domain** (or drop a
+`CNAME` file in `app/static/` so it's included in `_site/`). For a custom domain
+you must also allow it on the backend — see CORS below.
+
+---
+
+## 5. CORS (cross-origin requests)
+
+Because the page and the API are on different origins, the backend must allow
+the page's origin. This is configured in `app/main.py` via `CORSMiddleware`.
+**Allowed by default:**
+
+- any `localhost` / `127.0.0.1` port (local dev), and
+- any `https://<something>.github.io` site (GitHub Pages).
+
+So a standard GitHub Pages deployment needs **no CORS configuration**.
+
+Using a **custom domain** for the frontend? Add it to the backend's
+`ALLOWED_ORIGINS` env var (comma-separated exact origins) — on Render:
+**Service → Environment → Add** `ALLOWED_ORIGINS=https://your-domain.com`.
+No cookies/credentials are used, so file uploads and analysis POSTs (and their
+preflight `OPTIONS`) work cross-origin.
+
+---
+
+## 6. Troubleshooting
+
+| Symptom | Likely cause / fix |
+|---------|--------------------|
+| "Set PROD_API_BASE…" error on the live site | Backend URL not configured — do step 3. |
+| First analysis hangs ~30–60s then works | Render free service was asleep; it woke up. Normal. |
+| "Couldn't reach the backend…" | Backend down or wrong URL. Check `…/health` returns `{"status":"ok"}`. |
+| Browser console shows a **CORS** error | Frontend origin isn't allowed. On `*.github.io` it's automatic; for a custom domain set `ALLOWED_ORIGINS`. |
+| **Mixed content** blocked | Your backend URL must be **https://** (Render URLs already are). |
+| Page loads but is "static only" | That's the page with no backend configured — it always loads; analysis needs the backend (steps 2–3). |
+
+---
+
+## Summary of files
+
+- `app/main.py` — FastAPI backend; CORS + reads `$HOST`/`$PORT`/`ALLOWED_ORIGINS`.
+- `app/static/index.html` — frontend; `PROD_API_BASE` / `?api=` selects the backend.
+- `requirements.txt` — backend dependencies for the host.
+- `render.yaml` — Render free-tier Blueprint (build/start/health).
+- `.github/workflows/deploy-pages.yml` — auto-publishes the frontend to Pages.

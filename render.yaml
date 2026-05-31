@@ -1,0 +1,34 @@
+# Render Blueprint — free hosting for the FastAPI backend.
+#
+# One-time deploy:
+#   1. Push this repo to GitHub.
+#   2. On https://render.com  ->  New +  ->  Blueprint  ->  pick this repo.
+#   3. Render reads this file and creates the service on the FREE plan.
+#
+# Notes:
+#   * Free web services sleep after ~15 min idle; the first request then takes
+#     ~30-60s to wake (the UI shows a loading state meanwhile).
+#   * The backend runs from the repo checkout, so tracks/, data/ and the FastF1
+#     cache live alongside the code. The start command pre-creates the FastF1
+#     cache dir because src/fastf1_loader.py enables it at import time.
+services:
+  - type: web
+    name: f1-ai-driver-coach-api
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: mkdir -p cache/fastf1 && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      # Pin a Python with prebuilt wheels for numpy/pandas/scipy/fastf1.
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # Keep matplotlib's config/cache in a writable, ephemeral location.
+      - key: MPLCONFIGDIR
+        value: /tmp/matplotlib
+      # OPTIONAL: extra allowed CORS origins (comma-separated), e.g. a custom
+      # domain. Any *.github.io origin and localhost are already allowed in code,
+      # so you can leave this unset for a standard GitHub Pages site.
+      - key: ALLOWED_ORIGINS
+        sync: false

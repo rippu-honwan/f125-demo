@@ -43,6 +43,7 @@ matplotlib.rcParams["font.family"] = "DejaVu Sans"
 import matplotlib.pyplot as plt  # noqa: E402
 
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
@@ -90,6 +91,35 @@ app = FastAPI(
     title="F1 AI Driver Coach",
     description="Compare your sim-racing lap against a real F1 driver, corner by corner.",
     version="1.0.0",
+)
+
+# ---------------------------------------------------------------------------
+# CORS — let the static frontend (GitHub Pages or local dev) call this API.
+# ---------------------------------------------------------------------------
+# The frontend may be served from a *different* origin than this backend (e.g.
+# the UI on GitHub Pages, the API on Render), and browsers block cross-origin
+# requests unless the server opts in. Allowed by default:
+#   * any localhost / 127.0.0.1 port (local development), and
+#   * any ``*.github.io`` site (GitHub Pages)
+# matched by the regex below. Add extra exact origins (e.g. a custom domain)
+# without touching code via the ``ALLOWED_ORIGINS`` env var (comma-separated).
+# No cookies/credentials are used, so credentials stay off and file-upload /
+# analysis POSTs work cross-origin (incl. their preflight OPTIONS).
+_CORS_ORIGIN_REGEX = (
+    r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?"
+    r"|https://[a-z0-9-]+\.github\.io)$"
+)
+_EXTRA_ORIGINS = [
+    o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_EXTRA_ORIGINS,
+    allow_origin_regex=_CORS_ORIGIN_REGEX,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -1035,9 +1065,8 @@ def index() -> FileResponse:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(
-        "app.main:app",
-        host="127.0.0.1",
-        port=8000,
-        reload=False,
-    )
+    # Bind to $HOST / $PORT when provided. Hosted platforms (e.g. Render) set
+    # $PORT and require binding to 0.0.0.0; locally we default to 127.0.0.1:8000.
+    host = os.environ.get("HOST", "127.0.0.1")
+    port = int(os.environ.get("PORT", "8000"))
+    uvicorn.run("app.main:app", host=host, port=port, reload=False)

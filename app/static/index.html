@@ -1854,6 +1854,68 @@
 (() => {
   "use strict";
 
+  // ============================================================
+  // API base configuration
+  // ============================================================
+  // The backend (FastAPI: /laps, /analyze) may live on a DIFFERENT origin than
+  // this page. When the backend serves this file itself (local dev, or any
+  // single-host deploy) the API is same-origin, so the base is "". When the
+  // static frontend is hosted separately (e.g. GitHub Pages), point it at your
+  // deployed backend by setting PROD_API_BASE below — that is the one line you
+  // edit for a hosted deployment.
+  //
+  //   PROD_API_BASE = "https://your-backend.onrender.com";
+  //
+  // You can also override at runtime without editing the file:
+  //   • add ?api=https://your-backend.onrender.com to the URL (it is remembered
+  //     in localStorage for next time), or
+  //   • run  localStorage.setItem("apiBase", "https://...")  in the console.
+  const PROD_API_BASE = "";   // <-- set to your hosted backend URL for GitHub Pages
+
+  function resolveApiBase() {
+    const strip = (u) => String(u || "").trim().replace(/\/+$/, "");
+    // 1) explicit ?api= override (persisted), then a stored override.
+    try {
+      const q = new URLSearchParams(location.search).get("api");
+      if (q !== null) { const v = strip(q); localStorage.setItem("apiBase", v); return v; }
+      const stored = strip(localStorage.getItem("apiBase"));
+      if (stored) return stored;
+    } catch (e) { /* localStorage may be unavailable; fall through */ }
+    // 2) on a remote host (e.g. GitHub Pages) use the configured prod backend.
+    const host = location.hostname;
+    const isLocal = !host || host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0";
+    if (!isLocal && PROD_API_BASE) return strip(PROD_API_BASE);
+    // 3) same-origin (local dev: the backend serves this page).
+    return "";
+  }
+
+  const API_BASE = resolveApiBase();
+  const apiUrl = (path) => API_BASE + path;
+  // True when the page is hosted remotely but no backend URL is configured yet
+  // — used to give a clearer error than a bare "network error".
+  const API_UNCONFIGURED = !API_BASE &&
+    !(["localhost", "127.0.0.1", "0.0.0.0", ""].includes(location.hostname));
+
+  // A failed fetch (backend down, asleep, CORS-blocked, or unconfigured) surfaces
+  // as a TypeError; turn that into a message that tells the user what to do.
+  function isNetworkError(err) {
+    return !!err && (err.name === "TypeError" ||
+      /failed to fetch|networkerror|load failed/i.test(err.message || ""));
+  }
+  function apiErrorMessage(err, fallback) {
+    if (isNetworkError(err)) {
+      if (API_UNCONFIGURED) {
+        return "Can’t reach the analysis backend. This page is hosted as a static site " +
+          "(e.g. GitHub Pages), so it needs a separately deployed backend. Set " +
+          "PROD_API_BASE in index.html (or append ?api=<your-backend-url> to this URL). " +
+          "See DEPLOYMENT.md.";
+      }
+      return "Couldn’t reach the backend at " + (API_BASE || location.origin) +
+        ". Is it running and awake? Free hosts can take ~30–60s to wake on the first request.";
+    }
+    return (err && err.message) || fallback || "Unknown error.";
+  }
+
   // -------- Element refs --------
   const $ = (id) => document.getElementById(id);
   const dropzone   = $("dropzone");
@@ -2247,7 +2309,7 @@
     fd.append("file", file);
 
     try {
-      const res = await fetch("/laps", { method: "POST", body: fd });
+      const res = await fetch(apiUrl("/laps"), { method: "POST", body: fd });
       if (token !== lapFetchToken) return;  // a newer upload superseded this one
       const ctype = res.headers.get("content-type") || "";
       const payload = ctype.includes("application/json") ? await res.json() : null;
@@ -2272,8 +2334,11 @@
       setSelectedLap(null);
     } catch (err) {
       if (token !== lapFetchToken) return;
-      showLapNote("Couldn’t read laps from this file: " + escapeHtml(err.message || "unknown error") +
-                  ". You can still run Auto / Fastest Lap.");
+      const msg = isNetworkError(err)
+        ? apiErrorMessage(err)
+        : "Couldn’t read laps from this file: " + (err.message || "unknown error") +
+          ". You can still run Auto / Fastest Lap.";
+      showLapNote(escapeHtml(msg));
       lapTrigger.disabled = true;
       setSelectedLap(null);
     } finally {
@@ -3178,7 +3243,7 @@
     fd.append("lap_index", selectedLapIndex == null ? "" : String(selectedLapIndex));
 
     try {
-      const res = await fetch("/analyze", { method: "POST", body: fd });
+      const res = await fetch(apiUrl("/analyze"), { method: "POST", body: fd });
       const ctype = res.headers.get("content-type") || "";
       const payload = ctype.includes("application/json") ? await res.json() : null;
       if (!res.ok) {
@@ -3187,7 +3252,7 @@
       }
       renderResults(payload);
     } catch (err) {
-      showError(err.message || "Network error. Is the server running?");
+      showError(apiErrorMessage(err, "Network error. Is the server running?"));
     } finally {
       stopStatusCycle();
       loadingState.classList.remove("show");

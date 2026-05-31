@@ -1,0 +1,20 @@
+# Runtime dependencies for the hosted FastAPI backend (app/main.py).
+#
+# These mirror the runtime + "web" extra in pyproject.toml. We list the
+# dependencies directly (rather than installing the project package) on purpose:
+# the backend runs straight from the repo checkout, so app/main.py keeps the
+# repo root as PROJECT_ROOT and can find tracks/, data/ and cache/ at runtime.
+#
+# Used by free hosts (e.g. Render) via:  pip install -r requirements.txt
+
+# --- analysis pipeline (src/) ---
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10
+matplotlib>=3.7
+fastf1>=3.3
+
+# --- web layer (app/) ---
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
