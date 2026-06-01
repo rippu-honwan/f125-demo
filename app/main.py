@@ -99,23 +99,24 @@ app = FastAPI(
 # The frontend may be served from a *different* origin than this backend (e.g.
 # the UI on GitHub Pages, the API on Render), and browsers block cross-origin
 # requests unless the server opts in. Allowed by default:
-#   * any localhost / 127.0.0.1 port (local development), and
-#   * any ``*.github.io`` site (GitHub Pages)
-# matched by the regex below. Add extra exact origins (e.g. a custom domain)
-# without touching code via the ``ALLOWED_ORIGINS`` env var (comma-separated).
+#   * any localhost / 127.0.0.1 port (local development) — matched by the
+#     regex below, and
+#   * the project's own GitHub Pages origin — an exact entry in allow_origins.
+# Add extra exact origins (e.g. a custom domain) without touching code via the
+# ``ALLOWED_ORIGINS`` env var (comma-separated).
 # No cookies/credentials are used, so credentials stay off and file-upload /
 # analysis POSTs work cross-origin (incl. their preflight OPTIONS).
-_CORS_ORIGIN_REGEX = (
-    r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?"
-    r"|https://[a-z0-9-]+\.github\.io)$"
-)
+_CORS_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+# The project's own GitHub Pages origin is always allowed (exact match).
+_PROD_ORIGIN = "https://rippu-honwan.github.io"
 _EXTRA_ORIGINS = [
     o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()
 ]
+_ALLOWED_ORIGINS = [_PROD_ORIGIN, *_EXTRA_ORIGINS]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_EXTRA_ORIGINS,
+    allow_origins=_ALLOWED_ORIGINS,
     allow_origin_regex=_CORS_ORIGIN_REGEX,
     allow_credentials=False,
     allow_methods=["*"],
