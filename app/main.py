@@ -21,9 +21,7 @@ Run
 from __future__ import annotations
 
 import os
-import io
 import sys
-import base64
 import tempfile
 import traceback
 from pathlib import Path
@@ -52,7 +50,6 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from src.pipeline import run_pipeline  # noqa: E402
 from src.track_map import (  # noqa: E402
-    draw_track_map,
     _severity,
     _extract_track_xy,
     _smooth_xy,
@@ -224,82 +221,6 @@ def _corner_to_dict(ci: Any) -> dict:
         "apex_speed_diff": _num(ci.apex_speed_diff, 1),
         "exit_speed_diff": _num(ci.exit_speed_diff, 1),
     }
-
-
-def _render_track_map_and_positions(aligned, corners, report, title: str):
-    """Render the track map PNG *and* the normalized apex overlay positions.
-
-    Returns ``(base64_png_or_None, corner_positions)``.
-
-    ``corner_positions`` is a list of ``{corner_id, short, x_norm, y_norm}``
-    where ``x_norm`` / ``y_norm`` are 0..1 fractions of the rendered PNG using a
-    top-left origin (HTML canvas convention).  They come from the *exact*
-    matplotlib data transform of the figure that draw_track_map() produced, so a
-    canvas overlay lands precisely on each apex dot — accounting for the equal
-    aspect-ratio letterboxing, title, legend and colorbar in the image.
-
-    The apex (x, y) lookup replicates src/track_map.py's own pipeline
-    (``_extract_track_xy`` -> ``_smooth_xy`` -> ``_find_corner_xy``) so the
-    points match the polyline actually drawn on the map.  src/track_map.py is
-    imported, never modified.
-    """
-    tmp_png = None
-    fig = None
-    positions: "list[dict]" = []
-    try:
-        # draw_track_map writes to output_path internally *and* returns the Figure.
-        fd, tmp_png = tempfile.mkstemp(suffix=".png")
-        os.close(fd)
-        fig = draw_track_map(
-            aligned=aligned,
-            corners=corners,
-            report=report,
-            output_path=tmp_png,
-            title=title,
-            mode="both",  # heatmap line + corner severity labels
-        )
-
-        # --- Normalized apex positions from the figure's data transform. ---
-        # Only meaningful when real GPS was available; otherwise draw_track_map
-        # falls back to a schematic whose axes do not match these coordinates,
-        # so we leave positions empty and the overlay simply stays hidden.
-        x, y, dist = _extract_track_xy(aligned)
-        if x is not None and corners:
-            x, y = _smooth_xy(x, y, window=12)   # same smoothing the map uses
-            ax = fig.axes[0]                     # main map axes (colorbar = axes[1])
-            fig.canvas.draw()                    # finalize layout -> transforms valid
-            fig_w = float(fig.bbox.width)
-            fig_h = float(fig.bbox.height)
-            for idx, c in enumerate(corners):
-                cid = int(c.get("id", idx + 1))
-                cx, cy = _find_corner_xy(c, x, y, dist)
-                # data coords -> display px (origin bottom-left) -> 0..1 fraction
-                px, py = ax.transData.transform((cx, cy))
-                positions.append({
-                    "corner_id": cid,
-                    "short": c.get("short", f"T{cid}"),
-                    "x_norm": round(px / fig_w, 5),
-                    "y_norm": round(1.0 - py / fig_h, 5),  # flip to top-left origin
-                })
-
-        # Re-save the returned figure at a web-friendly resolution.  We must NOT
-        # pass bbox_inches="tight" here: the saved PNG has to span the whole
-        # figure so the figure-fraction positions above map exactly onto it.
-        buf = io.BytesIO()
-        fig.savefig(buf, format="png", dpi=130, facecolor=BG_COLOR)
-        buf.seek(0)
-        return base64.b64encode(buf.read()).decode("ascii"), positions
-    except Exception:  # pragma: no cover - visualization is best-effort
-        traceback.print_exc()
-        return None, positions
-    finally:
-        if fig is not None:
-            plt.close(fig)
-        if tmp_png and os.path.exists(tmp_png):
-            try:
-                os.unlink(tmp_png)
-            except OSError:
-                pass
 
 
 # ---------------------------------------------------------------------------
@@ -920,9 +841,7 @@ def _run_comparison(csv_path: str, mode: str, driver: str, year: int,
         return payload
 
     # ---- Interactive Track Explorer: your-lap telemetry mapped onto the
-    #      circuit. Replaces the static PNG track map (script 05). The old
-    #      _render_track_map_and_positions() helper stays in the module as a
-    #      dormant fallback but is intentionally no longer called here. ----
+    #      circuit. Replaces the static PNG track map (script 05). ----
     payload["track_explorer"] = _build_track_explorer(aligned, corners)
     payload["corner_severities"] = [
         {
