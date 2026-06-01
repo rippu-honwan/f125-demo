@@ -1870,7 +1870,7 @@
   //   • add ?api=https://your-backend.onrender.com to the URL (it is remembered
   //     in localStorage for next time), or
   //   • run  localStorage.setItem("apiBase", "https://...")  in the console.
-  const PROD_API_BASE = "";   // <-- set to your hosted backend URL for GitHub Pages
+  const PROD_API_BASE = "https://f125-demo-api.onrender.com";   // hosted backend (used when served from GitHub Pages)
 
   function resolveApiBase() {
     const strip = (u) => String(u || "").trim().replace(/\/+$/, "");
