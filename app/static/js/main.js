@@ -63,6 +63,51 @@
     return (err && err.message) || fallback || "Unknown error.";
   }
 
+  // -------- Backend wake-up probe (fire-and-forget) --------
+  // Render's free tier sleeps the backend after inactivity, so the first
+  // request can take 20–40s. At startup we probe GET /health: if it is slow
+  // (>2s) or fails, surface #wakeBanner so the user knows the wait is expected;
+  // once /health answers OK we hide it again. This uses its own AbortController,
+  // separate from the one guarding /analyze, and never blocks page load.
+  function pingBackend() {
+    const wakeBanner = $("wakeBanner");
+    if (!wakeBanner) return;
+    const wakeClose = $("wakeClose");
+    if (wakeClose) {
+      wakeClose.addEventListener("click", () => { wakeBanner.style.display = "none"; });
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);                     // hard 60s cap
+    const slowTimer = setTimeout(() => { wakeBanner.style.display = "flex"; }, 2000);   // >2s ⇒ likely waking up
+    fetch(apiUrl("/health"), { method: "GET", signal: controller.signal })
+      .then((res) => { wakeBanner.style.display = res.ok ? "none" : "flex"; })          // OK ⇒ awake, hide; non-OK ⇒ still warn
+      .catch(() => { wakeBanner.style.display = "flex"; })                              // network error / aborted ⇒ warn
+      .finally(() => { clearTimeout(slowTimer); clearTimeout(timeoutId); });
+  }
+
+  // -------- Dynamic track list --------
+  // Fetch the supported tracks from the backend (single source of truth) and
+  // rebuild <select id="track">. On any failure we leave the hardcoded <option>
+  // tags from index.html in place, so the dropdown still works offline/degraded.
+  async function loadTracks() {
+    const sel = $("track");
+    if (!sel) return;
+    try {
+      const res = await fetch(apiUrl("/tracks"), { method: "GET" });
+      if (!res.ok) return;                                  // keep static fallback options
+      const tracks = await res.json();
+      if (!Array.isArray(tracks) || !tracks.length) return; // keep static fallback options
+      const prev = sel.value;                               // preserve auto-detected/selected key
+      sel.innerHTML = tracks.map((t) =>
+        `<option value="${escapeHtml(String(t.key))}">${escapeHtml(String(t.name))}</option>`
+      ).join("");
+      if (prev && tracks.some((t) => String(t.key) === prev)) sel.value = prev;
+    } catch (_) {
+      /* network error / invalid JSON — leave the static <select> options as the fallback */
+    }
+  }
+
   // -------- Element refs --------
   const $ = (id) => document.getElementById(id);
   const dropzone   = $("dropzone");
@@ -616,25 +661,11 @@
     $("timingLabel").textContent = label || "Lap Summary";
   }
 
-  function renderMap(data) {
-    clearHighlight();
-    setCornerPositions(data.corner_positions || []);
-    const mapImg = $("mapImg");
-    if (data.track_map_base64) {
-      mapImg.src = "data:image/png;base64," + data.track_map_base64;
-      $("mapFrame").style.display = "";
-    } else {
-      $("mapFrame").style.display = "none";
-    }
-  }
-
   // -------- Lap Comparison (script 03): visual head-to-head, no heatmap --------
   // Hierarchy: TOP = overall delta + where-you-stand summary; MIDDLE = key-corner
   // cards with brake/throttle/gear mini charts; BOTTOM = the main whole-lap
   // pace & cumulative-delta comparison chart.
   function renderComparison(data) {
-    clearHighlight();
-    setCornerPositions([]);        // no map in this mode — clear any stale overlay
     renderTiming(data, "Lap Summary");
 
     // Top: where-you-stand summary strip.
@@ -954,8 +985,6 @@
   // -------- Track Map (script 05): the Interactive Track Explorer ----------
   // The SVG circuit is the controller. A single hovered index drives the moving
   // marker on the map AND every cursor / value in the telemetry panel below.
-  // The old static-PNG renderer (renderMap + the <canvas> overlay) stays in the
-  // file as a dormant fallback but is no longer wired into this mode.
   const CORNER_NEAR_M = 35;          // hover this close (m) to an apex -> label it
   let txState = {
     points: [], telemetry: {}, markers: [], n: 0,
@@ -1281,91 +1310,6 @@
     return `<table class="data-table">${thead}${tbody}</table>`;
   }
 
-  function renderCorners(corners) {
-    const grid = $("cornerGrid");
-    grid.innerHTML = "";
-    if (!corners.length) {
-      const empty = document.createElement("div");
-      empty.className = "empty-corners";
-      empty.textContent = "No corner definitions were found for this track, so a per-corner breakdown isn't available. The lap summary and track map above still reflect your full lap.";
-      grid.appendChild(empty);
-      return;
-    }
-
-    corners.forEach((c, idx) => {
-      const sev = c.severity in SEV_VAR ? c.severity : "ok";
-      const card = document.createElement("div");
-      card.className = "corner-card";
-      card.style.setProperty("--sev", SEV_VAR[sev]);
-      card.style.animationDelay = (idx * 45) + "ms";
-      card.tabIndex = 0;
-      card.setAttribute("role", "button");
-      card.setAttribute("aria-expanded", "false");
-
-      const fast = c.time_delta != null && c.time_delta < 0;
-      const stats = [];
-      const b = fmtSigned(c.brake_diff_m, "m");
-      const a = fmtSigned(c.apex_speed_diff, " km/h");
-      const ex = fmtSigned(c.exit_speed_diff, " km/h");
-      if (b)  stats.push(`<span class="stat">Brake <b>${b}</b></span>`);
-      if (a)  stats.push(`<span class="stat">Apex <b>${a}</b></span>`);
-      if (ex) stats.push(`<span class="stat">Exit <b>${ex}</b></span>`);
-
-      const issues = (c.issues || []).map((i) => `<li>${escapeHtml(i)}</li>`).join("");
-      const tips   = (c.tips || []).map((t) => `<li>${escapeHtml(t)}</li>`).join("");
-
-      card.innerHTML = `
-        <div class="cc-head">
-          <div>
-            <div class="cc-id">${escapeHtml(c.short || ("C" + c.corner_id))}</div>
-            <div class="cc-name">${escapeHtml(c.name || "")}</div>
-          </div>
-          <div class="cc-badge">${escapeHtml(c.grade || "–")}</div>
-        </div>
-        <div class="cc-delta ${fast ? "fast" : "slow"}">${fmtDelta(c.time_delta)}</div>
-        ${stats.length ? `<div class="cc-stats">${stats.join("")}</div>` : ""}
-        <div class="cc-detail">
-          <div><div class="inner">
-            ${issues ? `<div class="detail-block"><div class="detail-h">What happened</div><ul class="detail-list issues">${issues}</ul></div>` : ""}
-            ${tips ? `<div class="detail-block"><div class="detail-h">How to fix it</div><ul class="detail-list tips">${tips}</ul></div>` : ""}
-          </div></div>
-        </div>
-        <div class="cc-foot">
-          <span>${sev === "ok" ? "On pace" : sev === "minor" ? "Minor loss" : "Major loss"}</span>
-          <span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
-        </div>`;
-
-      const toggle = () => {
-        const open = card.classList.toggle("open");
-        card.setAttribute("aria-expanded", open ? "true" : "false");
-      };
-      const glowColor = SEV_HEX[sev] || "#6f7494";
-
-      // Hover / focus: spotlight this corner's apex on the track map overlay.
-      card.addEventListener("mouseenter", () => highlightCorner(c.corner_id, glowColor, false));
-      card.addEventListener("mouseleave", () => clearHighlight());
-      card.addEventListener("focus", () => highlightCorner(c.corner_id, glowColor, false));
-      card.addEventListener("blur", () => clearHighlight());
-
-      // Click / Enter / Space: expand the card, pulse the apex, return to the map.
-      card.addEventListener("click", () => {
-        toggle();
-        highlightCorner(c.corner_id, glowColor, true);
-        scrollMapIntoView();
-      });
-      card.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          toggle();
-          highlightCorner(c.corner_id, glowColor, true);
-          scrollMapIntoView();
-        }
-      });
-
-      grid.appendChild(card);
-    });
-  }
-
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (m) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
@@ -1430,138 +1374,6 @@
     }
   }
   analyzeBtn.addEventListener("click", analyze);
-
-  // -------- Track-map corner overlay --------
-  // A <canvas> sits exactly over the server-rendered PNG.  /analyze returns each
-  // corner apex as a 0..1 fraction of that image (corner_positions), so we can
-  // spotlight the true apex when a corner card is hovered, focused or clicked.
-  const mapFrame  = $("mapFrame");
-  const mapImg    = $("mapImg");
-  const mapCanvas = $("mapCanvas");
-  const mapCtx    = mapCanvas.getContext("2d");
-  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-  let cornerPos = new Map();   // corner_id -> {x_norm, y_norm}
-  let activeGlow = null;       // {x_norm, y_norm, color} currently drawn
-  let pulseRAF = 0;
-  let cssW = 0, cssH = 0;
-
-  function setCornerPositions(list) {
-    cornerPos = new Map();
-    (list || []).forEach((p) => {
-      if (p && p.corner_id != null) cornerPos.set(p.corner_id, p);
-    });
-  }
-
-  function sizeMapCanvas() {
-    if (!mapImg.clientWidth || !mapImg.clientHeight) return;
-    const dpr = window.devicePixelRatio || 1;
-    cssW = mapImg.clientWidth;
-    cssH = mapImg.clientHeight;
-    mapCanvas.style.width  = cssW + "px";
-    mapCanvas.style.height = cssH + "px";
-    mapCanvas.width  = Math.round(cssW * dpr);
-    mapCanvas.height = Math.round(cssH * dpr);
-    mapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);   // draw using CSS pixels
-    if (activeGlow) drawGlow(activeGlow); else clearGlowCanvas();
-  }
-
-  function clearGlowCanvas() { mapCtx.clearRect(0, 0, cssW, cssH); }
-
-  function glowRadius() { return Math.max(7, Math.min(cssW, cssH) * 0.016); }
-
-  function drawGlow(g, ringExtra = 0, ringAlpha = 0) {
-    if (!g || !cssW) return;
-    const x = g.x_norm * cssW;
-    const y = g.y_norm * cssH;
-    const r = glowRadius();
-    clearGlowCanvas();
-
-    // soft outer halo
-    mapCtx.save();
-    mapCtx.shadowColor = g.color;
-    mapCtx.shadowBlur  = 26;
-    mapCtx.globalAlpha = 0.95;
-    mapCtx.fillStyle   = g.color;
-    mapCtx.beginPath();
-    mapCtx.arc(x, y, r, 0, Math.PI * 2);
-    mapCtx.fill();
-    mapCtx.restore();
-
-    // white-cored centre for contrast against the dark map
-    mapCtx.beginPath();
-    mapCtx.arc(x, y, Math.max(2, r * 0.38), 0, Math.PI * 2);
-    mapCtx.globalAlpha = 0.9;
-    mapCtx.fillStyle = "#ffffff";
-    mapCtx.fill();
-    mapCtx.globalAlpha = 1;
-
-    // steady ring
-    mapCtx.beginPath();
-    mapCtx.arc(x, y, r + 5, 0, Math.PI * 2);
-    mapCtx.strokeStyle = g.color;
-    mapCtx.globalAlpha = 0.85;
-    mapCtx.lineWidth = 2;
-    mapCtx.stroke();
-    mapCtx.globalAlpha = 1;
-
-    // expanding pulse ring (click animation)
-    if (ringExtra > 0 && ringAlpha > 0) {
-      mapCtx.beginPath();
-      mapCtx.arc(x, y, r + 5 + ringExtra, 0, Math.PI * 2);
-      mapCtx.strokeStyle = g.color;
-      mapCtx.globalAlpha = ringAlpha;
-      mapCtx.lineWidth = 3;
-      mapCtx.stroke();
-      mapCtx.globalAlpha = 1;
-    }
-  }
-
-  function cancelPulse() { if (pulseRAF) { cancelAnimationFrame(pulseRAF); pulseRAF = 0; } }
-
-  function startPulse() {
-    cancelPulse();
-    if (reduceMotion) { drawGlow(activeGlow); return; }
-    const dur = 620, total = dur * 2;
-    const t0 = performance.now();
-    const step = (now) => {
-      if (!activeGlow) { pulseRAF = 0; return; }
-      const elapsed = now - t0;
-      const phase = (elapsed % dur) / dur;            // 0..1 each cycle
-      drawGlow(activeGlow, phase * 30, (1 - phase) * 0.55);
-      if (elapsed < total) {
-        pulseRAF = requestAnimationFrame(step);
-      } else {
-        drawGlow(activeGlow);                          // settle to steady glow
-        pulseRAF = 0;
-      }
-    };
-    pulseRAF = requestAnimationFrame(step);
-  }
-
-  function highlightCorner(cornerId, color, pulse) {
-    const p = cornerPos.get(cornerId);
-    if (!p) return;
-    if (!cssW) sizeMapCanvas();
-    activeGlow = { x_norm: p.x_norm, y_norm: p.y_norm, color: color };
-    mapFrame.classList.add("is-linked");
-    if (pulse) startPulse(); else { cancelPulse(); drawGlow(activeGlow); }
-  }
-
-  function clearHighlight() {
-    cancelPulse();
-    activeGlow = null;
-    clearGlowCanvas();
-    mapFrame.classList.remove("is-linked");
-  }
-
-  function scrollMapIntoView() {
-    if (mapFrame.offsetParent === null) return;   // map hidden -> nothing to show
-    mapFrame.scrollIntoView({ behavior: "smooth", block: "center" });
-  }
-
-  mapImg.addEventListener("load", sizeMapCanvas);
-  window.addEventListener("resize", sizeMapCanvas);
 
   // -------- Interactive Track Explorer wiring (attached once) --------
   (() => {
@@ -1764,4 +1576,6 @@
   // -------- Init --------
   applyModeUI(currentMode);   // set default mode description, label & muted state
   resetTrackDetection();      // track is auto-detected from the CSV on upload
+  pingBackend();              // fire-and-forget: warn the user if the backend is cold-starting
+  loadTracks();               // replace the static <select> options with the backend's list
 })();

@@ -79,6 +79,24 @@ ALL_MODES = SOLO_MODES + COMPARISON_MODES
 DEFAULT_MODE = "comparison"
 DEFAULT_YEAR = 2025
 
+# Supported tracks, in display order — the single source of truth served to the
+# frontend via GET /tracks. Each "key" is the tracks/<key>.json stem understood
+# by src.track.load_track(); the hardcoded <select> in index.html mirrors this
+# list only as a static fallback for when /tracks can't be reached.
+SUPPORTED_TRACKS = [
+    {"key": "suzuka", "name": "Suzuka"},
+    {"key": "monza", "name": "Monza"},
+    {"key": "spa", "name": "Spa-Francorchamps"},
+    {"key": "silverstone", "name": "Silverstone"},
+    {"key": "singapore", "name": "Singapore"},
+    {"key": "austin", "name": "Austin (COTA)"},
+    {"key": "barcelona", "name": "Barcelona"},
+    {"key": "interlagos", "name": "Interlagos"},
+    {"key": "melbourne", "name": "Melbourne"},
+    {"key": "miami", "name": "Miami"},
+    {"key": "shanghai", "name": "Shanghai"},
+]
+
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 app = FastAPI(
@@ -860,6 +878,12 @@ def _run_comparison(csv_path: str, mode: str, driver: str, year: int,
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/tracks")
+def tracks() -> list:
+    """Supported tracks for the frontend dropdown (single source of truth)."""
+    return SUPPORTED_TRACKS
 
 
 @app.post("/laps")

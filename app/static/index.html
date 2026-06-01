@@ -252,6 +252,12 @@
         <div class="lt-hint" id="ltHint">Downloading real F1 data — this can take 15–30 seconds on first run.</div>
       </div>
 
+      <!-- ========== Backend wake-up banner (Render free-tier cold start) ========== -->
+      <div id="wakeBanner" role="status" style="display:none; align-items:center; gap:10px; margin:16px 0 0; padding:12px 14px; border:1px solid rgba(245,176,65,0.45); background:rgba(245,176,65,0.12); color:#f5b041; border-radius:10px; font-size:.9rem; line-height:1.4;">
+        <span style="flex:1;">Backend is waking up — the first request may take up to 30 seconds.</span>
+        <button type="button" id="wakeClose" aria-label="Dismiss" style="flex:none; background:none; border:none; color:inherit; font-size:1.25rem; line-height:1; cursor:pointer; padding:0 2px;">&times;</button>
+      </div>
+
       <!-- ========== Error banner ========== -->
       <div class="error-banner" id="errorBanner" role="alert">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
