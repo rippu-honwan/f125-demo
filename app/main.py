@@ -1009,6 +1009,11 @@ def analyze(
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+# Sample telemetry (e.g. data/suzuka_sample.csv) for the UI's "Use Sample" button.
+_DATA_DIR = PROJECT_ROOT / "data"
+if _DATA_DIR.exists():
+    app.mount("/data", StaticFiles(directory=str(_DATA_DIR)), name="data")
+
 
 @app.get("/")
 def index() -> FileResponse:

@@ -340,6 +340,29 @@
     if (f) setFile(f);
   });
 
+  // -------- "Use Sample": load the bundled Suzuka CSV through the normal flow --------
+  const useSampleBtn = $("useSampleBtn");
+  const sampleStatus = $("sampleStatus");
+  if (useSampleBtn) {
+    useSampleBtn.addEventListener("click", async () => {
+      useSampleBtn.disabled = true;
+      if (sampleStatus) { sampleStatus.hidden = false; sampleStatus.textContent = "Loading sample…"; }
+      try {
+        const res = await fetch("data/suzuka_sample.csv");   // relative — served as a static file
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const blob = await res.blob();
+        const file = new File([blob], "suzuka_sample.csv", { type: "text/csv" });
+        setFile(file);                                       // reuse the exact upload flow (chip, lap load, enable Analyze)
+        if (sampleStatus) sampleStatus.textContent = "Sample loaded — Suzuka 2024";
+      } catch (err) {
+        if (sampleStatus) sampleStatus.textContent = "Couldn’t load sample.";
+        showError("Couldn’t load the sample telemetry file. " + (err.message || ""));
+      } finally {
+        useSampleBtn.disabled = false;
+      }
+    });
+  }
+
   // -------- Lap selector --------
   function resetLapSelector() {
     lapFetchToken++;            // cancel any in-flight /laps request

@@ -782,6 +782,28 @@
     color: var(--text-mute); font-weight: 600; text-transform: none;
   }
 
+  /* Secondary "Use Sample" pill — sits at the right of the section heading. */
+  .btn-sample {
+    margin-left: auto; flex: none;
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 11px;
+    font-family: var(--font-display);
+    font-size: .62rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--text-dim);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: color .2s var(--ease), border-color .2s var(--ease), background .2s var(--ease);
+  }
+  .btn-sample:hover:not(:disabled) { color: var(--text); border-color: var(--border-strong); }
+  .btn-sample:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(232,0,45,0.30); }
+  .btn-sample:disabled { opacity: .6; cursor: progress; }
+  .sample-status {
+    font-size: .68rem; color: var(--text-mute); letter-spacing: .04em;
+    margin: -4px 0 12px;
+  }
+
   /* Analysis mode segmented control */
   .mode-grid {
     display: grid;
