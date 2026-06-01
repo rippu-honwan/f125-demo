@@ -577,42 +577,6 @@
     text-shadow: 0 0 18px color-mix(in srgb, var(--gc) 60%, transparent);
   }
 
-  /* Track map */
-  .map-wrap { margin-top: 30px; }
-  .map-frame {
-    position: relative;
-    padding: 14px;
-    border-radius: var(--radius);
-    background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
-    border: 1px solid var(--border);
-    transition: box-shadow .3s var(--ease), border-color .3s var(--ease);
-    text-align: center;
-  }
-  .map-frame.is-linked {
-    border-color: rgba(232,0,45,0.4);
-    box-shadow: 0 0 0 1px var(--accent-glow), 0 30px 80px -30px var(--accent-glow);
-  }
-  .map-stage {
-    position: relative;
-    display: block;
-    max-width: 980px;
-    margin: 0 auto;
-    line-height: 0;
-  }
-  .map-frame img {
-    width: 100%; height: auto; display: block;
-    border-radius: 12px;
-    filter: drop-shadow(0 24px 40px rgba(0,0,0,0.55));
-    cursor: zoom-in;
-  }
-  /* Interactive corner overlay, layered exactly over the track-map PNG. */
-  .map-canvas {
-    position: absolute;
-    top: 0; left: 0;
-    pointer-events: none;       /* clicks fall through to the image (lightbox) */
-    border-radius: 12px;
-    z-index: 3;
-  }
   .map-hint {
     margin-top: 10px; color: var(--text-mute); font-size: .8rem;
     letter-spacing: .04em;
@@ -759,17 +723,6 @@
     font-size: .82rem; color: var(--text-dim); margin-bottom: 6px;
   }
   .summary-card .s-text { font-size: .92rem; line-height: 1.5; color: var(--text); }
-
-  /* Lightbox */
-  .lightbox {
-    position: fixed; inset: 0; z-index: 100;
-    display: none; place-items: center;
-    background: rgba(6, 6, 12, 0.86);
-    backdrop-filter: blur(6px);
-    padding: 4vw; cursor: zoom-out;
-  }
-  .lightbox.show { display: grid; animation: fadeUp .25s var(--ease) both; }
-  .lightbox img { max-width: 96vw; max-height: 92vh; border-radius: 12px; box-shadow: 0 30px 90px -20px #000; }
 
   footer.site {
     margin-top: 60px; padding-top: 22px;

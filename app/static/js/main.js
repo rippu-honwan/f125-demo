@@ -201,7 +201,7 @@
   };
   const ALL_BLOCKS = [
     "blkOverview", "blkSolo", "blkTiming", "blkLapChart", "blkCompStrip",
-    "blkMap", "blkExplorer", "blkCorners", "blkKeyCorners", "blkSummary", "blkActionPlan", "blkSeverity",
+    "blkExplorer", "blkCorners", "blkKeyCorners", "blkSummary", "blkActionPlan", "blkSeverity",
   ];
   let currentMode = "overview";
 
@@ -1393,19 +1393,6 @@
       txSetIndex(0, true);
     });
   })();
-
-  // -------- Lightbox --------
-  const lightbox = $("lightbox");
-  const lightboxImg = $("lightboxImg");
-  $("mapImg").addEventListener("click", () => {
-    if (!$("mapImg").src) return;
-    lightboxImg.src = $("mapImg").src;
-    lightbox.classList.add("show");
-  });
-  lightbox.addEventListener("click", () => lightbox.classList.remove("show"));
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") lightbox.classList.remove("show");
-  });
 
   // -------- Collapsible corner cards (delegation survives re-renders) --------
   function syncExpandAll() {

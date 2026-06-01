@@ -26,7 +26,7 @@ services:
     plan: free
     region: oregon
     rootDir: .                       # repo root — where requirements.txt lives
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.lock
     startCommand: mkdir -p cache/fastf1 && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
@@ -37,7 +37,7 @@ services:
       - key: MPLCONFIGDIR
         value: /tmp/matplotlib
       # OPTIONAL: extra allowed CORS origins (comma-separated), e.g. a custom
-      # domain. Any *.github.io origin and localhost are already allowed in code,
-      # so you can leave this unset for a standard GitHub Pages site.
+      # domain. Only the exact production origin (rippu-honwan.github.io) and
+      # localhost are allowed in code, so you can leave this unset.
       - key: ALLOWED_ORIGINS
         sync: false

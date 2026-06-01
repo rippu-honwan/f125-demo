@@ -79,23 +79,24 @@ ALL_MODES = SOLO_MODES + COMPARISON_MODES
 DEFAULT_MODE = "comparison"
 DEFAULT_YEAR = 2025
 
-# Supported tracks, in display order — the single source of truth served to the
-# frontend via GET /tracks. Each "key" is the tracks/<key>.json stem understood
-# by src.track.load_track(); the hardcoded <select> in index.html mirrors this
-# list only as a static fallback for when /tracks can't be reached.
-SUPPORTED_TRACKS = [
-    {"key": "suzuka", "name": "Suzuka"},
-    {"key": "monza", "name": "Monza"},
-    {"key": "spa", "name": "Spa-Francorchamps"},
-    {"key": "silverstone", "name": "Silverstone"},
-    {"key": "singapore", "name": "Singapore"},
-    {"key": "austin", "name": "Austin (COTA)"},
-    {"key": "barcelona", "name": "Barcelona"},
-    {"key": "interlagos", "name": "Interlagos"},
-    {"key": "melbourne", "name": "Melbourne"},
-    {"key": "miami", "name": "Miami"},
-    {"key": "shanghai", "name": "Shanghai"},
-]
+# Short display labels for GET /tracks, keyed by the tracks/<key>.json stem.
+# The track JSON files carry long official names (e.g. "Suzuka International
+# Racing Course"), so these overrides keep the dropdown labels short. Tracks
+# not listed here fall back to a title-cased key (see _discover_tracks). The
+# hardcoded <select> in index.html mirrors these labels as a static fallback.
+SHORT_NAMES = {
+    "suzuka": "Suzuka",
+    "monza": "Monza",
+    "spa": "Spa-Francorchamps",
+    "silverstone": "Silverstone",
+    "singapore": "Singapore",
+    "austin": "Austin (COTA)",
+    "barcelona": "Barcelona",
+    "interlagos": "Interlagos",
+    "melbourne": "Melbourne",
+    "miami": "Miami",
+    "shanghai": "Shanghai",
+}
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -880,10 +881,24 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+def _discover_tracks() -> list:
+    """Track list for GET /tracks, auto-discovered from tracks/*.json.
+
+    "key" is the JSON filename stem; "name" is a short label from SHORT_NAMES,
+    falling back to a title-cased key. Dropping a new tracks/<key>.json makes it
+    appear automatically — no code change. Sorted alphabetically by key.
+    """
+    stems = sorted(p.stem for p in (PROJECT_ROOT / "tracks").glob("*.json"))
+    return [
+        {"key": stem, "name": SHORT_NAMES.get(stem, stem.replace("_", " ").title())}
+        for stem in stems
+    ]
+
+
 @app.get("/tracks")
 def tracks() -> list:
-    """Supported tracks for the frontend dropdown (single source of truth)."""
-    return SUPPORTED_TRACKS
+    """Supported tracks for the frontend dropdown, auto-discovered from tracks/*.json."""
+    return _discover_tracks()
 
 
 @app.post("/laps")
