@@ -1070,6 +1070,55 @@
     return legend + speed + tb + gear;
   }
 
+  // Compare mode: same rows as txBuildCharts plus a faded/dashed reference trace
+  // per channel. Speed + gear share a common scale across both drivers so the
+  // overlay is comparable; throttle/brake already use fixed 0..1 / 0..gMax scales.
+  function txBuildChartsCompare(t, ref) {
+    const n = (t.speed && t.speed.length) || (t.dist && t.dist.length) || 0;
+    const h = 92;
+    const legend =
+      `<div class="tx-legend">` +
+      `<span class="lg"><i class="sw spd"></i>Speed</span>` +
+      `<span class="lg"><i class="sw thr"></i>Throttle</span>` +
+      `<span class="lg"><i class="sw brk"></i>Brake</span>` +
+      `<span class="lg"><i class="sw gr"></i>Gear</span></div>`;
+    const minMax = (a, b) => {
+      const v = [];
+      (a || []).concat(b || []).forEach((x) => { if (x != null && !isNaN(x)) v.push(x); });
+      return v.length ? [Math.min.apply(null, v), Math.max.apply(null, v)] : [0, 1];
+    };
+    const [sLo, sHi] = minMax(t.speed, ref.speed);
+    const speed = txChartRow("Speed", "km/h",
+      txTracePath(t.speed, n, "tx-line-spd", { h, min: sLo, max: sHi }) +
+      txTracePath(ref.speed, n, "tx-line-ref-spd", { h, min: sLo, max: sHi }), h);
+    const tb = txChartRow("Thr / Brk", "0–100%",
+      txTracePath(t.throttle, n, "tx-line-thr", { h, min: 0, max: 1 }) +
+      txTracePath(t.brake, n, "tx-line-brk", { h, min: 0, max: 1 }) +
+      txTracePath(ref.throttle, n, "tx-line-ref-thr", { h, min: 0, max: 1 }) +
+      txTracePath(ref.brake, n, "tx-line-ref-brk", { h, min: 0, max: 1 }), h);
+    let gMax = 8;
+    (t.gear || []).forEach((v) => { if (v != null && v > gMax) gMax = v; });
+    (ref.gear || []).forEach((v) => { if (v != null && v > gMax) gMax = v; });
+    const gear = txChartRow("Gear", "",
+      txTracePath(t.gear, n, "tx-line-gr", { h, min: 0, max: gMax, step: true }) +
+      txTracePath(ref.gear, n, "tx-line-ref-gr", { h, min: 0, max: gMax, step: true }), h);
+    return legend + speed + tb + gear;
+  }
+
+  // (Re)build the chart panel for the current compare-toggle state, then rebind
+  // the cursor elements (innerHTML replaces them). Reused by txRender and the toggle.
+  function txRenderCharts() {
+    const charts = $("txCharts");
+    if (!charts) return;
+    const ref = txState.refTelemetry;
+    const toggle = $("txCompareToggle");
+    const compare = !!(ref && toggle && toggle.checked);
+    charts.innerHTML = compare
+      ? txBuildChartsCompare(txState.telemetry, ref)
+      : txBuildCharts(txState.telemetry);
+    txState.cursorEls = Array.from(charts.querySelectorAll(".tx-cursor"));
+  }
+
   function txBuildSvg(ex) {
     const svg = $("txSvg");
     const tp = ex.track_path;
@@ -1207,24 +1256,35 @@
       readout.style.display = "none";
       charts.innerHTML = "";
       hint.innerHTML = `<div class="tx-empty">No GPS telemetry was available for this lap, so the interactive map can't be drawn. Try a lap exported with position data.</div>`;
-      txState = { points: [], telemetry: {}, markers: [], n: 0, cursorEls: [], idx: 0, nearCid: undefined };
+      const cmpWrap0 = $("txCompareWrap");
+      if (cmpWrap0) cmpWrap0.hidden = true;
+      txState = { points: [], telemetry: {}, markers: [], n: 0, cursorEls: [], idx: 0, nearCid: undefined, refTelemetry: null };
       return;
     }
     stage.style.display = "";
     readout.style.display = "";
     hint.textContent = "Move your cursor along the track to inspect your telemetry · the chart below follows the marker";
     txBuildSvg(ex);
-    charts.innerHTML = txBuildCharts(ex.telemetry);
     const t = ex.telemetry;
     txState = {
       points: ex.track_path.points,
       telemetry: t,
       markers: ex.corner_markers || [],
       n: (t.speed && t.speed.length) || (t.dist && t.dist.length) || ex.track_path.points.length,
-      cursorEls: Array.from(charts.querySelectorAll(".tx-cursor")),
+      cursorEls: [],
       idx: 0,
       nearCid: undefined,
+      refTelemetry: ex.ref_telemetry || null,
     };
+    // "Compare Driver" toggle is only offered when this run carries reference telemetry.
+    const cmpWrap = $("txCompareWrap"), cmpToggle = $("txCompareToggle");
+    if (ex.ref_telemetry) {
+      if (cmpWrap) cmpWrap.hidden = false;
+    } else {
+      if (cmpWrap) cmpWrap.hidden = true;
+      if (cmpToggle) cmpToggle.checked = false;
+    }
+    txRenderCharts();             // build charts (single or compare) + bind cursorEls
     txSetIndex(0, true);          // resting state: marker parked at the lap start
   }
 
@@ -1415,6 +1475,43 @@
       frame.classList.remove("is-active");
       txSetIndex(0, true);
     });
+
+    // CHANGE 1 — scrubbing the chart area also drives the map marker (two-way sync).
+    const charts = $("txCharts");
+    if (charts) {
+      const idxFromPlot = (clientX, plot) => {
+        const rect = plot.getBoundingClientRect();
+        const n = txState.n;
+        if (!rect.width || !n) return 0;
+        const f = (clientX - rect.left) / rect.width;            // 0..1 across the plot
+        const i = Math.round(((f * 100 - 2) / 96) * (n - 1));    // inverse of the cursor X math
+        return Math.max(0, Math.min(i, n - 1));
+      };
+      charts.addEventListener("mousemove", (e) => {
+        const plot = e.target.closest && e.target.closest(".tx-plot");
+        if (!plot || !txState.points.length) return;
+        txSetIndex(idxFromPlot(e.clientX, plot), false);        // moves the SVG marker too
+      });
+      charts.addEventListener("touchmove", (e) => {
+        const tch = e.touches && e.touches[0];
+        if (!tch) return;
+        const el = document.elementFromPoint(tch.clientX, tch.clientY);
+        const plot = el && el.closest && el.closest(".tx-plot");
+        if (!plot || !txState.points.length) return;
+        txSetIndex(idxFromPlot(tch.clientX, plot), false);
+        e.preventDefault();
+      }, { passive: false });
+      charts.addEventListener("mouseleave", () => txSetIndex(0, true));  // idle, like the SVG
+    }
+
+    // CHANGE 2 — Compare Driver toggle: re-render charts (single vs two-trace) in place.
+    const cmp = $("txCompareToggle");
+    if (cmp) {
+      cmp.addEventListener("change", () => {
+        txRenderCharts();                  // rebuilds charts + rebinds txState.cursorEls
+        txSetIndex(txState.idx, false);    // restore cursor/marker on the freshly built charts
+      });
+    }
   })();
 
   // -------- Collapsible corner cards (delegation survives re-renders) --------

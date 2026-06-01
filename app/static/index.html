@@ -321,7 +321,14 @@
 
       <!-- Interactive Track Explorer (replaces the static Track Map for this mode) -->
       <div class="result-block tx-wrap" id="blkExplorer">
-        <div class="section-label" id="explorerLabel">Interactive Track Map</div>
+        <div class="tx-head">
+          <div class="section-label" id="explorerLabel">Interactive Track Map</div>
+          <label class="tx-compare-wrap" id="txCompareWrap" hidden>
+            <span class="tx-compare-label">Compare Driver</span>
+            <input type="checkbox" id="txCompareToggle" class="tx-compare-input">
+            <span class="tx-compare-track"><span class="tx-compare-thumb"></span></span>
+          </label>
+        </div>
         <div class="tx-frame" id="txFrame">
           <div class="tx-stage" id="txStage">
             <svg id="txSvg" class="tx-svg" role="img"

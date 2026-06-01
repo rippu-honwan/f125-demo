@@ -682,6 +682,28 @@ def _build_track_explorer(aligned, corners, n_points: int = 300,
         "gear": [None if v is None else int(round(v)) for v in gear_raw],
     }
 
+    # Reference-driver (Pro) telemetry, sampled onto the SAME distance points as the
+    # primary lap above (so arrays are index-aligned and equal length). The real_*
+    # columns exist only when a reference lap was loaded (comparison / track_map
+    # modes); in solo modes — or on any error — ref_telemetry is None so the
+    # frontend's Compare Driver toggle stays hidden.
+    _REF_COLS = ("real_speed_kmh", "real_throttle", "real_brake", "real_gear")
+    try:
+        if all(c in cols for c in _REF_COLS):
+            ref_gear_raw = chan("real_gear", 0)
+            ref_telemetry = {
+                "dist": telemetry["dist"],          # identical samples as the primary
+                "speed": chan("real_speed_kmh", 1),
+                "throttle": chan("real_throttle", 3),
+                "brake": chan("real_brake", 3),
+                "gear": [None if v is None else int(round(v)) for v in ref_gear_raw],
+            }
+        else:
+            ref_telemetry = None
+    except Exception:                               # pragma: no cover - best-effort overlay
+        traceback.print_exc()
+        ref_telemetry = None
+
     markers = []
     for i, c in enumerate(corners or []):
         cid = int(c.get("id", i + 1))
@@ -700,6 +722,7 @@ def _build_track_explorer(aligned, corners, n_points: int = 300,
         "track_path": {"viewbox_w": vb_w, "viewbox_h": vb_h,
                        "closed": closed, "points": points},
         "telemetry": telemetry,
+        "ref_telemetry": ref_telemetry,
         "corner_markers": markers,
     }
 
