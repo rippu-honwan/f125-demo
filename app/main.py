@@ -8,8 +8,8 @@ Endpoints
 ---------
 GET  /          -> serves the single-page premium UI (app/static/index.html)
 POST /analyze   -> accepts a telemetry CSV upload + driver/year/session/track,
-                   runs the full coaching pipeline, returns JSON (incl. a
-                   base64-encoded PNG track map).
+                   runs the full coaching pipeline, returns JSON (incl. the
+                   interactive Track Explorer map data).
 GET  /health    -> liveness probe.
 
 Run
@@ -38,7 +38,6 @@ if str(PROJECT_ROOT) not in sys.path:
 import matplotlib  # noqa: E402
 matplotlib.use("Agg")
 matplotlib.rcParams["font.family"] = "DejaVu Sans"
-import matplotlib.pyplot as plt  # noqa: E402
 
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
@@ -52,7 +51,6 @@ from src.pipeline import run_pipeline  # noqa: E402
 from src.track_map import (  # noqa: E402
     _severity,
     _extract_track_xy,
-    _smooth_xy,
     _find_corner_xy,
 )
 from src.loader import (  # noqa: E402
@@ -82,7 +80,6 @@ DEFAULT_MODE = "comparison"
 DEFAULT_YEAR = 2025
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-BG_COLOR = "#0f0f1a"  # matches src/track_map.py + config.py theme
 
 app = FastAPI(
     title="F1 AI Driver Coach",

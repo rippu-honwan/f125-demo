@@ -495,6 +495,7 @@
 
   // -------- Loading status cycling --------
   const STATUS_COMPARISON = [
+    "Fetching F1 reference data…",
     "Loading your lap…",
     "Fetching real F1 telemetry…",
     "Aligning the two laps…",
@@ -513,7 +514,7 @@
     $("ltTitle").textContent = needsRef
       ? "Running game-vs-real analysis" : "Running telemetry analysis";
     $("ltHint").textContent = needsRef
-      ? "Fetching real F1 data can take a moment on the first run."
+      ? "Downloading real F1 data — this can take 15–30 seconds on first run."
       : "Analysing your uploaded lap — no download required.";
     let i = 0;
     ltStatus.textContent = messages[0];
@@ -1389,18 +1390,39 @@
     fd.append("track", $("track").value);
     fd.append("lap_index", selectedLapIndex == null ? "" : String(selectedLapIndex));
 
+    // /analyze can take 15–30s (FastF1 download on first run) and longer when a
+    // free-tier host is cold-starting. Abort after 45s so the request can't hang
+    // indefinitely. This timeout is scoped to /analyze only.
+    const controller = new AbortController();
+    const ANALYZE_TIMEOUT_MS = 45000;
+    const timeoutId = setTimeout(() => controller.abort(), ANALYZE_TIMEOUT_MS);
+
     try {
-      const res = await fetch(apiUrl("/analyze"), { method: "POST", body: fd });
+      const res = await fetch(apiUrl("/analyze"), { method: "POST", body: fd, signal: controller.signal });
+      if (!res.ok) {
+        // Prefer the backend's JSON `detail`; if the body isn't JSON (e.g. a
+        // proxy error page during cold-start), fall back to the HTTP status text.
+        let detail = "";
+        try {
+          const body = await res.json();
+          detail = (body && (body.detail || body.message)) || "";
+        } catch (_) { /* response body was not valid JSON */ }
+        if (detail && typeof detail !== "string") detail = JSON.stringify(detail);
+        showError(detail || res.statusText || ("Server error (" + res.status + ")."));
+        return;
+      }
       const ctype = res.headers.get("content-type") || "";
       const payload = ctype.includes("application/json") ? await res.json() : null;
-      if (!res.ok) {
-        const detail = (payload && (payload.detail || payload.message)) || ("Server error (" + res.status + ").");
-        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
-      }
       renderResults(payload);
     } catch (err) {
-      showError(apiErrorMessage(err, "Network error. Is the server running?"));
+      if (err && err.name === "AbortError") {
+        showError("Analysis is taking longer than expected. The server may be waking up " +
+          "from sleep — please wait a moment and try again.");
+      } else {
+        showError(apiErrorMessage(err, "Network error. Is the server running?"));
+      }
     } finally {
+      clearTimeout(timeoutId);
       stopStatusCycle();
       loadingState.classList.remove("show");
       analyzeBtn.classList.remove("loading");
