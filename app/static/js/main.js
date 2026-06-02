@@ -1124,22 +1124,99 @@
     const tp = ex.track_path;
     const pts = tp.points;
     svg.setAttribute("viewBox", `0 0 ${tp.viewbox_w} ${tp.viewbox_h}`);
-    let d = "";
-    for (let i = 0; i < pts.length; i++) d += (i ? "L" : "M") + pts[i][0] + " " + pts[i][1];
-    if (tp.closed) d += "Z";                    // close only a genuine lap loop
     const span = Math.min(tp.viewbox_w, tp.viewbox_h);
     const r = Math.max(6, span * 0.013);
+
+    // Track geometry: a per-segment speed heat-map when reference telemetry is
+    // available (segment_colors), otherwise a single plain gray polyline so the
+    // map still renders in solo modes.
+    const colors = ex.segment_colors || [];
+    const userSpeeds = (ex.telemetry && ex.telemetry.speed) || [];
+    const proSpeeds = (ex.ref_telemetry && ex.ref_telemetry.speed) || [];
+    const spdAttr = (v) => (v == null || isNaN(v)) ? "" : (+v).toFixed(1);
+    let track;
+    if (colors.length) {
+      let lines = "";
+      for (let i = 0; i < pts.length - 1; i++) {
+        const col = colors[i] || "#6b7280";
+        lines += `<line x1="${pts[i][0]}" y1="${pts[i][1]}" x2="${pts[i + 1][0]}" y2="${pts[i + 1][1]}" ` +
+                 `stroke="${col}" stroke-width="6" stroke-linecap="round" ` +
+                 `data-user-speed="${spdAttr(userSpeeds[i])}" data-pro-speed="${spdAttr(proSpeeds[i])}"/>`;
+      }
+      track = `<g class="tx-track-heat">${lines}</g>`;
+    } else {
+      let d = "";
+      for (let i = 0; i < pts.length; i++) d += (i ? "L" : "M") + pts[i][0] + " " + pts[i][1];
+      if (tp.closed) d += "Z";                  // close only a genuine lap loop
+      track = `<polyline class="tx-track-solo" points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" ` +
+              `fill="none" stroke="#6b7280" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`;
+    }
+
+    // Corner pins: still colored by severity (via the .tx-corner-dot CSS / near
+    // state), now larger (r=8) with a white ring so they pop against the heat-map.
     let corners = "";
     (ex.corner_markers || []).forEach((m) => {
       const t = escapeHtml((m.short || "") + (m.name ? " — " + m.name : ""));
-      corners += `<circle class="tx-corner-dot" data-cid="${m.corner_id}" cx="${m.x}" cy="${m.y}" r="${(r * 0.72).toFixed(1)}"><title>${t}</title></circle>`;
+      corners += `<circle class="tx-corner-dot" data-cid="${m.corner_id}" cx="${m.x}" cy="${m.y}" r="8" stroke="white" stroke-width="2"><title>${t}</title></circle>`;
     });
     svg.innerHTML =
-      `<path class="tx-track" d="${d}"/>` +
-      `<path class="tx-track-core" d="${d}"/>` +
+      track +
       `<g id="txCorners">${corners}</g>` +
       `<circle id="txMarkerHalo" class="tx-marker-halo" r="${(r * 2.6).toFixed(1)}" cx="${pts[0][0]}" cy="${pts[0][1]}"/>` +
       `<circle id="txMarker" class="tx-marker" r="${(r * 1.25).toFixed(1)}" cx="${pts[0][0]}" cy="${pts[0][1]}"/>`;
+  }
+
+  // Single shared tooltip for heat-map segment hover, created lazily on body.
+  function txTooltip() {
+    let el = document.getElementById("tx-tooltip");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "tx-tooltip";
+      el.style.cssText =
+        "position:absolute;background:#1a1a1a;color:#fff;padding:6px 10px;" +
+        "border-radius:6px;font-size:0.78rem;box-shadow:0 2px 8px rgba(0,0,0,0.4);" +
+        "pointer-events:none;z-index:9999;display:none;";
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  // Is this event target a heat-map segment line? (carries our data attrs)
+  function txIsSeg(t) {
+    return t && t.tagName === "line" && t.hasAttribute("data-user-speed");
+  }
+
+  // Delegated on the (persistent) SVG so it survives innerHTML rebuilds.
+  function txSegOver(e) {
+    if (txIsSeg(e.target)) e.target.setAttribute("stroke-width", "10");
+  }
+  function txSegOut(e) {
+    if (txIsSeg(e.target)) {
+      e.target.setAttribute("stroke-width", "6");
+      txTooltip().style.display = "none";
+    }
+  }
+  function txSegMove(e) {
+    const tip = txTooltip();
+    if (!txIsSeg(e.target)) { tip.style.display = "none"; return; }
+    const us = e.target.getAttribute("data-user-speed");
+    const ps = e.target.getAttribute("data-pro-speed");
+    const uNum = us === "" ? null : parseFloat(us);
+    const pNum = ps === "" ? null : parseFloat(ps);
+    let deltaHtml = "";
+    if (uNum != null && pNum != null) {
+      const d = uNum - pNum;
+      const col = d < 0 ? "#ef4444" : "#22c55e";
+      const sign = d > 0 ? "+" : "";
+      deltaHtml = `<div style="color:${col}">Δ ${sign}${d.toFixed(1)} km/h</div>`;
+    }
+    tip.innerHTML =
+      `<div>You: ${uNum == null ? "—" : uNum.toFixed(1)} km/h</div>` +
+      `<div>Pro: ${pNum == null ? "—" : pNum.toFixed(1)} km/h</div>` +
+      deltaHtml;
+    tip.style.left = (e.pageX + 12) + "px";
+    tip.style.top = (e.pageY - 28) + "px";
+    tip.style.display = "block";
   }
 
   // Pointer/touch client coords -> SVG viewBox coords (robust to letterboxing).
@@ -1245,8 +1322,11 @@
 
   function txRender(ex) {
     const svg = $("txSvg"), charts = $("txCharts"), stage = $("txStage"),
-          readout = $("txReadout"), hint = $("txHint"), frame = $("txFrame");
+          readout = $("txReadout"), hint = $("txHint"), frame = $("txFrame"),
+          legend = $("txLegend");
     frame.classList.remove("is-active");
+    // Legend only makes sense with the speed heat-map (reference lap present).
+    if (legend) legend.hidden = !(ex && (ex.segment_colors || []).length);
     if (!ex || !ex.track_path || !(ex.track_path.points || []).length ||
         ex.track_path.points.length < 2) {
       // GPS unavailable for this lap — graceful, non-distorting fallback.
@@ -1463,9 +1543,14 @@
     const svg = $("txSvg"), frame = $("txFrame");
     if (!svg) return;
     svg.addEventListener("mousemove", txOnMove);
+    // Heat-map segment hover: tooltip (You/Pro/Δ) + thicken the hovered line.
+    svg.addEventListener("mouseover", txSegOver);
+    svg.addEventListener("mouseout", txSegOut);
+    svg.addEventListener("mousemove", txSegMove);
     svg.addEventListener("mouseenter", () => frame.classList.add("is-active"));
     svg.addEventListener("mouseleave", () => {
       frame.classList.remove("is-active");
+      txTooltip().style.display = "none";  // hide segment tooltip on exit
       txSetIndex(0, true);                 // Design B: return to lap-start idle
     });
     svg.addEventListener("touchmove", (e) => {

@@ -10,6 +10,15 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/static/css/main.css" />
+<style>
+  .track-legend {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.8rem;
+    margin-top: 0.75rem;
+    justify-content: center;
+  }
+</style>
 </head>
 <body>
   <div class="stripe" aria-hidden="true"></div>
@@ -335,6 +344,12 @@
                  aria-label="Interactive circuit map — move your cursor along the track to inspect telemetry"></svg>
           </div>
           <div class="tx-hint" id="txHint">Move your cursor along the track to inspect your telemetry · the chart below follows the marker</div>
+        </div>
+
+        <div class="track-legend" id="txLegend" hidden>
+          <span style="color:#22c55e">● On pace (within 3 km/h)</span>
+          <span style="color:#eab308">● Slightly slower (3–10 km/h)</span>
+          <span style="color:#ef4444">● Significantly slower (>10 km/h)</span>
         </div>
 
         <div class="tx-readout" id="txReadout">

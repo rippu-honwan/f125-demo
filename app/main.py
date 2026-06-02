@@ -471,6 +471,41 @@ def _auto_explanation(ci) -> str:
     return "You are " + ", ".join(bits) + "."
 
 
+def _natural_tip(ci, driver: str = "the pro") -> str:
+    """Turn the engineer-style corner metrics into one warm coaching sentence.
+
+    Deterministic, rule-based (no AI APIs). Rules are checked in priority order
+    and the first match wins; the returned sentence already bundles the
+    actionable advice, so callers no longer need a separate ``tip`` field.
+    """
+    brake = ci.brake_diff_m
+    apex = ci.apex_speed_diff
+    throttle = ci.throttle_diff_m
+    exit_spd = ci.exit_speed_diff
+    delta = ci.time_delta or 0
+
+    if brake is not None and brake < -15:
+        return (f"Brake {abs(brake):.0f}m later into {ci.short} — you're currently "
+                f"leaving time on the table before the corner even starts.")
+    if brake is not None and brake > 15:
+        return (f"You're braking {brake:.0f}m too late into {ci.short} — trail brake "
+                f"or accept a slower apex.")
+    if apex is not None and apex < -10:
+        return (f"Your apex speed at {ci.short} is {abs(apex):.0f} km/h below {driver}. "
+                f"Widen your entry line to carry more momentum through.")
+    if throttle is not None and throttle > 20:
+        return (f"You're getting on the throttle {throttle:.0f}m too late after "
+                f"{ci.short}. Start with 20% at the apex and build progressively.")
+    if exit_spd is not None and exit_spd < -10:
+        return (f"At {ci.short}, you exit {abs(exit_spd):.0f} km/h slower than {driver}. "
+                f"Prioritise a clean, fast exit over a perfect apex.")
+    if delta > 0.15:
+        return (f"{ci.short} is your biggest opportunity — {delta:.3f}s lost here. "
+                f"Focus exclusively on this corner next session.")
+    return (f"Small differences at {ci.short}. Keep the technique consistent and the "
+            f"time will come.")
+
+
 def _build_lap_chart(aligned, k: int = 110) -> dict:
     """Whole-lap you-vs-pro speed traces + cumulative time delta."""
     return {
@@ -704,6 +739,26 @@ def _build_track_explorer(aligned, corners, n_points: int = 300,
         traceback.print_exc()
         ref_telemetry = None
 
+    # Per-segment heat-map colours: how the driver's speed compares to the Pro's
+    # at each polyline point. Empty in solo modes (no reference lap) so the
+    # frontend falls back to a single plain polyline.
+    user_speeds = telemetry["speed"]
+    pro_speeds = ref_telemetry["speed"] if ref_telemetry else None
+    if not pro_speeds:
+        segment_colors = []
+    else:
+        segment_colors = []
+        for i in range(len(points)):
+            us = user_speeds[i] if i < len(user_speeds) and user_speeds[i] is not None else 0
+            ps = pro_speeds[i] if i < len(pro_speeds) and pro_speeds[i] is not None else 0
+            delta = us - ps
+            if delta >= -3:
+                segment_colors.append("#22c55e")    # green  — on pace
+            elif delta >= -10:
+                segment_colors.append("#eab308")    # yellow — slightly slower
+            else:
+                segment_colors.append("#ef4444")    # red    — significantly slower
+
     markers = []
     for i, c in enumerate(corners or []):
         cid = int(c.get("id", i + 1))
@@ -723,6 +778,7 @@ def _build_track_explorer(aligned, corners, n_points: int = 300,
                        "closed": closed, "points": points},
         "telemetry": telemetry,
         "ref_telemetry": ref_telemetry,
+        "segment_colors": segment_colors,
         "corner_markers": markers,
     }
 
@@ -832,8 +888,8 @@ def _run_comparison(csv_path: str, mode: str, driver: str, year: int,
                 "brake_diff_m": _num(ci.brake_diff_m, 1),
                 "apex_speed_diff": _num(ci.apex_speed_diff, 1),
                 "exit_speed_diff": _num(ci.exit_speed_diff, 1),
-                "explanation": (ci.issues[0] if ci.issues else _auto_explanation(ci)),
-                "tip": ci.tips[0] if ci.tips else None,
+                "explanation": _natural_tip(ci, report.driver),
+                "tip": None,
                 "charts": _corner_charts(aligned, c),
             })
         payload["key_corners"] = key_corners
@@ -856,8 +912,7 @@ def _run_comparison(csv_path: str, mode: str, driver: str, year: int,
                 "grade": ci.grade,
                 "severity": _severity(ci),
                 "time_delta": _num(ci.time_delta, 3),
-                "issue": ci.issues[0] if ci.issues else None,
-                "tip": ci.tips[0] if ci.tips else None,
+                "issue": _natural_tip(ci, report.driver),
             })
             if len(fixes) >= 5:
                 break
