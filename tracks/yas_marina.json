@@ -1,0 +1,190 @@
+{
+  "name": "Yas Marina Circuit",
+  "country": "United Arab Emirates",
+  "short": "yas_marina",
+  "length_m": 5281,
+  "corners": [
+    {
+      "id": 1,
+      "name": "Turn 1",
+      "short": "T1",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 260,
+      "apex_m": 350,
+      "exit_m": 440
+    },
+    {
+      "id": 2,
+      "name": "Turn 2",
+      "short": "T2",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 640,
+      "apex_m": 750,
+      "exit_m": 820
+    },
+    {
+      "id": 3,
+      "name": "Turn 3",
+      "short": "T3",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 860,
+      "apex_m": 950,
+      "exit_m": 1040
+    },
+    {
+      "id": 4,
+      "name": "Turn 4",
+      "short": "T4",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 1260,
+      "apex_m": 1350,
+      "exit_m": 1440
+    },
+    {
+      "id": 5,
+      "name": "Turn 5",
+      "short": "T5",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 1590,
+      "apex_m": 1700,
+      "exit_m": 1770
+    },
+    {
+      "id": 6,
+      "name": "Turn 6",
+      "short": "T6",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 1980,
+      "apex_m": 2050,
+      "exit_m": 2150
+    },
+    {
+      "id": 7,
+      "name": "Turn 7",
+      "short": "T7",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 2430,
+      "apex_m": 2500,
+      "exit_m": 2600
+    },
+    {
+      "id": 8,
+      "name": "Turn 8",
+      "short": "T8",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 2830,
+      "apex_m": 2900,
+      "exit_m": 3000
+    },
+    {
+      "id": 9,
+      "name": "Turn 9",
+      "short": "T9",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 3130,
+      "apex_m": 3200,
+      "exit_m": 3300
+    },
+    {
+      "id": 10,
+      "name": "Turn 10",
+      "short": "T10",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 3460,
+      "apex_m": 3550,
+      "exit_m": 3640
+    },
+    {
+      "id": 11,
+      "name": "Turn 11",
+      "short": "T11",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 3810,
+      "apex_m": 3900,
+      "exit_m": 3990
+    },
+    {
+      "id": 12,
+      "name": "Turn 12",
+      "short": "T12",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 4060,
+      "apex_m": 4150,
+      "exit_m": 4240
+    },
+    {
+      "id": 13,
+      "name": "Turn 13",
+      "short": "T13",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 4310,
+      "apex_m": 4400,
+      "exit_m": 4490
+    },
+    {
+      "id": 14,
+      "name": "Turn 14",
+      "short": "T14",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 4560,
+      "apex_m": 4650,
+      "exit_m": 4740
+    },
+    {
+      "id": 15,
+      "name": "Turn 15",
+      "short": "T15",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 4830,
+      "apex_m": 4900,
+      "exit_m": 5000
+    },
+    {
+      "id": 16,
+      "name": "Turn 16",
+      "short": "T16",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 5030,
+      "apex_m": 5100,
+      "exit_m": 5200
+    }
+  ],
+  "compound_zones": [],
+  "sectors": [
+    {
+      "id": 1,
+      "name": "Sector 1",
+      "start_m": 0,
+      "end_m": 1760
+    },
+    {
+      "id": 2,
+      "name": "Sector 2",
+      "start_m": 1760,
+      "end_m": 3520
+    },
+    {
+      "id": 3,
+      "name": "Sector 3",
+      "start_m": 3520,
+      "end_m": 5281
+    }
+  ],
+  "drs_zones": []
+}

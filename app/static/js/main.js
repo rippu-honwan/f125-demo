@@ -117,8 +117,6 @@
   const fcSize     = $("fcSize");
   const fcClear    = $("fcClear");
   const analyzeBtn = $("analyzeBtn");
-  const loadingState = $("loadingState");
-  const ltStatus   = $("ltStatus");
   const errorBanner = $("errorBanner");
   const errorMsg   = $("errorMsg");
   const results    = $("results");
@@ -153,7 +151,6 @@
   const trackDetectMsgText = $("trackDetectMsgText");
 
   let selectedFile = null;
-  let statusTimer  = null;
   let kcData = [];          // per-corner trace data, for mini-chart hover tooltips
   let kcDriver = "Pro";     // reference driver label shown in those tooltips
   let lapChartData = { you: [], pro: [], delta: [], markers: [] };  // whole-lap hover
@@ -561,37 +558,69 @@
     }
   }
 
-  // -------- Loading status cycling --------
-  const STATUS_COMPARISON = [
-    "Fetching F1 reference data…",
-    "Loading your lap…",
-    "Fetching real F1 telemetry…",
-    "Aligning the two laps…",
-    "Analyzing every corner…",
-    "Building your coaching report…",
+  // -------- Full-screen loading overlay --------
+  // /analyze can take 10–30s (FastF1 download). This opaque overlay sits on top
+  // of everything with a pure-CSS spinner (reusing the existing `spin` keyframe
+  // in main.css) and a status line that cycles while we wait. Built lazily in JS
+  // so no markup/CSS files need to change.
+  const OVERLAY_MESSAGES = [
+    "Connecting to F1 data servers...",
+    "Downloading 2025 qualifying telemetry...",
+    "Aligning your lap with the pro...",
+    "Analysing corner by corner...",
+    "Building your coaching report...",
   ];
-  const STATUS_SOLO = [
-    "Loading your lap…",
-    "Validating telemetry…",
-    "Measuring each corner…",
-    "Building your overview…",
-  ];
-  function startStatusCycle(mode) {
-    const needsRef = MODES[mode] && MODES[mode].needsReference;
-    const messages = needsRef ? STATUS_COMPARISON : STATUS_SOLO;
-    $("ltTitle").textContent = needsRef
-      ? "Running game-vs-real analysis" : "Running telemetry analysis";
-    $("ltHint").textContent = needsRef
-      ? "Downloading real F1 data — this can take 15–30 seconds on first run."
-      : "Analysing your uploaded lap — no download required.";
-    let i = 0;
-    ltStatus.textContent = messages[0];
-    statusTimer = setInterval(() => {
-      i = Math.min(i + 1, messages.length - 1);
-      ltStatus.textContent = messages[i];
-    }, 2200);
+  let overlayTimer = null;
+
+  function ensureOverlay() {
+    let ov = $("loadingOverlay");
+    if (ov) return ov;
+    ov = document.createElement("div");
+    ov.id = "loadingOverlay";
+    ov.setAttribute("role", "status");
+    ov.setAttribute("aria-live", "polite");
+    ov.style.cssText =
+      "position:fixed;inset:0;z-index:1000;display:none;" +
+      "flex-direction:column;align-items:center;justify-content:center;gap:18px;" +
+      "background:rgba(0,0,0,0.85);color:#fff;text-align:center;padding:24px;";
+    ov.innerHTML =
+      '<div style="width:40px;height:40px;border:4px solid;' +
+      'border-color:transparent transparent #ef4444 transparent;border-radius:50%;' +
+      'animation:spin 0.8s linear infinite;"></div>' +
+      '<div id="loadingOverlayMsg" style="font-size:1.05rem;font-weight:600;"></div>' +
+      '<div id="loadingOverlaySub" style="font-size:.85rem;color:rgba(255,255,255,0.7);"></div>';
+    document.body.appendChild(ov);
+    return ov;
   }
-  function stopStatusCycle() { if (statusTimer) { clearInterval(statusTimer); statusTimer = null; } }
+
+  function showLoadingOverlay() {
+    const ov = ensureOverlay();
+    // Subtitle: track + driver, phrased by whether this mode compares vs a pro.
+    const sel = $("track");
+    const trackName = (sel && sel.selectedOptions && sel.selectedOptions[0])
+      ? sel.selectedOptions[0].textContent.trim()
+      : (sel && sel.value ? sel.value : "your");
+    const driver = ($("driver").value || "VER").trim().toUpperCase();
+    const needsRef = MODES[currentMode] && MODES[currentMode].needsReference;
+    $("loadingOverlaySub").textContent = needsRef
+      ? `Comparing your ${trackName} lap vs ${driver}`
+      : `Analysing your ${trackName} lap`;
+    // Cycle the status line every 3s (wraps around while the request runs).
+    let i = 0;
+    $("loadingOverlayMsg").textContent = OVERLAY_MESSAGES[0];
+    if (overlayTimer) clearInterval(overlayTimer);
+    overlayTimer = setInterval(() => {
+      i = (i + 1) % OVERLAY_MESSAGES.length;
+      $("loadingOverlayMsg").textContent = OVERLAY_MESSAGES[i];
+    }, 3000);
+    ov.style.display = "flex";
+  }
+
+  function hideLoadingOverlay() {
+    if (overlayTimer) { clearInterval(overlayTimer); overlayTimer = null; }
+    const ov = $("loadingOverlay");
+    if (ov) ov.style.display = "none";
+  }
 
   // -------- Error handling --------
   function showError(msg) {
@@ -1485,8 +1514,7 @@
     results.classList.remove("show");
     analyzeBtn.classList.add("loading");
     analyzeBtn.disabled = true;
-    loadingState.classList.add("show");
-    startStatusCycle(currentMode);
+    showLoadingOverlay();
 
     const fd = new FormData();
     fd.append("file", selectedFile);
@@ -1530,8 +1558,7 @@
       }
     } finally {
       clearTimeout(timeoutId);
-      stopStatusCycle();
-      loadingState.classList.remove("show");
+      hideLoadingOverlay();
       analyzeBtn.classList.remove("loading");
       analyzeBtn.disabled = false;
     }

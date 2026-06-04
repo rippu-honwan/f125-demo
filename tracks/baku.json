@@ -1,0 +1,230 @@
+{
+  "name": "Baku City Circuit",
+  "country": "Azerbaijan",
+  "short": "baku",
+  "length_m": 6003,
+  "corners": [
+    {
+      "id": 1,
+      "name": "Turn 1",
+      "short": "T1",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 740,
+      "apex_m": 850,
+      "exit_m": 920
+    },
+    {
+      "id": 2,
+      "name": "Turn 2",
+      "short": "T2",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 940,
+      "apex_m": 1050,
+      "exit_m": 1120
+    },
+    {
+      "id": 3,
+      "name": "Turn 3",
+      "short": "T3",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 1360,
+      "apex_m": 1450,
+      "exit_m": 1540
+    },
+    {
+      "id": 4,
+      "name": "Turn 4",
+      "short": "T4",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 1660,
+      "apex_m": 1750,
+      "exit_m": 1840
+    },
+    {
+      "id": 5,
+      "name": "Turn 5",
+      "short": "T5",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 1940,
+      "apex_m": 2050,
+      "exit_m": 2120
+    },
+    {
+      "id": 6,
+      "name": "Turn 6",
+      "short": "T6",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 2190,
+      "apex_m": 2300,
+      "exit_m": 2370
+    },
+    {
+      "id": 7,
+      "name": "Turn 7",
+      "short": "T7",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 2460,
+      "apex_m": 2550,
+      "exit_m": 2640
+    },
+    {
+      "id": 8,
+      "name": "Turn 8",
+      "short": "T8",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 2640,
+      "apex_m": 2750,
+      "exit_m": 2820
+    },
+    {
+      "id": 9,
+      "name": "Turn 9",
+      "short": "T9",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 2790,
+      "apex_m": 2900,
+      "exit_m": 2970
+    },
+    {
+      "id": 10,
+      "name": "Turn 10",
+      "short": "T10",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 2940,
+      "apex_m": 3050,
+      "exit_m": 3120
+    },
+    {
+      "id": 11,
+      "name": "Turn 11",
+      "short": "T11",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 3160,
+      "apex_m": 3250,
+      "exit_m": 3340
+    },
+    {
+      "id": 12,
+      "name": "Turn 12",
+      "short": "T12",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 3490,
+      "apex_m": 3600,
+      "exit_m": 3670
+    },
+    {
+      "id": 13,
+      "name": "Turn 13",
+      "short": "T13",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 3760,
+      "apex_m": 3850,
+      "exit_m": 3940
+    },
+    {
+      "id": 14,
+      "name": "Turn 14",
+      "short": "T14",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 3960,
+      "apex_m": 4050,
+      "exit_m": 4140
+    },
+    {
+      "id": 15,
+      "name": "Turn 15",
+      "short": "T15",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 4190,
+      "apex_m": 4300,
+      "exit_m": 4370
+    },
+    {
+      "id": 16,
+      "name": "Turn 16",
+      "short": "T16",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 4680,
+      "apex_m": 4750,
+      "exit_m": 4850
+    },
+    {
+      "id": 17,
+      "name": "Turn 17",
+      "short": "T17",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 4980,
+      "apex_m": 5050,
+      "exit_m": 5150
+    },
+    {
+      "id": 18,
+      "name": "Turn 18",
+      "short": "T18",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 5230,
+      "apex_m": 5300,
+      "exit_m": 5400
+    },
+    {
+      "id": 19,
+      "name": "Turn 19",
+      "short": "T19",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 5460,
+      "apex_m": 5550,
+      "exit_m": 5640
+    },
+    {
+      "id": 20,
+      "name": "Turn 20",
+      "short": "T20",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 5640,
+      "apex_m": 5750,
+      "exit_m": 5820
+    }
+  ],
+  "compound_zones": [],
+  "sectors": [
+    {
+      "id": 1,
+      "name": "Sector 1",
+      "start_m": 0,
+      "end_m": 2000
+    },
+    {
+      "id": 2,
+      "name": "Sector 2",
+      "start_m": 2000,
+      "end_m": 4000
+    },
+    {
+      "id": 3,
+      "name": "Sector 3",
+      "start_m": 4000,
+      "end_m": 6003
+    }
+  ],
+  "drs_zones": []
+}

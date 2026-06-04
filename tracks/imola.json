@@ -1,0 +1,220 @@
+{
+  "name": "Autodromo Enzo e Dino Ferrari",
+  "country": "Italy",
+  "short": "imola",
+  "length_m": 4909,
+  "corners": [
+    {
+      "id": 1,
+      "name": "Turn 1",
+      "short": "T1",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 280,
+      "apex_m": 350,
+      "exit_m": 450
+    },
+    {
+      "id": 2,
+      "name": "Tamburello",
+      "short": "T2",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 490,
+      "apex_m": 600,
+      "exit_m": 670
+    },
+    {
+      "id": 3,
+      "name": "Tamburello",
+      "short": "T3",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 580,
+      "apex_m": 690,
+      "exit_m": 760
+    },
+    {
+      "id": 4,
+      "name": "Turn 4",
+      "short": "T4",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 980,
+      "apex_m": 1050,
+      "exit_m": 1150
+    },
+    {
+      "id": 5,
+      "name": "Villeneuve",
+      "short": "T5",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 1190,
+      "apex_m": 1300,
+      "exit_m": 1370
+    },
+    {
+      "id": 6,
+      "name": "Villeneuve",
+      "short": "T6",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 1270,
+      "apex_m": 1380,
+      "exit_m": 1450
+    },
+    {
+      "id": 7,
+      "name": "Tosa",
+      "short": "T7",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 1590,
+      "apex_m": 1700,
+      "exit_m": 1770
+    },
+    {
+      "id": 8,
+      "name": "Turn 8",
+      "short": "T8",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 1860,
+      "apex_m": 1950,
+      "exit_m": 2040
+    },
+    {
+      "id": 9,
+      "name": "Piratella",
+      "short": "T9",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 2130,
+      "apex_m": 2200,
+      "exit_m": 2300
+    },
+    {
+      "id": 10,
+      "name": "Turn 10",
+      "short": "T10",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 2430,
+      "apex_m": 2500,
+      "exit_m": 2600
+    },
+    {
+      "id": 11,
+      "name": "Acque Minerali",
+      "short": "T11",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 2660,
+      "apex_m": 2750,
+      "exit_m": 2840
+    },
+    {
+      "id": 12,
+      "name": "Acque Minerali",
+      "short": "T12",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 2770,
+      "apex_m": 2880,
+      "exit_m": 2950
+    },
+    {
+      "id": 13,
+      "name": "Turn 13",
+      "short": "T13",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 3080,
+      "apex_m": 3150,
+      "exit_m": 3250
+    },
+    {
+      "id": 14,
+      "name": "Variante Alta",
+      "short": "T14",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 3340,
+      "apex_m": 3450,
+      "exit_m": 3520
+    },
+    {
+      "id": 15,
+      "name": "Variante Alta",
+      "short": "T15",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 3410,
+      "apex_m": 3520,
+      "exit_m": 3590
+    },
+    {
+      "id": 16,
+      "name": "Rivazza 1",
+      "short": "T16",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 3790,
+      "apex_m": 3900,
+      "exit_m": 3970
+    },
+    {
+      "id": 17,
+      "name": "Rivazza 2",
+      "short": "T17",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 3970,
+      "apex_m": 4080,
+      "exit_m": 4150
+    },
+    {
+      "id": 18,
+      "name": "Turn 18",
+      "short": "T18",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 4330,
+      "apex_m": 4400,
+      "exit_m": 4500
+    },
+    {
+      "id": 19,
+      "name": "Variante Bassa",
+      "short": "T19",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 4560,
+      "apex_m": 4650,
+      "exit_m": 4740
+    }
+  ],
+  "compound_zones": [],
+  "sectors": [
+    {
+      "id": 1,
+      "name": "Sector 1",
+      "start_m": 0,
+      "end_m": 1640
+    },
+    {
+      "id": 2,
+      "name": "Sector 2",
+      "start_m": 1640,
+      "end_m": 3270
+    },
+    {
+      "id": 3,
+      "name": "Sector 3",
+      "start_m": 3270,
+      "end_m": 4909
+    }
+  ],
+  "drs_zones": []
+}

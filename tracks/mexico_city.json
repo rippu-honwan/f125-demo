@@ -1,0 +1,200 @@
+{
+  "name": "Autodromo Hermanos Rodriguez",
+  "country": "Mexico",
+  "short": "mexico_city",
+  "length_m": 4304,
+  "corners": [
+    {
+      "id": 1,
+      "name": "Turn 1",
+      "short": "T1",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 690,
+      "apex_m": 800,
+      "exit_m": 870
+    },
+    {
+      "id": 2,
+      "name": "Turn 2",
+      "short": "T2",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 790,
+      "apex_m": 900,
+      "exit_m": 970
+    },
+    {
+      "id": 3,
+      "name": "Turn 3",
+      "short": "T3",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 890,
+      "apex_m": 1000,
+      "exit_m": 1070
+    },
+    {
+      "id": 4,
+      "name": "Turn 4",
+      "short": "T4",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 1330,
+      "apex_m": 1400,
+      "exit_m": 1500
+    },
+    {
+      "id": 5,
+      "name": "Turn 5",
+      "short": "T5",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 1610,
+      "apex_m": 1700,
+      "exit_m": 1790
+    },
+    {
+      "id": 6,
+      "name": "Turn 6",
+      "short": "T6",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 1860,
+      "apex_m": 1950,
+      "exit_m": 2040
+    },
+    {
+      "id": 7,
+      "name": "Turn 7",
+      "short": "T7",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 2230,
+      "apex_m": 2300,
+      "exit_m": 2400
+    },
+    {
+      "id": 8,
+      "name": "Turn 8",
+      "short": "T8",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 2430,
+      "apex_m": 2500,
+      "exit_m": 2600
+    },
+    {
+      "id": 9,
+      "name": "Turn 9",
+      "short": "T9",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 2660,
+      "apex_m": 2750,
+      "exit_m": 2840
+    },
+    {
+      "id": 10,
+      "name": "Turn 10",
+      "short": "T10",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 2860,
+      "apex_m": 2950,
+      "exit_m": 3040
+    },
+    {
+      "id": 11,
+      "name": "Turn 11",
+      "short": "T11",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 3090,
+      "apex_m": 3200,
+      "exit_m": 3270
+    },
+    {
+      "id": 12,
+      "name": "Turn 12",
+      "short": "T12",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 3390,
+      "apex_m": 3500,
+      "exit_m": 3570
+    },
+    {
+      "id": 13,
+      "name": "Turn 13",
+      "short": "T13",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 3540,
+      "apex_m": 3650,
+      "exit_m": 3720
+    },
+    {
+      "id": 14,
+      "name": "Turn 14",
+      "short": "T14",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 3690,
+      "apex_m": 3800,
+      "exit_m": 3870
+    },
+    {
+      "id": 15,
+      "name": "Turn 15",
+      "short": "T15",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 3840,
+      "apex_m": 3950,
+      "exit_m": 4020
+    },
+    {
+      "id": 16,
+      "name": "Turn 16",
+      "short": "T16",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 4010,
+      "apex_m": 4080,
+      "exit_m": 4180
+    },
+    {
+      "id": 17,
+      "name": "Turn 17",
+      "short": "T17",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 4110,
+      "apex_m": 4180,
+      "exit_m": 4280
+    }
+  ],
+  "compound_zones": [],
+  "sectors": [
+    {
+      "id": 1,
+      "name": "Sector 1",
+      "start_m": 0,
+      "end_m": 1430
+    },
+    {
+      "id": 2,
+      "name": "Sector 2",
+      "start_m": 1430,
+      "end_m": 2870
+    },
+    {
+      "id": 3,
+      "name": "Sector 3",
+      "start_m": 2870,
+      "end_m": 4304
+    }
+  ],
+  "drs_zones": []
+}

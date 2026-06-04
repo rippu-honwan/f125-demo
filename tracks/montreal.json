@@ -1,0 +1,170 @@
+{
+  "name": "Circuit Gilles Villeneuve",
+  "country": "Canada",
+  "short": "montreal",
+  "length_m": 4361,
+  "corners": [
+    {
+      "id": 1,
+      "name": "Turn 1",
+      "short": "T1",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 210,
+      "apex_m": 300,
+      "exit_m": 390
+    },
+    {
+      "id": 2,
+      "name": "Turn 2",
+      "short": "T2",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 250,
+      "apex_m": 360,
+      "exit_m": 430
+    },
+    {
+      "id": 3,
+      "name": "Turn 3",
+      "short": "T3",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 670,
+      "apex_m": 760,
+      "exit_m": 850
+    },
+    {
+      "id": 4,
+      "name": "Turn 4",
+      "short": "T4",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 830,
+      "apex_m": 920,
+      "exit_m": 1010
+    },
+    {
+      "id": 5,
+      "name": "Turn 5",
+      "short": "T5",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 1180,
+      "apex_m": 1250,
+      "exit_m": 1350
+    },
+    {
+      "id": 6,
+      "name": "Turn 6",
+      "short": "T6",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 1590,
+      "apex_m": 1700,
+      "exit_m": 1770
+    },
+    {
+      "id": 7,
+      "name": "Turn 7",
+      "short": "T7",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 1670,
+      "apex_m": 1780,
+      "exit_m": 1850
+    },
+    {
+      "id": 8,
+      "name": "Turn 8",
+      "short": "T8",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 2060,
+      "apex_m": 2150,
+      "exit_m": 2240
+    },
+    {
+      "id": 9,
+      "name": "Turn 9",
+      "short": "T9",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 2210,
+      "apex_m": 2300,
+      "exit_m": 2390
+    },
+    {
+      "id": 10,
+      "name": "L'Epingle",
+      "short": "T10",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 2790,
+      "apex_m": 2900,
+      "exit_m": 2970
+    },
+    {
+      "id": 11,
+      "name": "Turn 11",
+      "short": "T11",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 3330,
+      "apex_m": 3400,
+      "exit_m": 3500
+    },
+    {
+      "id": 12,
+      "name": "Turn 12",
+      "short": "T12",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 3580,
+      "apex_m": 3650,
+      "exit_m": 3750
+    },
+    {
+      "id": 13,
+      "name": "Turn 13",
+      "short": "T13",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 3970,
+      "apex_m": 4080,
+      "exit_m": 4150
+    },
+    {
+      "id": 14,
+      "name": "Turn 14",
+      "short": "T14",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 4050,
+      "apex_m": 4160,
+      "exit_m": 4230
+    }
+  ],
+  "compound_zones": [],
+  "sectors": [
+    {
+      "id": 1,
+      "name": "Sector 1",
+      "start_m": 0,
+      "end_m": 1450
+    },
+    {
+      "id": 2,
+      "name": "Sector 2",
+      "start_m": 1450,
+      "end_m": 2910
+    },
+    {
+      "id": 3,
+      "name": "Sector 3",
+      "start_m": 2910,
+      "end_m": 4361
+    }
+  ],
+  "drs_zones": []
+}

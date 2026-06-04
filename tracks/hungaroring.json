@@ -1,0 +1,170 @@
+{
+  "name": "Hungaroring",
+  "country": "Hungary",
+  "short": "hungaroring",
+  "length_m": 4381,
+  "corners": [
+    {
+      "id": 1,
+      "name": "Turn 1",
+      "short": "T1",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 490,
+      "apex_m": 600,
+      "exit_m": 670
+    },
+    {
+      "id": 2,
+      "name": "Turn 2",
+      "short": "T2",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 940,
+      "apex_m": 1050,
+      "exit_m": 1120
+    },
+    {
+      "id": 3,
+      "name": "Turn 3",
+      "short": "T3",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 1210,
+      "apex_m": 1300,
+      "exit_m": 1390
+    },
+    {
+      "id": 4,
+      "name": "Turn 4",
+      "short": "T4",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 1510,
+      "apex_m": 1600,
+      "exit_m": 1690
+    },
+    {
+      "id": 5,
+      "name": "Turn 5",
+      "short": "T5",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 1760,
+      "apex_m": 1850,
+      "exit_m": 1940
+    },
+    {
+      "id": 6,
+      "name": "Turn 6",
+      "short": "T6",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 2010,
+      "apex_m": 2100,
+      "exit_m": 2190
+    },
+    {
+      "id": 7,
+      "name": "Turn 7",
+      "short": "T7",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 2260,
+      "apex_m": 2350,
+      "exit_m": 2440
+    },
+    {
+      "id": 8,
+      "name": "Turn 8",
+      "short": "T8",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 2510,
+      "apex_m": 2600,
+      "exit_m": 2690
+    },
+    {
+      "id": 9,
+      "name": "Turn 9",
+      "short": "T9",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 2710,
+      "apex_m": 2800,
+      "exit_m": 2890
+    },
+    {
+      "id": 10,
+      "name": "Turn 10",
+      "short": "T10",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 2960,
+      "apex_m": 3050,
+      "exit_m": 3140
+    },
+    {
+      "id": 11,
+      "name": "Turn 11",
+      "short": "T11",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 3290,
+      "apex_m": 3400,
+      "exit_m": 3470
+    },
+    {
+      "id": 12,
+      "name": "Turn 12",
+      "short": "T12",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 3590,
+      "apex_m": 3700,
+      "exit_m": 3770
+    },
+    {
+      "id": 13,
+      "name": "Turn 13",
+      "short": "T13",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 3740,
+      "apex_m": 3850,
+      "exit_m": 3920
+    },
+    {
+      "id": 14,
+      "name": "Turn 14",
+      "short": "T14",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 4080,
+      "apex_m": 4150,
+      "exit_m": 4250
+    }
+  ],
+  "compound_zones": [],
+  "sectors": [
+    {
+      "id": 1,
+      "name": "Sector 1",
+      "start_m": 0,
+      "end_m": 1460
+    },
+    {
+      "id": 2,
+      "name": "Sector 2",
+      "start_m": 1460,
+      "end_m": 2920
+    },
+    {
+      "id": 3,
+      "name": "Sector 3",
+      "start_m": 2920,
+      "end_m": 4381
+    }
+  ],
+  "drs_zones": []
+}

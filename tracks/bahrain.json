@@ -1,0 +1,180 @@
+{
+  "name": "Bahrain International Circuit",
+  "country": "Bahrain",
+  "short": "bahrain",
+  "length_m": 5412,
+  "corners": [
+    {
+      "id": 1,
+      "name": "Turn 1",
+      "short": "T1",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 610,
+      "apex_m": 720,
+      "exit_m": 790
+    },
+    {
+      "id": 2,
+      "name": "Turn 2",
+      "short": "T2",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 890,
+      "apex_m": 980,
+      "exit_m": 1070
+    },
+    {
+      "id": 3,
+      "name": "Turn 3",
+      "short": "T3",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 1090,
+      "apex_m": 1180,
+      "exit_m": 1270
+    },
+    {
+      "id": 4,
+      "name": "Turn 4",
+      "short": "T4",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 1570,
+      "apex_m": 1680,
+      "exit_m": 1750
+    },
+    {
+      "id": 5,
+      "name": "Turn 5",
+      "short": "T5",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 1860,
+      "apex_m": 1950,
+      "exit_m": 2040
+    },
+    {
+      "id": 6,
+      "name": "Turn 6",
+      "short": "T6",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 2060,
+      "apex_m": 2150,
+      "exit_m": 2240
+    },
+    {
+      "id": 7,
+      "name": "Turn 7",
+      "short": "T7",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 2340,
+      "apex_m": 2430,
+      "exit_m": 2520
+    },
+    {
+      "id": 8,
+      "name": "Turn 8",
+      "short": "T8",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 2650,
+      "apex_m": 2760,
+      "exit_m": 2830
+    },
+    {
+      "id": 9,
+      "name": "Turn 9",
+      "short": "T9",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 2980,
+      "apex_m": 3050,
+      "exit_m": 3150
+    },
+    {
+      "id": 10,
+      "name": "Turn 10",
+      "short": "T10",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 3410,
+      "apex_m": 3520,
+      "exit_m": 3590
+    },
+    {
+      "id": 11,
+      "name": "Turn 11",
+      "short": "T11",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 3790,
+      "apex_m": 3880,
+      "exit_m": 3970
+    },
+    {
+      "id": 12,
+      "name": "Turn 12",
+      "short": "T12",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 4060,
+      "apex_m": 4150,
+      "exit_m": 4240
+    },
+    {
+      "id": 13,
+      "name": "Turn 13",
+      "short": "T13",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 4260,
+      "apex_m": 4350,
+      "exit_m": 4440
+    },
+    {
+      "id": 14,
+      "name": "Turn 14",
+      "short": "T14",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 4630,
+      "apex_m": 4720,
+      "exit_m": 4810
+    },
+    {
+      "id": 15,
+      "name": "Turn 15",
+      "short": "T15",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 4960,
+      "apex_m": 5050,
+      "exit_m": 5140
+    }
+  ],
+  "compound_zones": [],
+  "sectors": [
+    {
+      "id": 1,
+      "name": "Sector 1",
+      "start_m": 0,
+      "end_m": 1800
+    },
+    {
+      "id": 2,
+      "name": "Sector 2",
+      "start_m": 1800,
+      "end_m": 3610
+    },
+    {
+      "id": 3,
+      "name": "Sector 3",
+      "start_m": 3610,
+      "end_m": 5412
+    }
+  ],
+  "drs_zones": []
+}

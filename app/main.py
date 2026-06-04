@@ -96,6 +96,19 @@ SHORT_NAMES = {
     "melbourne": "Melbourne",
     "miami": "Miami",
     "shanghai": "Shanghai",
+    "bahrain": "Bahrain",
+    "jeddah": "Jeddah",
+    "imola": "Imola",
+    "monaco": "Monaco",
+    "montreal": "Montreal",
+    "spielberg": "Red Bull Ring",
+    "zandvoort": "Zandvoort",
+    "baku": "Baku",
+    "las_vegas": "Las Vegas",
+    "lusail": "Lusail",
+    "yas_marina": "Yas Marina",
+    "mexico_city": "Mexico City",
+    "hungaroring": "Hungaroring",
 }
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"

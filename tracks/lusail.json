@@ -1,0 +1,190 @@
+{
+  "name": "Lusail International Circuit",
+  "country": "Qatar",
+  "short": "lusail",
+  "length_m": 5380,
+  "corners": [
+    {
+      "id": 1,
+      "name": "Turn 1",
+      "short": "T1",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 440,
+      "apex_m": 550,
+      "exit_m": 620
+    },
+    {
+      "id": 2,
+      "name": "Turn 2",
+      "short": "T2",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 710,
+      "apex_m": 800,
+      "exit_m": 890
+    },
+    {
+      "id": 3,
+      "name": "Turn 3",
+      "short": "T3",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 960,
+      "apex_m": 1050,
+      "exit_m": 1140
+    },
+    {
+      "id": 4,
+      "name": "Turn 4",
+      "short": "T4",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 1330,
+      "apex_m": 1400,
+      "exit_m": 1500
+    },
+    {
+      "id": 5,
+      "name": "Turn 5",
+      "short": "T5",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 1580,
+      "apex_m": 1650,
+      "exit_m": 1750
+    },
+    {
+      "id": 6,
+      "name": "Turn 6",
+      "short": "T6",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 1930,
+      "apex_m": 2000,
+      "exit_m": 2100
+    },
+    {
+      "id": 7,
+      "name": "Turn 7",
+      "short": "T7",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 2210,
+      "apex_m": 2300,
+      "exit_m": 2390
+    },
+    {
+      "id": 8,
+      "name": "Turn 8",
+      "short": "T8",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 2460,
+      "apex_m": 2550,
+      "exit_m": 2640
+    },
+    {
+      "id": 9,
+      "name": "Turn 9",
+      "short": "T9",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 2780,
+      "apex_m": 2850,
+      "exit_m": 2950
+    },
+    {
+      "id": 10,
+      "name": "Turn 10",
+      "short": "T10",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 3130,
+      "apex_m": 3200,
+      "exit_m": 3300
+    },
+    {
+      "id": 11,
+      "name": "Turn 11",
+      "short": "T11",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 3460,
+      "apex_m": 3550,
+      "exit_m": 3640
+    },
+    {
+      "id": 12,
+      "name": "Turn 12",
+      "short": "T12",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 3760,
+      "apex_m": 3850,
+      "exit_m": 3940
+    },
+    {
+      "id": 13,
+      "name": "Turn 13",
+      "short": "T13",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 4060,
+      "apex_m": 4150,
+      "exit_m": 4240
+    },
+    {
+      "id": 14,
+      "name": "Turn 14",
+      "short": "T14",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 4430,
+      "apex_m": 4500,
+      "exit_m": 4600
+    },
+    {
+      "id": 15,
+      "name": "Turn 15",
+      "short": "T15",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 4790,
+      "apex_m": 4900,
+      "exit_m": 4970
+    },
+    {
+      "id": 16,
+      "name": "Turn 16",
+      "short": "T16",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 5040,
+      "apex_m": 5150,
+      "exit_m": 5220
+    }
+  ],
+  "compound_zones": [],
+  "sectors": [
+    {
+      "id": 1,
+      "name": "Sector 1",
+      "start_m": 0,
+      "end_m": 1790
+    },
+    {
+      "id": 2,
+      "name": "Sector 2",
+      "start_m": 1790,
+      "end_m": 3590
+    },
+    {
+      "id": 3,
+      "name": "Sector 3",
+      "start_m": 3590,
+      "end_m": 5380
+    }
+  ],
+  "drs_zones": []
+}

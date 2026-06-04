@@ -1,0 +1,170 @@
+{
+  "name": "Circuit Zandvoort",
+  "country": "Netherlands",
+  "short": "zandvoort",
+  "length_m": 4259,
+  "corners": [
+    {
+      "id": 1,
+      "name": "Tarzan",
+      "short": "T1",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 490,
+      "apex_m": 600,
+      "exit_m": 670
+    },
+    {
+      "id": 2,
+      "name": "Gerlachbocht",
+      "short": "T2",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 660,
+      "apex_m": 750,
+      "exit_m": 840
+    },
+    {
+      "id": 3,
+      "name": "Hugenholtzbocht",
+      "short": "T3",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 840,
+      "apex_m": 950,
+      "exit_m": 1020
+    },
+    {
+      "id": 4,
+      "name": "Hunzerug",
+      "short": "T4",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 1180,
+      "apex_m": 1250,
+      "exit_m": 1350
+    },
+    {
+      "id": 5,
+      "name": "Turn 5",
+      "short": "T5",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 1430,
+      "apex_m": 1500,
+      "exit_m": 1600
+    },
+    {
+      "id": 6,
+      "name": "Turn 6",
+      "short": "T6",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 1660,
+      "apex_m": 1750,
+      "exit_m": 1840
+    },
+    {
+      "id": 7,
+      "name": "Scheivlak",
+      "short": "T7",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 1980,
+      "apex_m": 2050,
+      "exit_m": 2150
+    },
+    {
+      "id": 8,
+      "name": "Turn 8",
+      "short": "T8",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 2310,
+      "apex_m": 2400,
+      "exit_m": 2490
+    },
+    {
+      "id": 9,
+      "name": "Turn 9",
+      "short": "T9",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 2560,
+      "apex_m": 2650,
+      "exit_m": 2740
+    },
+    {
+      "id": 10,
+      "name": "Hans Ernst",
+      "short": "T10",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 2860,
+      "apex_m": 2950,
+      "exit_m": 3040
+    },
+    {
+      "id": 11,
+      "name": "Turn 11",
+      "short": "T11",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 3040,
+      "apex_m": 3150,
+      "exit_m": 3220
+    },
+    {
+      "id": 12,
+      "name": "Turn 12",
+      "short": "T12",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 3360,
+      "apex_m": 3450,
+      "exit_m": 3540
+    },
+    {
+      "id": 13,
+      "name": "Kumho",
+      "short": "T13",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 3630,
+      "apex_m": 3700,
+      "exit_m": 3800
+    },
+    {
+      "id": 14,
+      "name": "Arie Luyendyk",
+      "short": "T14",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 3980,
+      "apex_m": 4050,
+      "exit_m": 4150
+    }
+  ],
+  "compound_zones": [],
+  "sectors": [
+    {
+      "id": 1,
+      "name": "Sector 1",
+      "start_m": 0,
+      "end_m": 1420
+    },
+    {
+      "id": 2,
+      "name": "Sector 2",
+      "start_m": 1420,
+      "end_m": 2840
+    },
+    {
+      "id": 3,
+      "name": "Sector 3",
+      "start_m": 2840,
+      "end_m": 4259
+    }
+  ],
+  "drs_zones": []
+}

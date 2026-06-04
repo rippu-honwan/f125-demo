@@ -1,0 +1,220 @@
+{
+  "name": "Circuit de Monaco",
+  "country": "Monaco",
+  "short": "monaco",
+  "length_m": 3337,
+  "corners": [
+    {
+      "id": 1,
+      "name": "Sainte Devote",
+      "short": "T1",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 80,
+      "apex_m": 190,
+      "exit_m": 260
+    },
+    {
+      "id": 2,
+      "name": "Beau Rivage",
+      "short": "T2",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 380,
+      "apex_m": 450,
+      "exit_m": 550
+    },
+    {
+      "id": 3,
+      "name": "Massenet",
+      "short": "T3",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 570,
+      "apex_m": 640,
+      "exit_m": 740
+    },
+    {
+      "id": 4,
+      "name": "Casino",
+      "short": "T4",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 670,
+      "apex_m": 760,
+      "exit_m": 850
+    },
+    {
+      "id": 5,
+      "name": "Mirabeau Haute",
+      "short": "T5",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 870,
+      "apex_m": 980,
+      "exit_m": 1050
+    },
+    {
+      "id": 6,
+      "name": "Fairmont Hairpin",
+      "short": "T6",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 1020,
+      "apex_m": 1130,
+      "exit_m": 1200
+    },
+    {
+      "id": 7,
+      "name": "Mirabeau Bas",
+      "short": "T7",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 1160,
+      "apex_m": 1270,
+      "exit_m": 1340
+    },
+    {
+      "id": 8,
+      "name": "Portier",
+      "short": "T8",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 1370,
+      "apex_m": 1480,
+      "exit_m": 1550
+    },
+    {
+      "id": 9,
+      "name": "Tunnel",
+      "short": "T9",
+      "type": "high_speed",
+      "direction": "right",
+      "entry_m": 1710,
+      "apex_m": 1780,
+      "exit_m": 1880
+    },
+    {
+      "id": 10,
+      "name": "Nouvelle Chicane",
+      "short": "T10",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 1940,
+      "apex_m": 2050,
+      "exit_m": 2120
+    },
+    {
+      "id": 11,
+      "name": "Nouvelle Chicane",
+      "short": "T11",
+      "type": "low_speed",
+      "direction": "left",
+      "entry_m": 2000,
+      "apex_m": 2110,
+      "exit_m": 2180
+    },
+    {
+      "id": 12,
+      "name": "Tabac",
+      "short": "T12",
+      "type": "high_speed",
+      "direction": "left",
+      "entry_m": 2250,
+      "apex_m": 2320,
+      "exit_m": 2420
+    },
+    {
+      "id": 13,
+      "name": "Louis Chiron",
+      "short": "T13",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 2390,
+      "apex_m": 2480,
+      "exit_m": 2570
+    },
+    {
+      "id": 14,
+      "name": "Piscine",
+      "short": "T14",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 2470,
+      "apex_m": 2560,
+      "exit_m": 2650
+    },
+    {
+      "id": 15,
+      "name": "Piscine",
+      "short": "T15",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 2550,
+      "apex_m": 2640,
+      "exit_m": 2730
+    },
+    {
+      "id": 16,
+      "name": "Piscine",
+      "short": "T16",
+      "type": "medium_speed",
+      "direction": "left",
+      "entry_m": 2630,
+      "apex_m": 2720,
+      "exit_m": 2810
+    },
+    {
+      "id": 17,
+      "name": "La Rascasse",
+      "short": "T17",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 2840,
+      "apex_m": 2950,
+      "exit_m": 3020
+    },
+    {
+      "id": 18,
+      "name": "Anthony Noghes",
+      "short": "T18",
+      "type": "low_speed",
+      "direction": "right",
+      "entry_m": 3010,
+      "apex_m": 3120,
+      "exit_m": 3190
+    },
+    {
+      "id": 19,
+      "name": "Turn 19",
+      "short": "T19",
+      "type": "medium_speed",
+      "direction": "right",
+      "entry_m": 3130,
+      "apex_m": 3220,
+      "exit_m": 3310
+    }
+  ],
+  "compound_zones": [],
+  "sectors": [
+    {
+      "id": 1,
+      "name": "Sector 1",
+      "start_m": 0,
+      "end_m": 1110
+    },
+    {
+      "id": 2,
+      "name": "Sector 2",
+      "start_m": 1110,
+      "end_m": 2220
+    },
+    {
+      "id": 3,
+      "name": "Sector 3",
+      "start_m": 2220,
+      "end_m": 3337
+    }
+  ],
+  "drs_zones": []
+}
