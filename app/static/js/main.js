@@ -1510,6 +1510,60 @@
     if (inner) inner.style.transform = "rotate(0deg)";
   }
 
+  // Pro (reference) steering wheel — a SECOND wheel parked just left of the user
+  // wheel in the Track Explorer's top-right. The reference lap carries no real
+  // steering channel, so app/main.py derives ref_telemetry.steering from the
+  // Pro's GPS-path curvature; we surface it here, clearly labelled as a GPS
+  // estimate, and drive its rotation live from txSetIndex. Built once, reused
+  // across renders, and shown only when that derived signal actually has data.
+  // The existing user wheel (txSteerWidget) is left completely untouched.
+  function txProSteerWidget(ex) {
+    const frame = $("txFrame");
+    if (!frame) return;
+    let widget = $("txProSteerWidget");
+    const steer = ex && ex.ref_telemetry && ex.ref_telemetry.steering;
+    const hasPro = !!(steer && steer.length);
+    if (!hasPro) {
+      if (widget) widget.hidden = true;
+      return;
+    }
+    if (!widget) {
+      widget = document.createElement("div");
+      widget.id = "txProSteerWidget";
+      // Inline styles (the user wheel's positioning lives in index.html, which we
+      // mustn't touch): the user wheel sits at right:12px width:100px, so we park
+      // this one at right:124px to sit flush beside it. Cyan palette + the label
+      // below keep it visually distinct from the user's (grey) wheel.
+      widget.style.cssText =
+        "position:absolute;top:12px;right:124px;width:100px;height:100px;" +
+        "pointer-events:none;z-index:10;";
+      widget.title = "Pro steering — estimated from GPS path curvature";
+      widget.innerHTML =
+        `<div id="txProSteerInner" style="width:100px;height:100px;` +
+          `transform:rotate(0deg);transition:transform 0.05s linear;">` +
+          `<svg viewBox="0 0 100 100" width="100" height="100" aria-hidden="true">` +
+            `<g transform="translate(50,50)">` +
+              `<circle cx="0" cy="0" r="44" fill="none" stroke="#0e7490" stroke-width="3"/>` +
+              `<rect x="-14" y="32" width="28" height="5" rx="2" fill="#155e75"/>` +
+              `<line x1="0" y1="0" x2="0" y2="-26.4" stroke="#22d3ee" stroke-width="4" stroke-linecap="round"/>` +
+              `<line x1="0" y1="0" x2="22.9" y2="13.2" stroke="#22d3ee" stroke-width="4" stroke-linecap="round"/>` +
+              `<line x1="0" y1="0" x2="-22.9" y2="13.2" stroke="#22d3ee" stroke-width="4" stroke-linecap="round"/>` +
+              `<circle cx="0" cy="0" r="10" fill="#0e3a44"/>` +
+              `<circle cx="0" cy="-40" r="4" fill="#22d3ee"/>` +
+            `</g>` +
+          `</svg>` +
+        `</div>` +
+        `<div class="tx-steer-label" style="font-size:0.65rem;text-align:center;` +
+          `letter-spacing:0.08em;line-height:1.15;color:rgba(34,211,238,0.75);">` +
+          `PRO<span style="display:block;font-size:0.52rem;letter-spacing:0.03em;` +
+          `color:rgba(255,255,255,0.4);">≈ from GPS curve</span></div>`;
+      frame.appendChild(widget);
+    }
+    widget.hidden = false;
+    const inner = $("txProSteerInner");        // initial state: wheel upright
+    if (inner) inner.style.transform = "rotate(0deg)";
+  }
+
   // Single shared tooltip for heat-map segment hover, created lazily on body.
   function txTooltip() {
     let el = document.getElementById("tx-tooltip");
@@ -1635,6 +1689,19 @@
     const steer = txAt(tel.steering, i);
     const steerInner = $("txSteerInner");
     if (steerInner) steerInner.style.transform = `rotate(${(steer == null ? 0 : steer) * 180}deg)`;
+
+    // Pro steering wheel (estimated from GPS curvature): clamp to [-1, 1] and map
+    // DIRECTLY to one absolute angle (steer * 180 → -180..180°). We always assign
+    // the full transform (never an increment), so the wheel can't accumulate or
+    // wrap past 360°, even if the input has spikes. Absent/NaN → upright. Only
+    // present when txProSteerWidget built it (ref_telemetry.steering had data).
+    const proInner = $("txProSteerInner");
+    if (proInner) {
+      const ref = txState.refTelemetry;
+      const raw = txAt(ref && ref.steering, i);
+      const proSteer = (raw == null) ? 0 : Math.max(-1, Math.min(1, raw));
+      proInner.style.transform = `rotate(${proSteer * 180}deg)`;
+    }
     const steerEl = $("txSteer");
     if (steerEl) {
       if (steer == null) {
@@ -1699,6 +1766,8 @@
       if (cmpWrap0) cmpWrap0.hidden = true;
       const steerW = $("txSteerWidget");
       if (steerW) steerW.hidden = true;       // no GPS → no map → no wheel
+      const proSteerW = $("txProSteerWidget");
+      if (proSteerW) proSteerW.hidden = true; // no GPS → no Pro wheel either
       txState = { points: [], telemetry: {}, markers: [], n: 0, cursorEls: [], idx: 0, nearCid: undefined, refTelemetry: null };
       return;
     }
@@ -1706,7 +1775,8 @@
     readout.style.display = "";
     hint.textContent = t("tx.hint");
     txBuildSvg(ex);
-    txSteerWidget(ex);            // steering wheel parked top-right, reset upright
+    txSteerWidget(ex);            // user steering wheel parked top-right, reset upright
+    txProSteerWidget(ex);         // Pro (GPS-estimated) wheel beside it, when present
     const tel = ex.telemetry;
     txState = {
       points: ex.track_path.points,

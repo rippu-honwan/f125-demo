@@ -21,8 +21,10 @@ Run
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import tempfile
+import time
 import traceback
 from pathlib import Path
 from types import SimpleNamespace
@@ -41,13 +43,15 @@ matplotlib.rcParams["font.family"] = "DejaVu Sans"
 
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from fastapi.responses import FileResponse, JSONResponse  # noqa: E402
+from fastapi.responses import HTMLResponse, JSONResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
 # --- Existing pipeline (read-only consumption). ---
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from src.pipeline import run_pipeline  # noqa: E402
+from src.alignment import compute_curvature  # noqa: E402
+from src.utils import smooth  # noqa: E402
 from src.track_map import (  # noqa: E402
     _severity,
     _extract_track_xy,
@@ -112,6 +116,32 @@ SHORT_NAMES = {
 }
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+
+def _compute_build_id() -> str:
+    """Cache-busting token stamped into the static asset URLs (``?v=``).
+
+    Prefers the short git commit SHA (stable per commit/deploy); falls back to
+    the process start time when git isn't available (e.g. a source tarball or a
+    container without the .git dir). Either way the value changes on every new
+    deployment, so browsers fetch fresh CSS/JS without manual version bumps.
+    Computed once at import — never per request.
+    """
+    try:
+        sha = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=str(PROJECT_ROOT),
+            stderr=subprocess.DEVNULL,
+            timeout=2,
+        ).decode().strip()
+        if sha:
+            return sha
+    except Exception:
+        pass
+    return str(int(time.time()))
+
+
+BUILD_ID = _compute_build_id()
 
 app = FastAPI(
     title="F1 AI Driver Coach",
@@ -586,6 +616,106 @@ def _sample_channel(d_target, d_full, values, digits) -> "list":
     return [round(float(v), digits) for v in out]
 
 
+def _ref_steering_from_curvature(aligned, d_full, d_target) -> list:
+    """Infer a Pro-lap steering trace from the reference GPS path geometry.
+
+    The reference (real F1) telemetry carries no steering channel, so the Pro
+    steering wheel has nothing to drive it. Geometrically, steering angle tracks
+    path curvature, so we recover one from ``real_world_x`` / ``real_world_y``:
+
+      * ``compute_curvature`` (from ``src.alignment``) returns signed, already
+        smoothed curvature with the convention *positive = left turn* in the F1
+        game's ``world_position`` frame. The reference path, however, comes from
+        FastF1, whose coordinate frame is a REFLECTION of the game's (this is why
+        ``src.alignment`` carries explicit reflection handling). A reflection
+        negates curvature, so to land on the game's SRT steering convention
+        (negative = left, positive = right) for the *real* path we use the
+        curvature as-is — i.e. we do NOT sign-flip it. (Empirically, on game laps
+        that do carry steering, ``-curvature`` correlates ~+0.86 with the real
+        steering input; the real path's reflected frame flips that, leaving the
+        un-negated curvature as the sign-correct choice here.)
+      * curvature spikes where GPS points bunch up (the 1/speed^3 term blows up),
+        so we pre-smooth harder (a wider curvature window) and run a second
+        smoothing pass over the curvature itself before normalising — this keeps
+        the Pro wheel from twitching on isolated samples.
+      * curvature magnitude scales with 1/radius (track-size dependent), so we
+        normalise by a robust peak (90th percentile of |curvature|, computed on
+        the smoothed signal so a lone spike can't set the scale) and hard-clamp
+        to the same -1..+1 domain as the primary lap's steering.
+      * the curvature is computed at full GPS resolution, then resampled onto the
+        explorer's distance samples (``d_target`` == ``ds``) so the returned list
+        is index-aligned and exactly as long as the other telemetry channels.
+
+    Returns ``[]`` when the GPS columns are missing or too sparse to be
+    meaningful, so the caller simply leaves the Pro steering overlay hidden.
+    """
+    cols = getattr(aligned, "columns", ())
+    if "real_world_x" not in cols or "real_world_y" not in cols:
+        return []
+    rx = np.asarray(aligned["real_world_x"].values, dtype=float)
+    ry = np.asarray(aligned["real_world_y"].values, dtype=float)
+    good = np.isfinite(rx) & np.isfinite(ry)
+    if good.sum() < 25:                       # too few GPS points to trust
+        return []
+    # Carry finite values across any gaps so curvature isn't poisoned by NaNs.
+    if not np.all(good):
+        idx = np.arange(rx.size, dtype=float)
+        rx = np.interp(idx, idx[good], rx[good])
+        ry = np.interp(idx, idx[good], ry[good])
+
+    # Signed curvature with a wider smoothing window than the default. NOTE: no
+    # sign-flip here — the FastF1 reference frame is a reflection of the game's,
+    # which already negates curvature, so the un-negated value is the one that
+    # matches the game's SRT convention (negative = left, positive = right). The
+    # extra window tames the 1/speed^3 spikes that appear where GPS samples bunch up.
+    curv = compute_curvature(np.column_stack([rx, ry]), smooth_window=31)
+    # Second smoothing pass directly on the curvature, killing any residual
+    # single-sample spikes before they can drive the wheel.
+    curv = smooth(curv, window=15)
+
+    # Robust normalisation: scale by the 90th percentile of |curvature| (measured
+    # on the already-smoothed signal, so an isolated spike can't define the
+    # scale), then HARD-CLAMP into the -1..+1 steering domain.
+    scale = float(np.percentile(np.abs(curv), 90))
+    if not np.isfinite(scale) or scale <= 0.0:
+        return []
+    steer = np.clip(curv / scale, -1.0, 1.0)
+
+    # Resample onto the explorer's distance samples (same length as the primary
+    # telemetry / track-map points).
+    out = _sample_channel(d_target, d_full, steer, 3)
+
+    # Zero-crossing deadzone (+ hysteresis) — applied last, so smoothing,
+    # normalisation and the sign convention above are untouched. On straights the
+    # normalised curvature hovers in a small noisy band around 0 and flips sign
+    # sample-to-sample, which makes the Pro wheel twitch left/right. We snap that
+    # band to dead-centre: a sample only counts as "turning" once its magnitude
+    # reaches ENTER, and we don't fall back to centre until it drops below the
+    # lower EXIT threshold — the hysteresis gap stops on/off flicker right at the
+    # boundary. One value in, one value out, so the output length is preserved.
+    ENTER, EXIT = 0.08, 0.05
+    engaged = False
+    cleaned = []
+    for v in out:
+        if v is None:                 # gap marker — pass through, reset state
+            engaged = False
+            cleaned.append(None)
+            continue
+        mag = abs(v)
+        if engaged:
+            if mag < EXIT:
+                engaged = False
+                cleaned.append(0.0)
+            else:
+                cleaned.append(v)
+        elif mag >= ENTER:
+            engaged = True
+            cleaned.append(v)
+        else:
+            cleaned.append(0.0)
+    return cleaned
+
+
 # --- Track Explorer path diagnostics ---------------------------------------
 # Maintenance-only knob: set the env var F1_EXPLORER_DEBUG to a truthy value
 # (1/true/yes/on) to log, on stderr, how each lap's polyline is classified
@@ -746,9 +876,12 @@ def _build_track_explorer(aligned, corners, n_points: int = 300,
                 "speed": chan("real_speed_kmh", 1),
                 "throttle": chan("real_throttle", 3),
                 "brake": chan("real_brake", 3),
-                # real_steering isn't carried by the alignment, so chan() returns []
-                # — harmless; the widget is driven by the primary lap's steering.
-                "steering": chan("real_steering", 3),
+                # The reference lap has no steering channel, so we derive one from
+                # the Pro's GPS-path curvature (real_world_x / real_world_y). This
+                # yields a non-empty -1..+1 trace whenever GPS exists, so the Pro
+                # steering wheel has its own signal instead of mirroring the primary
+                # lap; falls back to [] when GPS is unavailable.
+                "steering": _ref_steering_from_curvature(aligned, d_full, ds),
                 "gear": [None if v is None else int(round(v)) for v in ref_gear_raw],
             }
         else:
@@ -1112,11 +1245,19 @@ if _DATA_DIR.exists():
 
 
 @app.get("/")
-def index() -> FileResponse:
+def index() -> HTMLResponse:
     index_html = STATIC_DIR / "index.html"
     if not index_html.exists():
         raise HTTPException(status_code=404, detail="Frontend not built.")
-    return FileResponse(str(index_html))
+    # Stamp the build id into the asset URLs (?v=BUILD_ID), and tell the browser
+    # to always revalidate the HTML so a new build is picked up immediately. The
+    # versioned CSS/JS URLs can then be cached safely — a new deploy changes the
+    # query string, which forces a fresh fetch without manual version bumping.
+    html = index_html.read_text(encoding="utf-8").replace("__BUILD__", BUILD_ID)
+    return HTMLResponse(
+        content=html,
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
 
 
 if __name__ == "__main__":
