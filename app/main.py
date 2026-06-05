@@ -650,12 +650,27 @@ def _ref_steering_from_curvature(aligned, d_full, d_target) -> list:
     meaningful, so the caller simply leaves the Pro steering overlay hidden.
     """
     cols = getattr(aligned, "columns", ())
-    if "real_world_x" not in cols or "real_world_y" not in cols:
-        return []
-    rx = np.asarray(aligned["real_world_x"].values, dtype=float)
-    ry = np.asarray(aligned["real_world_y"].values, dtype=float)
-    good = np.isfinite(rx) & np.isfinite(ry)
-    if good.sum() < 25:                       # too few GPS points to trust
+    # Same GPS-source priority as _extract_track_xy (src/track_map.py): real F1
+    # FastF1 GPS first, then game GPS, then the legacy position/world names. Use
+    # the first pair where both columns exist and carry > 25 finite samples, so
+    # the Pro steering is derived from the SAME geometry the track map is drawn
+    # from (the old code looked up real_world_x/y, which the explorer's aligned
+    # frame doesn't carry, so the lookup always failed and the wheel never moved).
+    rx = ry = good = None
+    for xcol, ycol in (
+        ("real_world_position_X", "real_world_position_Y"),
+        ("game_world_position_X", "game_world_position_Y"),
+        ("world_position_X",      "world_position_Y"),
+        ("world_x",               "world_y"),
+    ):
+        if xcol in cols and ycol in cols:
+            cx = np.asarray(aligned[xcol].values, dtype=float)
+            cy = np.asarray(aligned[ycol].values, dtype=float)
+            cgood = np.isfinite(cx) & np.isfinite(cy)
+            if cgood.sum() > 25:              # enough finite GPS points to trust
+                rx, ry, good = cx, cy, cgood
+                break
+    if rx is None:                            # no usable GPS column pair
         return []
     # Carry finite values across any gaps so curvature isn't poisoned by NaNs.
     if not np.all(good):
@@ -668,15 +683,15 @@ def _ref_steering_from_curvature(aligned, d_full, d_target) -> list:
     # which already negates curvature, so the un-negated value is the one that
     # matches the game's SRT convention (negative = left, positive = right). The
     # extra window tames the 1/speed^3 spikes that appear where GPS samples bunch up.
-    curv = compute_curvature(np.column_stack([rx, ry]), smooth_window=31)
+    curv = -compute_curvature(np.column_stack([rx, ry]), smooth_window=21)
     # Second smoothing pass directly on the curvature, killing any residual
     # single-sample spikes before they can drive the wheel.
-    curv = smooth(curv, window=15)
+    curv = smooth(curv, window=9)
 
     # Robust normalisation: scale by the 90th percentile of |curvature| (measured
     # on the already-smoothed signal, so an isolated spike can't define the
     # scale), then HARD-CLAMP into the -1..+1 steering domain.
-    scale = float(np.percentile(np.abs(curv), 90))
+    scale = float(np.percentile(np.abs(curv), 99))
     if not np.isfinite(scale) or scale <= 0.0:
         return []
     steer = np.clip(curv / scale, -1.0, 1.0)
