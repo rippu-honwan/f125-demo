@@ -18,6 +18,20 @@
     margin-top: 0.75rem;
     justify-content: center;
   }
+  .lang-toggle {
+    display: flex; gap: 2px; align-items: center;
+    background: rgba(255,255,255,0.08); border-radius: 8px; padding: 3px;
+  }
+  .lang-btn {
+    background: none; border: none; color: rgba(255,255,255,0.5);
+    font-size: 0.78rem; font-weight: 600; padding: 3px 10px;
+    border-radius: 6px; cursor: pointer; transition: all 0.15s;
+    font-family: inherit;
+  }
+  .lang-btn.active {
+    background: rgba(255,255,255,0.15); color: #fff;
+  }
+  .lang-btn:hover:not(.active) { color: rgba(255,255,255,0.8); }
 </style>
 </head>
 <body>
@@ -34,16 +48,20 @@
         </div>
         <div>
           <div class="title">F1 <span class="accent">·</span> AI Driver Coach</div>
-          <div class="sub">Telemetry · Real F1 · Corner Analysis</div>
+          <div class="sub" data-i18n="header.sub">Telemetry · Real F1 · Corner Analysis</div>
         </div>
       </div>
-      <div class="header-tag"><span class="dot" aria-hidden="true"></span> Engine Ready</div>
+      <div class="lang-toggle" id="langToggle" role="group" aria-label="Language">
+        <button type="button" class="lang-btn active" data-lang="en" aria-pressed="true">EN</button>
+        <button type="button" class="lang-btn" data-lang="ja" aria-pressed="false">日本語</button>
+      </div>
+      <div class="header-tag"><span class="dot" aria-hidden="true"></span> <span data-i18n="header.engineReady">Engine Ready</span></div>
     </header>
 
     <section class="panel">
       <!-- ========== 1 · Telemetry file ========== -->
       <div class="form-section">
-        <div class="section-heading"><span class="sh-num">1</span> Telemetry File <button type="button" id="useSampleBtn" class="btn-sample">Use Sample ▶</button></div>
+        <div class="section-heading"><span class="sh-num">1</span> <span data-i18n="section.telemetryFile">Telemetry File</span> <button type="button" id="useSampleBtn" class="btn-sample" data-i18n="btn.useSample">Use Sample ▶</button></div>
         <div id="sampleStatus" class="sample-status" role="status" hidden></div>
         <div
           class="dropzone"
@@ -59,9 +77,9 @@
               <line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
           </div>
-          <div class="dz-title">Drop your telemetry CSV</div>
-          <div class="dz-hint">or <u>click to browse</u> — exported from Sim Racing Telemetry</div>
-          <div class="dz-formats">.CSV · tab or comma separated</div>
+          <div class="dz-title" data-i18n="upload.dzTitle">Drop your telemetry CSV</div>
+          <div class="dz-hint" data-i18n="upload.dzHint">or <u>click to browse</u> — exported from Sim Racing Telemetry</div>
+          <div class="dz-formats" data-i18n="upload.dzFormats">.CSV · tab or comma separated</div>
           <input type="file" id="fileInput" accept=".csv,text/csv" hidden />
         </div>
 
@@ -84,7 +102,7 @@
 
       <!-- ========== 2 · Analysis mode ========== -->
       <div class="form-section">
-        <div class="section-heading"><span class="sh-num">2</span> Analysis Mode</div>
+        <div class="section-heading"><span class="sh-num">2</span> <span data-i18n="section.analysisMode">Analysis Mode</span></div>
         <div class="mode-grid" id="modeGrid" role="tablist" aria-label="Choose an analysis program">
           <button type="button" class="mode-btn active" data-mode="overview" role="tab" aria-selected="true">
             <span class="mb-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 4-6"/></svg></span>
@@ -120,10 +138,10 @@
 
       <!-- ========== 3 · Reference & track ========== -->
       <div class="form-section">
-        <div class="section-heading"><span class="sh-num">3</span> Reference &amp; Track <span class="sh-opt" id="refOpt"></span></div>
+        <div class="section-heading"><span class="sh-num">3</span> <span data-i18n="section.referenceTrack">Reference &amp; Track</span> <span class="sh-opt" id="refOpt"></span></div>
         <div class="config card" id="config">
           <div class="field ref-field">
-            <label for="driver">Driver</label>
+            <label for="driver" data-i18n="label.driver">Driver</label>
             <select class="control" id="driver">
               <option value="VER" selected>VER · Verstappen</option>
               <option value="NOR">NOR · Norris</option>
@@ -155,7 +173,7 @@
             </select>
           </div>
           <div class="field ref-field">
-            <label for="year">Year</label>
+            <label for="year" data-i18n="label.year">Year</label>
             <select class="control" id="year">
               <option selected>2025</option>
               <option>2024</option>
@@ -165,7 +183,7 @@
             </select>
           </div>
           <div class="field ref-field">
-            <label for="session">Session</label>
+            <label for="session" data-i18n="label.session">Session</label>
             <select class="control" id="session">
               <option value="Q" selected>Qualifying</option>
               <option value="R">Race</option>
@@ -177,11 +195,11 @@
             </select>
           </div>
           <div class="field" id="trackField">
-            <label for="track">Track <span class="req" aria-hidden="true">*</span></label>
+            <label for="track"><span data-i18n="label.track">Track</span> <span class="req" aria-hidden="true">*</span></label>
             <!-- Auto-detected from the CSV's trackId (default path). -->
             <div class="track-auto" id="trackAuto">
               <span class="ta-dot" aria-hidden="true"></span>
-              <span class="ta-name" id="trackAutoName">Detected on upload</span>
+              <span class="ta-name" id="trackAutoName" data-i18n="track.detectedOnUpload">Detected on upload</span>
               <button type="button" class="ta-change" id="trackChange" hidden>Change</button>
             </div>
             <!-- Manual fallback: only shown if trackId is missing or overridden. -->
@@ -213,9 +231,9 @@
       <!-- ========== 4 · Lap selection (revealed after CSV upload) ========== -->
       <div class="form-section lap-block" id="lapBlock">
         <div class="section-heading">
-          <span class="sh-num">4</span> <span id="lapComboLabel">Lap Selection</span>
+          <span class="sh-num">4</span> <span id="lapComboLabel" data-i18n="section.lapSelection">Lap Selection</span>
           <span class="lap-loading sh-opt" id="lapLoading" hidden>
-            <span class="lap-spin" aria-hidden="true"></span> Reading laps…
+            <span class="lap-spin" aria-hidden="true"></span> <span data-i18n="section.lapLoading">Reading laps…</span>
           </span>
         </div>
 
@@ -238,7 +256,7 @@
               <input type="text" id="lapSearch" placeholder="Search by lap number or time…" autocomplete="off" spellcheck="false" aria-label="Search laps" />
             </div>
             <div class="combo-options" id="lapOptions"></div>
-            <div class="combo-empty" id="lapEmpty" hidden>No laps match your search.</div>
+            <div class="combo-empty" id="lapEmpty" data-i18n="lapCombo.noMatch" hidden>No laps match your search.</div>
           </div>
         </div>
 
@@ -249,7 +267,7 @@
       <!-- ========== Analyze button ========== -->
       <div class="actions form-section">
         <button class="btn-analyze" id="analyzeBtn" disabled aria-label="Run analysis">
-          <span class="label-text" id="analyzeLabel">Run Analysis</span>
+          <span class="label-text" id="analyzeLabel" data-i18n="btn.runAnalysis">Run Analysis</span>
           <span class="spinner"><span class="tire" aria-hidden="true"></span> Analyzing…</span>
         </button>
       </div>
@@ -291,7 +309,7 @@
         <div class="section-label" id="timingLabel">Lap Summary</div>
         <div class="timing card" id="timing">
           <div class="t-cell">
-            <span class="t-label">You</span>
+            <span class="t-label" data-i18n="label.you">You</span>
             <span class="t-value you" id="tYou">--</span>
           </div>
           <div class="t-cell">
@@ -299,7 +317,7 @@
             <span class="t-value real" id="tReal">--</span>
           </div>
           <div class="t-cell delta">
-            <span class="t-label">Delta</span>
+            <span class="t-label" data-i18n="label.delta">Delta</span>
             <span class="t-value" id="tDelta">--</span>
           </div>
           <div class="t-cell grade">
@@ -310,22 +328,22 @@
 
       <!-- Whole-lap comparison view (Lap Comparison only) -->
       <div class="result-block" id="blkLapChart">
-        <div class="section-label">Whole-Lap Comparison — Pace &amp; Cumulative Delta</div>
+        <div class="section-label" data-i18n="section.lapComparison">Whole-Lap Comparison — Pace &amp; Cumulative Delta</div>
         <div class="lap-chart card" id="lapChart"></div>
       </div>
 
       <!-- Comparison strip (Lap Comparison only) -->
       <div class="result-block" id="blkCompStrip">
-        <div class="section-label">Where You Stand</div>
+        <div class="section-label" data-i18n="section.whereYouStand">Where You Stand</div>
         <div class="comp-strip" id="compStrip"></div>
       </div>
 
       <!-- Interactive Track Explorer (replaces the static Track Map for this mode) -->
       <div class="result-block tx-wrap" id="blkExplorer">
         <div class="tx-head">
-          <div class="section-label" id="explorerLabel">Interactive Track Map</div>
+          <div class="section-label" id="explorerLabel" data-i18n="section.trackMap">Interactive Track Map</div>
           <label class="tx-compare-wrap" id="txCompareWrap" hidden>
-            <span class="tx-compare-label">Compare Driver</span>
+            <span class="tx-compare-label" data-i18n="btn.compareDriver">Compare Driver</span>
             <input type="checkbox" id="txCompareToggle" class="tx-compare-input">
             <span class="tx-compare-track"><span class="tx-compare-thumb"></span></span>
           </label>
@@ -335,22 +353,22 @@
             <svg id="txSvg" class="tx-svg" role="img"
                  aria-label="Interactive circuit map — move your cursor along the track to inspect telemetry"></svg>
           </div>
-          <div class="tx-hint" id="txHint">Move your cursor along the track to inspect your telemetry · the chart below follows the marker</div>
+          <div class="tx-hint" id="txHint" data-i18n="tx.hint">Move your cursor along the track to inspect your telemetry · the chart below follows the marker</div>
         </div>
 
         <div class="track-legend" id="txLegend" hidden>
-          <span style="color:#22c55e">● On pace (within 3 km/h)</span>
-          <span style="color:#eab308">● Slightly slower (3–10 km/h)</span>
-          <span style="color:#ef4444">● Significantly slower (>10 km/h)</span>
+          <span style="color:#22c55e" data-i18n="legend.onPace">● On pace (within 3 km/h)</span>
+          <span style="color:#eab308" data-i18n="legend.slightlySlower">● Slightly slower (3–10 km/h)</span>
+          <span style="color:#ef4444" data-i18n="legend.significantlySlower">● Significantly slower (>10 km/h)</span>
         </div>
 
         <div class="tx-readout" id="txReadout">
           <div class="tx-pos" id="txPos">Start / Idle<span class="txp-sub">Lap start</span></div>
           <div class="tx-vals">
-            <div class="tx-val"><span class="txv-k">Speed</span><span class="txv-v" id="txSpeed">—<i>km/h</i></span></div>
-            <div class="tx-val"><span class="txv-k">Throttle</span><span class="txv-v" id="txThrottle">—<i>%</i></span></div>
-            <div class="tx-val"><span class="txv-k">Brake</span><span class="txv-v" id="txBrake">—<i>%</i></span></div>
-            <div class="tx-val"><span class="txv-k">Gear</span><span class="txv-v" id="txGear">—</span></div>
+            <div class="tx-val"><span class="txv-k" data-i18n="label.speed">Speed</span><span class="txv-v" id="txSpeed">—<i>km/h</i></span></div>
+            <div class="tx-val"><span class="txv-k" data-i18n="label.throttle">Throttle</span><span class="txv-v" id="txThrottle">—<i>%</i></span></div>
+            <div class="tx-val"><span class="txv-k" data-i18n="label.brake">Brake</span><span class="txv-v" id="txBrake">—<i>%</i></span></div>
+            <div class="tx-val"><span class="txv-k" data-i18n="label.gear">Gear</span><span class="txv-v" id="txGear">—</span></div>
           </div>
         </div>
 
@@ -359,7 +377,7 @@
 
       <!-- Corner cards -->
       <div class="result-block corners" id="blkCorners">
-        <div class="section-label" id="cornersLabel">Corner Breakdown</div>
+        <div class="section-label" id="cornersLabel" data-i18n="section.cornerBreakdown">Corner Breakdown</div>
         <div class="corner-grid" id="cornerGrid"></div>
       </div>
 
@@ -374,14 +392,14 @@
 
       <!-- Coaching summary -->
       <div class="result-block" id="blkSummary">
-        <div class="section-label" id="summaryLabel">Coaching Summary</div>
+        <div class="section-label" id="summaryLabel" data-i18n="section.coachingSummary">Coaching Summary</div>
         <div class="summary" id="summary">
           <div class="summary-card">
             <div class="s-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
             </div>
             <div>
-              <div class="s-title">Braking Tendency</div>
+              <div class="s-title" data-i18n="label.brakingTendency">Braking Tendency</div>
               <div class="s-text" id="brakingSummary">—</div>
             </div>
           </div>
@@ -390,7 +408,7 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
             </div>
             <div>
-              <div class="s-title">Throttle Tendency</div>
+              <div class="s-title" data-i18n="label.throttleTendency">Throttle Tendency</div>
               <div class="s-text" id="throttleSummary">—</div>
             </div>
           </div>
@@ -399,23 +417,23 @@
 
       <!-- Coaching action plan + priority fixes (Coaching Report only) -->
       <div class="result-block" id="blkActionPlan">
-        <div class="section-label">Action Plan</div>
+        <div class="section-label" data-i18n="section.actionPlan">Action Plan</div>
         <div class="ap-banner" id="apBanner"></div>
         <ul class="ap-list" id="apList"></ul>
-        <div class="section-label" id="fixLabel">Priority Corner Fixes</div>
+        <div class="section-label" id="fixLabel" data-i18n="section.priorityFixes">Priority Corner Fixes</div>
         <div class="fix-grid" id="fixGrid"></div>
       </div>
 
       <!-- Track-map corner severity strip (Track Map only) -->
       <div class="result-block" id="blkSeverity">
-        <div class="section-label">Corner Severity</div>
+        <div class="section-label" data-i18n="section.cornerSeverity">Corner Severity</div>
         <div class="sev-strip" id="sevStrip"></div>
-        <div class="map-hint map-hint--spaced">Hover a corner to spotlight its apex on the map · green = on pace, amber = minor loss, red = major loss</div>
+        <div class="map-hint map-hint--spaced" data-i18n="map.hint">Hover a corner to spotlight its apex on the map · green = on pace, amber = minor loss, red = major loss</div>
       </div>
     </section>
 
     <footer class="site">
-      <span>F1 AI Driver Coach — your lap vs. real F1 telemetry, powered by FastF1.</span>
+      <span data-i18n="footer.text">F1 AI Driver Coach — your lap vs. real F1 telemetry, powered by FastF1.</span>
       <span id="footMeta"></span>
     </footer>
   </div>

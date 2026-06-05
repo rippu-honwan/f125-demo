@@ -2,6 +2,281 @@
   "use strict";
 
   // ============================================================
+  // i18n (English / Japanese)
+  // ============================================================
+  // Lives inside the module IIFE so the engine can reach module-local state it
+  // must keep in sync — OVERLAY_MESSAGES (loading overlay) and applyModeUI (mode
+  // description / button). t() is therefore available to every render function
+  // below. Note: a few functions declare a local `t` (telemetry); those are
+  // renamed where they need the translator.
+  const I18N = {
+    en: {
+      "header.sub":            "Telemetry · Real F1 · Corner Analysis",
+      "header.engineReady":    "Engine Ready",
+      "section.telemetryFile": "Telemetry File",
+      "btn.useSample":         "Use Sample ▶",
+      "btn.runAnalysis":       "Run Analysis",
+      "btn.runAnalysis.overview":     "Run Overview",
+      "btn.runAnalysis.lap_analysis": "Run Lap Analysis",
+      "btn.runAnalysis.comparison":   "Run Lap Comparison",
+      "btn.runAnalysis.coaching":     "Run Coaching Report",
+      "btn.runAnalysis.track_map":    "Run Track Explorer",
+      "upload.dzTitle":        "Drop your telemetry CSV",
+      "upload.dzHint":         "or click to browse — exported from Sim Racing Telemetry",
+      "upload.dzFormats":      ".CSV · tab or comma separated",
+      "section.analysisMode":  "Analysis Mode",
+      "section.referenceTrack":"Reference & Track",
+      "section.lapSelection":  "Lap Selection",
+      "label.driver":          "Driver",
+      "label.year":            "Year",
+      "label.session":         "Session",
+      "label.track":           "Track",
+      "track.detectedOnUpload":"Detected on upload",
+      "footer.text":           "F1 AI Driver Coach — your lap vs. real F1 telemetry, powered by FastF1.",
+      "legend.onPace":         "● On pace (within 3 km/h)",
+      "legend.slightlySlower": "● Slightly slower (3–10 km/h)",
+      "legend.significantlySlower": "● Significantly slower (>10 km/h)",
+      "map.hint":              "Hover a corner to spotlight its apex on the map · green = on pace, amber = minor loss, red = major loss",
+      "tx.hint":               "Move your cursor along the track to inspect your telemetry · the chart below follows the marker",
+      "section.overview":      "Telemetry Overview",
+      "section.lapAnalysis":   "Lap Analysis",
+      "section.lapSummary":    "Lap Summary",
+      "section.lapComparison": "Whole-Lap Comparison — Pace & Cumulative Delta",
+      "section.whereYouStand": "Where You Stand",
+      "section.trackMap":      "Interactive Track Map",
+      "section.cornerBreakdown":"Corner Breakdown",
+      "section.allCorners":    "All Corners — Brake · Throttle · Gear · Speed",
+      "section.coachingSummary":"Coaching Summary",
+      "section.actionPlan":    "Action Plan",
+      "section.priorityFixes": "Priority Corner Fixes",
+      "section.cornerSeverity":"Corner Severity",
+      "section.lapLoading":    "Reading laps…",
+      "label.you":             "You",
+      "label.reference":       "Reference",
+      "label.delta":           "Delta",
+      "label.speed":           "Speed",
+      "label.throttle":        "Throttle",
+      "label.brake":           "Brake",
+      "label.gear":            "Gear",
+      "label.brakingTendency": "Braking Tendency",
+      "label.throttleTendency":"Throttle Tendency",
+      "mode.overview.name":    "Telemetry\nOverview",
+      "mode.overview.tag":     "Your lap",
+      "mode.lapAnalysis.name": "Lap\nAnalysis",
+      "mode.lapAnalysis.tag":  "Your lap",
+      "mode.comparison.name":  "Lap\nComparison",
+      "mode.comparison.tag":   "vs Pro",
+      "mode.coaching.name":    "Coaching\nReport",
+      "mode.coaching.tag":     "vs Pro",
+      "mode.trackMap.name":    "Track\nExplorer",
+      "mode.trackMap.tag":     "vs Pro",
+      "mode.overview.desc":    "Get a quick summary of your lap — top speed, throttle, braking zones and sector times.",
+      "mode.lapAnalysis.desc": "Corner-by-corner breakdown of your own lap: entry speed, apex speed, gear and exit speed.",
+      "mode.comparison.desc":  "Compare every corner of your lap against a real F1 driver — speed traces, braking points and time delta.",
+      "mode.coaching.desc":    "Personalised coaching report: your top priority corners, driving tendencies and a clear action plan.",
+      "mode.trackMap.desc":    "Interactive circuit map: hover the track to see your speed, throttle, brake and gear at any point.",
+      "loading.messages":      ["Connecting to F1 data servers...",
+                                "Downloading 2025 qualifying telemetry...",
+                                "Aligning your lap with the pro...",
+                                "Analysing corner by corner...",
+                                "Building your coaching report..."],
+      "error.title":           "Analysis failed",
+      "error.default":         "Something went wrong.",
+      "lapCombo.auto":         "Auto / Fastest Lap",
+      "lapCombo.analyzing":    "Analyzing",
+      "lapCombo.searchPlaceholder": "Search by lap number or time…",
+      "lapCombo.noMatch":      "No laps match your search.",
+      "btn.expandAll":         "Expand all",
+      "btn.collapseAll":       "Collapse all",
+      "section.gradeTiming":   "Overall Grade & Timing",
+      "btn.compareDriver":     "Compare Driver",
+      "txPos.start":           "Start / Idle",
+      "txPos.startSub":        "Lap start",
+    },
+    ja: {
+      "header.sub":            "テレメトリー · リアルF1 · コーナー分析",
+      "header.engineReady":    "準備完了",
+      "section.telemetryFile": "テレメトリーファイル",
+      "btn.useSample":         "サンプルを使用 ▶",
+      "btn.runAnalysis":       "分析を実行",
+      "btn.runAnalysis.overview":     "概要を実行",
+      "btn.runAnalysis.lap_analysis": "ラップ分析を実行",
+      "btn.runAnalysis.comparison":   "ラップ比較を実行",
+      "btn.runAnalysis.coaching":     "コーチングレポートを実行",
+      "btn.runAnalysis.track_map":    "コースエクスプローラーを実行",
+      "upload.dzTitle":        "テレメトリーCSVをドロップ",
+      "upload.dzHint":         "またはクリックして選択 — Sim Racing Telemetryからエクスポート",
+      "upload.dzFormats":      ".CSV · タブまたはカンマ区切り",
+      "section.analysisMode":  "分析モード",
+      "section.referenceTrack":"参照設定 & サーキット",
+      "section.lapSelection":  "ラップ選択",
+      "label.driver":          "ドライバー",
+      "label.year":            "年",
+      "label.session":         "セッション",
+      "label.track":           "サーキット",
+      "track.detectedOnUpload":"アップロード時に自動検出",
+      "footer.text":           "F1 AIドライバーコーチ — FastF1を使用した実際のF1テレメトリーとの比較",
+      "legend.onPace":         "● ペース同等（3 km/h以内）",
+      "legend.slightlySlower": "● やや遅い（3〜10 km/h）",
+      "legend.significantlySlower": "● 大幅に遅い（10 km/h超）",
+      "map.hint":              "コーナーをホバーしてマップ上のアペックスを強調表示 · 緑=ペース同等、黄=軽微なロス、赤=大きなロス",
+      "tx.hint":               "サーキット上でカーソルを動かしてテレメトリーを確認 · 下のグラフが連動します",
+      "section.overview":      "テレメトリー概要",
+      "section.lapAnalysis":   "ラップ分析",
+      "section.lapSummary":    "ラップサマリー",
+      "section.lapComparison": "ラップ全体比較 — ペースと累積デルタ",
+      "section.whereYouStand": "現在の位置",
+      "section.trackMap":      "インタラクティブマップ",
+      "section.cornerBreakdown":"コーナー別分析",
+      "section.allCorners":    "全コーナー — ブレーキ · スロットル · ギア · 速度",
+      "section.coachingSummary":"コーチングサマリー",
+      "section.actionPlan":    "アクションプラン",
+      "section.priorityFixes": "優先改善コーナー",
+      "section.cornerSeverity":"コーナー重大度",
+      "section.lapLoading":    "ラップ読み込み中…",
+      "label.you":             "あなた",
+      "label.reference":       "参照",
+      "label.delta":           "デルタ",
+      "label.speed":           "速度",
+      "label.throttle":        "スロットル",
+      "label.brake":           "ブレーキ",
+      "label.gear":            "ギア",
+      "label.brakingTendency": "ブレーキの傾向",
+      "label.throttleTendency":"スロットルの傾向",
+      "mode.overview.name":    "テレメトリー\n概要",
+      "mode.overview.tag":     "自分のラップ",
+      "mode.lapAnalysis.name": "ラップ\n分析",
+      "mode.lapAnalysis.tag":  "自分のラップ",
+      "mode.comparison.name":  "ラップ\n比較",
+      "mode.comparison.tag":   "プロと比較",
+      "mode.coaching.name":    "コーチング\nレポート",
+      "mode.coaching.tag":     "プロと比較",
+      "mode.trackMap.name":    "コース\nエクスプローラー",
+      "mode.trackMap.tag":     "プロと比較",
+      "mode.overview.desc":    "ラップの概要を素早く確認 — 最高速度、スロットル、ブレーキゾーン、セクタータイム。",
+      "mode.lapAnalysis.desc": "自分のラップをコーナーごとに分析：進入速度、アペックス速度、ギア、脱出速度。",
+      "mode.comparison.desc":  "実際のF1ドライバーとすべてのコーナーを比較 — 速度トレース、ブレーキポイント、タイムデルタ。",
+      "mode.coaching.desc":    "パーソナライズされたコーチングレポート：優先改善コーナー、運転傾向、明確なアクションプラン。",
+      "mode.trackMap.desc":    "インタラクティブなサーキットマップ：コース上でホバーしてどの地点でも速度・スロットル・ブレーキ・ギアを確認。",
+      "loading.messages":      ["F1データサーバーに接続中...",
+                                "2025年予選テレメトリーをダウンロード中...",
+                                "あなたのラップとプロを照合中...",
+                                "コーナーごとに分析中...",
+                                "コーチングレポートを作成中..."],
+      "error.title":           "分析に失敗しました",
+      "error.default":         "エラーが発生しました。",
+      "lapCombo.auto":         "自動 / 最速ラップ",
+      "lapCombo.analyzing":    "分析中",
+      "lapCombo.searchPlaceholder": "ラップ番号またはタイムで検索…",
+      "lapCombo.noMatch":      "一致するラップがありません。",
+      "btn.expandAll":         "すべて展開",
+      "btn.collapseAll":       "すべて折りたたむ",
+      "section.gradeTiming":   "総合グレードとタイム",
+      "btn.compareDriver":     "ドライバー比較",
+      "txPos.start":           "スタート / 待機",
+      "txPos.startSub":        "ラップ開始",
+    }
+  };
+
+  // mode key (data-mode) -> i18n prefix used by mode.*.name/.tag/.desc
+  const MODE_I18N = {
+    overview: "overview", lap_analysis: "lapAnalysis", comparison: "comparison",
+    coaching: "coaching", track_map: "trackMap",
+  };
+
+  let currentLang = localStorage.getItem("f1coach_lang") || "en";
+
+  function t(key) {
+    return (I18N[currentLang] && I18N[currentLang][key])
+        || (I18N.en && I18N.en[key])
+        || key;
+  }
+
+  function applyI18n() {
+    // 1. Static text nodes carrying data-i18n
+    document.querySelectorAll("[data-i18n]").forEach((el) => {
+      el.textContent = t(el.getAttribute("data-i18n"));
+    });
+    // 2. <html lang>
+    document.documentElement.lang = currentLang === "ja" ? "ja" : "en";
+    // 3. Toggle button states
+    document.querySelectorAll(".lang-btn").forEach((btn) => {
+      const active = btn.dataset.lang === currentLang;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-pressed", String(active));
+    });
+    // 4. Loading overlay messages (the cycling timer re-reads this array each tick)
+    if (typeof OVERLAY_MESSAGES !== "undefined") {
+      OVERLAY_MESSAGES.length = 0;
+      t("loading.messages").forEach((m) => OVERLAY_MESSAGES.push(m));
+    }
+    // 5. Mode buttons — name carries a line break (\n -> <br>), tag is plain text
+    if (typeof modeGrid !== "undefined" && modeGrid) {
+      modeGrid.querySelectorAll(".mode-btn").forEach((btn) => {
+        const k = MODE_I18N[btn.dataset.mode];
+        if (!k) return;
+        const nameEl = btn.querySelector(".mb-name");
+        const tagEl = btn.querySelector(".mb-tag");
+        if (nameEl) nameEl.innerHTML = escapeHtml(t("mode." + k + ".name")).replace(/\n/g, "<br>");
+        if (tagEl) tagEl.textContent = t("mode." + k + ".tag");
+      });
+    }
+    // 6. Lap search placeholder (an attribute, not textContent)
+    const lapSearchEl = document.getElementById("lapSearch");
+    if (lapSearchEl) lapSearchEl.placeholder = t("lapCombo.searchPlaceholder");
+    // 7. Re-render the lap combo's live labels if a file is already loaded
+    if (typeof setSelectedLap === "function" && typeof selectedFile !== "undefined" && selectedFile) {
+      setSelectedLap(selectedLapIndex);
+    }
+    // 8. Session <select> option labels
+    const sessionLabels = {
+      en: { Q: "Qualifying", R: "Race", S: "Sprint",
+            SQ: "Sprint Quali", FP1: "Practice 1",
+            FP2: "Practice 2", FP3: "Practice 3" },
+      ja: { Q: "予選", R: "決勝", S: "スプリント",
+            SQ: "スプリント予選", FP1: "フリー走行1",
+            FP2: "フリー走行2", FP3: "フリー走行3" },
+    };
+    const sel = document.getElementById("session");
+    if (sel) {
+      Array.from(sel.options).forEach((opt) => {
+        const labels = sessionLabels[currentLang] || sessionLabels.en;
+        if (labels[opt.value]) opt.textContent = labels[opt.value];
+      });
+    }
+    // 9. Analyze button — per-mode label (overrides the generic data-i18n above)
+    const analyzeLabelEl = document.getElementById("analyzeLabel");
+    if (analyzeLabelEl) {
+      analyzeLabelEl.textContent = t("btn.runAnalysis." + currentMode) || t("btn.runAnalysis");
+    }
+    // 10. Expand/collapse-all button — re-derives its label from the open state
+    if (typeof syncExpandAll === "function" && document.getElementById("kcExpandAll")) {
+      syncExpandAll();
+    }
+    // 11. Timing label (dynamic) — re-translate for the active comparison-family mode
+    const timingLabelEl = document.getElementById("timingLabel");
+    if (timingLabelEl) {
+      if (currentMode === "coaching") timingLabelEl.textContent = t("section.gradeTiming");
+      else if (currentMode === "comparison") timingLabelEl.textContent = t("section.lapSummary");
+    }
+  }
+
+  function setLang(lang) {
+    if (lang !== "en" && lang !== "ja") return;
+    currentLang = lang;
+    localStorage.setItem("f1coach_lang", lang);
+    applyI18n();
+    // Re-translate the mode description + analyze button for the current mode.
+    if (typeof applyModeUI === "function") applyModeUI(currentMode);
+  }
+
+  // Toggle wiring via delegation so it works regardless of header timing.
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest && e.target.closest(".lang-btn");
+    if (btn) setLang(btn.dataset.lang);
+  });
+
+  // ============================================================
   // API base configuration
   // ============================================================
   // The backend (FastAPI: /laps, /analyze) may live on a DIFFERENT origin than
@@ -213,9 +488,9 @@
       b.setAttribute("aria-selected", on ? "true" : "false");
     });
 
-    // Description + analyze button label
-    modeDescText.textContent = meta.desc;
-    analyzeLabel.textContent = meta.label;
+    // Description + analyze button label (translated; per-mode label)
+    modeDescText.textContent = t("mode." + MODE_I18N[mode] + ".desc");
+    analyzeLabel.textContent = t("btn.runAnalysis." + mode) || t("btn.runAnalysis");
 
     // Reference fields: only the comparison family uses driver/year/session.
     configEl.classList.toggle("reference-muted", !meta.needsReference);
@@ -239,7 +514,6 @@
   });
 
   // Lap selector state
-  const AUTO_LABEL = "Auto / Fastest Lap";
   let lapData = [];             // [{lap_index, lap_number, lap_time, max_speed}]
   let selectedLapIndex = null;  // null = Auto / Fastest Lap
   let lapFetchToken = 0;        // guards against out-of-order /laps responses
@@ -280,7 +554,7 @@
   function resetTrackDetection() {
     trackAuto.hidden = false;
     trackAuto.style.opacity = ".6";
-    trackAutoName.textContent = "Detected on upload";
+    trackAutoName.textContent = t("track.detectedOnUpload");
     trackChange.hidden = true;
     trackSelect.hidden = true;
     trackDetectMsg.hidden = true;
@@ -372,7 +646,7 @@
   }
 
   function lapLabel(li) {
-    if (li == null) return AUTO_LABEL;
+    if (li == null) return t("lapCombo.auto");
     const lap = lapData.find((l) => l.lap_index === li);
     if (!lap) return "Lap " + (li + 1);
     return "Lap " + lap.lap_number + (lap.lap_time != null ? " · " + fmtLap(lap.lap_time) : "");
@@ -381,14 +655,14 @@
   function setSelectedLap(li) {
     selectedLapIndex = li;
     lapValue.textContent = lapLabel(li);
-    lapStatus.innerHTML = "Analyzing <b></b>";
+    lapStatus.innerHTML = t("lapCombo.analyzing") + " <b></b>";
     lapStatus.querySelector("b").textContent = lapLabel(li);
     renderLapOptions(lapSearch.value);
   }
 
   function buildRows() {
     const rows = [{
-      value: null, main: AUTO_LABEL, tag: "Default", meta: "",
+      value: null, main: t("lapCombo.auto"), tag: "Default", meta: "",
       search: "auto fastest default", fastest: false,
     }];
     // Fastest = lowest recorded lap time (gets golden-yellow styling).
@@ -563,13 +837,9 @@
   // of everything with a pure-CSS spinner (reusing the existing `spin` keyframe
   // in main.css) and a status line that cycles while we wait. Built lazily in JS
   // so no markup/CSS files need to change.
-  const OVERLAY_MESSAGES = [
-    "Connecting to F1 data servers...",
-    "Downloading 2025 qualifying telemetry...",
-    "Aligning your lap with the pro...",
-    "Analysing corner by corner...",
-    "Building your coaching report...",
-  ];
+  // Initialised from I18N so the very first overlay is already localised;
+  // applyI18n() mutates this array in place when the language changes.
+  const OVERLAY_MESSAGES = t("loading.messages").slice();
   let overlayTimer = null;
 
   function ensureOverlay() {
@@ -603,8 +873,12 @@
     const driver = ($("driver").value || "VER").trim().toUpperCase();
     const needsRef = MODES[currentMode] && MODES[currentMode].needsReference;
     $("loadingOverlaySub").textContent = needsRef
-      ? `Comparing your ${trackName} lap vs ${driver}`
-      : `Analysing your ${trackName} lap`;
+      ? (currentLang === "ja"
+          ? `${trackName}のラップを${driver}と比較中`
+          : `Comparing your ${trackName} lap vs ${driver}`)
+      : (currentLang === "ja"
+          ? `${trackName}のラップを分析中`
+          : `Analysing your ${trackName} lap`);
     // Cycle the status line every 3s (wraps around while the request runs).
     let i = 0;
     $("loadingOverlayMsg").textContent = OVERLAY_MESSAGES[0];
@@ -624,7 +898,7 @@
 
   // -------- Error handling --------
   function showError(msg) {
-    errorMsg.textContent = msg || "Something went wrong.";
+    errorMsg.textContent = msg || t("error.default");
     errorBanner.classList.add("show");
     errorBanner.scrollIntoView({ behavior: "smooth", block: "center" });
   }
@@ -702,7 +976,7 @@
   function renderTiming(data, label) {
     $("tYou").textContent = fmtLap(data.game_time);
     $("tReal").textContent = fmtLap(data.real_time);
-    $("tRealLabel").textContent = data.driver || "Reference";
+    $("tRealLabel").textContent = data.driver || t("label.reference");
     const delta = data.overall_delta;
     $("tDelta").textContent = fmtDelta(delta);
     $("tDelta").parentElement.querySelector(".t-value").style.color =
@@ -710,7 +984,7 @@
     const gradeEl = $("tGrade");
     gradeEl.textContent = data.overall_grade || "–";
     gradeEl.style.setProperty("--gc", gradeColor(data.overall_grade));
-    $("timingLabel").textContent = label || "Lap Summary";
+    $("timingLabel").textContent = label || t("section.lapSummary");
   }
 
   // -------- Lap Comparison (script 03): visual head-to-head, no heatmap --------
@@ -718,7 +992,7 @@
   // cards with brake/throttle/gear mini charts; BOTTOM = the main whole-lap
   // pace & cumulative-delta comparison chart.
   function renderComparison(data) {
-    renderTiming(data, "Lap Summary");
+    renderTiming(data, t("section.lapSummary"));
 
     // Top: where-you-stand summary strip.
     const worst = data.worst_corner, best = data.best_corner;
@@ -928,7 +1202,7 @@
     kcDriver = driver || "Pro";
     if (!list.length) {
       grid.innerHTML = `<div class="empty-corners" style="grid-column:1/-1">No corner trace data available for this lap.</div>`;
-      $("keyCornersLabel").textContent = "All Corners — Brake · Throttle · Gear · Speed";
+      $("keyCornersLabel").textContent = t("section.allCorners");
       return;
     }
     $("keyCornersLabel").textContent =
@@ -986,7 +1260,7 @@
 
   // -------- Coaching Report (script 04): actionable plan + fixes --------
   function renderCoaching(data) {
-    renderTiming(data, "Overall Grade & Timing");
+    renderTiming(data, t("section.gradeTiming"));
 
     $("brakingSummary").textContent = data.braking_summary || "Not enough corner data to assess braking tendency.";
     $("throttleSummary").textContent = data.throttle_summary || "Not enough corner data to assess throttle tendency.";
@@ -1295,7 +1569,7 @@
   // Shared cursor state: move the marker, the readout and every chart cursor to
   // the same sampled index. `idle` is the resting state shown on mouse-leave.
   function txSetIndex(i, idle) {
-    const t = txState.telemetry, pts = txState.points, n = txState.n;
+    const tel = txState.telemetry, pts = txState.points, n = txState.n;
     if (!pts.length) return;
     i = Math.max(0, Math.min(i, pts.length - 1));
     txState.idx = i;
@@ -1304,8 +1578,8 @@
     if (mk) { mk.setAttribute("cx", pts[i][0]); mk.setAttribute("cy", pts[i][1]); }
     if (hl) { hl.setAttribute("cx", pts[i][0]); hl.setAttribute("cy", pts[i][1]); }
 
-    const spd = txAt(t.speed, i), thr = txAt(t.throttle, i),
-          brk = txAt(t.brake, i), gr = txAt(t.gear, i);
+    const spd = txAt(tel.speed, i), thr = txAt(tel.throttle, i),
+          brk = txAt(tel.brake, i), gr = txAt(tel.gear, i);
     $("txSpeed").innerHTML = (spd == null ? "—" : Math.round(spd)) + "<i>km/h</i>";
     const thrEl = $("txThrottle");
     thrEl.innerHTML = (thr == null ? "—" : Math.round(thr * 100)) + "<i>%</i>";
@@ -1318,12 +1592,12 @@
     const leftPct = (n > 1) ? (2 + 96 * (i / (n - 1))) : 2;
     txState.cursorEls.forEach((c) => { c.style.left = leftPct + "%"; });
 
-    const dist = txAt(t.dist, i);
+    const dist = txAt(tel.dist, i);
     const near = txNearestCorner(dist);
     txHighlightDot(near ? near.corner_id : null);
     const posEl = $("txPos");
     if (idle) {
-      posEl.innerHTML = `Start / Idle<span class="txp-sub">Lap start · move cursor to explore</span>`;
+      posEl.innerHTML = `${t("txPos.start")}<span class="txp-sub">${t("txPos.startSub")} · move cursor to explore</span>`;
     } else if (near) {
       const sub = (dist == null ? "" : Math.round(dist) + " m · ") + "apex";
       posEl.innerHTML = `${escapeHtml(near.short || "")}` +
@@ -1372,14 +1646,14 @@
     }
     stage.style.display = "";
     readout.style.display = "";
-    hint.textContent = "Move your cursor along the track to inspect your telemetry · the chart below follows the marker";
+    hint.textContent = t("tx.hint");
     txBuildSvg(ex);
-    const t = ex.telemetry;
+    const tel = ex.telemetry;
     txState = {
       points: ex.track_path.points,
-      telemetry: t,
+      telemetry: tel,
       markers: ex.corner_markers || [],
-      n: (t.speed && t.speed.length) || (t.dist && t.dist.length) || ex.track_path.points.length,
+      n: (tel.speed && tel.speed.length) || (tel.dist && tel.dist.length) || ex.track_path.points.length,
       cursorEls: [],
       idx: 0,
       nearCid: undefined,
@@ -1399,7 +1673,7 @@
 
   // -------- Solo: Telemetry Overview (script 01) --------
   function renderOverview(data) {
-    $("ovLabel").textContent = "Telemetry Overview — " + (data.track_name || "Your Lap");
+    $("ovLabel").textContent = t("section.overview") + " — " + (data.track_name || "Your Lap");
 
     const cards = [
       ["Lap Time", fmtLap(data.lap_time), ""],
@@ -1443,7 +1717,7 @@
 
   // -------- Solo: Lap Analysis (script 02) --------
   function renderSolo(data) {
-    $("soloLabel").textContent = "Lap Analysis — " + (data.track_name || "Your Lap");
+    $("soloLabel").textContent = t("section.lapAnalysis") + " — " + (data.track_name || "Your Lap");
 
     const slow = data.slowest, fast = data.fastest;
     const cards = [
@@ -1630,7 +1904,7 @@
   function syncExpandAll() {
     const cards = $("keyCorners").querySelectorAll(".kc-card");
     const allOpen = cards.length && Array.from(cards).every((c) => c.classList.contains("open"));
-    $("kcExpandAll").textContent = allOpen ? "Collapse all" : "Expand all";
+    $("kcExpandAll").textContent = allOpen ? t("btn.collapseAll") : t("btn.expandAll");
     $("kcExpandAll").setAttribute("aria-pressed", allOpen ? "true" : "false");
   }
   $("keyCorners").addEventListener("click", (e) => {
@@ -1795,6 +2069,7 @@
   // -------- Init --------
   applyModeUI(currentMode);   // set default mode description, label & muted state
   resetTrackDetection();      // track is auto-detected from the CSV on upload
+  applyI18n();                // localise all static text + controls for the saved language
   pingBackend();              // fire-and-forget: warn the user if the backend is cold-starting
   loadTracks();               // replace the static <select> options with the backend's list
 })();
