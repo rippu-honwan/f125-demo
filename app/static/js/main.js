@@ -480,6 +480,7 @@
   let currentMode = "overview";
 
   function applyModeUI(mode) {
+    if (typeof txStopPlayback === "function") txStopPlayback();  // leaving a mode stops any lap playback
     currentMode = mode;
     const meta = MODES[mode];
 
@@ -1320,7 +1321,67 @@
   };
   let txRaf = 0, txPendingEvt = null;
 
+  // -------- Track Explorer playback (auto-scrub the lap) --------
+  // Module-level playback state (no classes). The animation drives the SAME
+  // txSetIndex() as mouse-hover, so the map dot, both steering wheels and every
+  // telemetry channel stay in sync for free.
+  let playbackActive = false;   // is the rAF loop running?
+  let playbackIndex = 0;        // fractional sample index (0 .. n-1)
+  let playbackLastTs = 0;       // wall-clock ts of the previous frame (ms)
+  let playbackSpeed = 1;        // 0.5 / 1 / 2  — read live each frame
+  let playbackRaf = 0;          // rAF handle, so we can cancel it
+  let txLapTimeSec = 90;        // 1x duration = game lap time (s); set per render
+
+  // Stop playback and reset the button to ▶. Safe to call when already stopped.
+  function txStopPlayback() {
+    playbackActive = false;
+    if (playbackRaf) { cancelAnimationFrame(playbackRaf); playbackRaf = 0; }
+    playbackLastTs = 0;
+    const btn = $("txPlayBtn");
+    if (btn) { btn.textContent = "▶"; btn.setAttribute("aria-label", "Play"); }
+  }
+
+  // One animation step. Advance the fractional index by real elapsed ms so the
+  // rate is frame-rate independent: the full lap (n-1 samples) spans
+  // txLapTimeSec seconds at 1x, scaled by the live playbackSpeed.
+  function txPlaybackStep(ts) {
+    if (!playbackActive) return;
+    const n = txState.n;
+    if (!n || n < 2) { txStopPlayback(); return; }
+    if (!playbackLastTs) playbackLastTs = ts;     // seed on the first frame
+    const dtMs = ts - playbackLastTs;
+    playbackLastTs = ts;
+    const idxPerMs = (n - 1) / (Math.max(txLapTimeSec, 0.001) * 1000);
+    playbackIndex += dtMs * idxPerMs * playbackSpeed;
+    if (playbackIndex >= n - 1) {                 // reached the end — stop, no loop
+      txSetIndex(n - 1, false);
+      playbackIndex = n - 1;
+      txStopPlayback();
+      return;
+    }
+    txSetIndex(Math.round(playbackIndex), false);
+    playbackRaf = requestAnimationFrame(txPlaybackStep);
+  }
+
+  function txStartPlayback() {
+    const n = txState.n;
+    if (!n || n < 2) return;
+    if (playbackIndex >= n - 1) playbackIndex = 0; // restart if parked at the end
+    playbackActive = true;
+    playbackLastTs = 0;
+    const btn = $("txPlayBtn");
+    if (btn) { btn.textContent = "⏸"; btn.setAttribute("aria-label", "Pause"); }
+    playbackRaf = requestAnimationFrame(txPlaybackStep);
+  }
+
+  function txTogglePlayback() {
+    if (playbackActive) txStopPlayback();
+    else txStartPlayback();
+  }
+
   function renderTrackMap(data) {
+    // 1x playback should take exactly the game lap time; fall back to 90s.
+    txLapTimeSec = (data && data.game_time > 0) ? data.game_time : 90;
     txRender(data.track_explorer);
   }
 
@@ -1751,6 +1812,8 @@
           readout = $("txReadout"), hint = $("txHint"), frame = $("txFrame"),
           legend = $("txLegend");
     frame.classList.remove("is-active");
+    txStopPlayback();            // a fresh render always starts paused at lap-start
+    playbackIndex = 0;
     // Legend only makes sense with the speed heat-map (reference lap present).
     if (legend) legend.hidden = !(ex && (ex.segment_colors || []).length);
     if (!ex || !ex.track_path || !(ex.track_path.points || []).length ||
@@ -1768,11 +1831,15 @@
       if (steerW) steerW.hidden = true;       // no GPS → no map → no wheel
       const proSteerW = $("txProSteerWidget");
       if (proSteerW) proSteerW.hidden = true; // no GPS → no Pro wheel either
+      const pb0 = $("txPlayback");
+      if (pb0) pb0.style.display = "none";    // no GPS → nothing to play back
       txState = { points: [], telemetry: {}, markers: [], n: 0, cursorEls: [], idx: 0, nearCid: undefined, refTelemetry: null };
       return;
     }
     stage.style.display = "";
     readout.style.display = "";
+    const pb = $("txPlayback");
+    if (pb) pb.style.display = "";            // GPS present → playback available
     hint.textContent = t("tx.hint");
     txBuildSvg(ex);
     txSteerWidget(ex);            // user steering wheel parked top-right, reset upright
@@ -1972,6 +2039,52 @@
   (() => {
     const svg = $("txSvg"), frame = $("txFrame");
     if (!svg) return;
+
+    // ---- Playback controls (Play/Pause + speed) — injected once, just above the
+    // telemetry readout so they sit with the existing telemetry controls. Built
+    // in JS (index.html is not ours to touch); the <select> reuses the dark-theme
+    // `.control` class and the button takes the requested `btn` class. ----
+    const readoutEl = $("txReadout");
+    if (readoutEl && readoutEl.parentNode && !$("txPlayback")) {
+      const bar = document.createElement("div");
+      bar.id = "txPlayback";
+      bar.className = "tx-playback";
+      bar.style.cssText =
+        "display:flex;align-items:center;gap:12px;margin:10px 0 2px;";
+      bar.innerHTML =
+        `<button type="button" class="btn" id="txPlayBtn" aria-label="Play" ` +
+          `style="display:inline-flex;align-items:center;justify-content:center;` +
+          `min-width:46px;height:38px;padding:0 16px;font-size:1rem;font-weight:600;` +
+          `background:var(--bg-2);color:var(--text);border:1px solid var(--border);` +
+          `border-radius:11px;cursor:pointer;line-height:1;` +
+          `transition:border-color .2s,background .2s;">▶</button>` +
+        `<label style="display:inline-flex;align-items:center;gap:8px;` +
+          `color:var(--text-dim);font-size:0.85rem;font-weight:600;letter-spacing:.03em;">` +
+          `<span>Speed</span>` +
+          `<select id="txSpeedSel" class="control" ` +
+            `style="width:auto;height:38px;padding:6px 34px 6px 12px;font-size:0.9rem;">` +
+            `<option value="0.5">0.5×</option>` +
+            `<option value="1" selected>1×</option>` +
+            `<option value="2">2×</option>` +
+          `</select>` +
+        `</label>`;
+      readoutEl.parentNode.insertBefore(bar, readoutEl);
+
+      const playBtn = $("txPlayBtn"), speedSel = $("txSpeedSel");
+      if (playBtn) playBtn.addEventListener("click", txTogglePlayback);
+      if (speedSel) speedSel.addEventListener("change", () => {
+        // Live rate change — read next frame, so it applies mid-play.
+        playbackSpeed = parseFloat(speedSel.value) || 1;
+      });
+    }
+
+    // Manual interaction with the map cancels playback (hover or click), then the
+    // existing hover handlers take over. These are ADDITIVE listeners — the
+    // original hover/scrub logic below is untouched.
+    svg.addEventListener("mousemove", () => { if (playbackActive) txStopPlayback(); });
+    svg.addEventListener("click", () => { if (playbackActive) txStopPlayback(); });
+    svg.addEventListener("touchstart", () => { if (playbackActive) txStopPlayback(); });
+
     svg.addEventListener("mousemove", txOnMove);
     // Heat-map segment hover: tooltip (You/Pro/Δ) + thicken the hovered line.
     svg.addEventListener("mouseover", txSegOver);
@@ -1994,6 +2107,9 @@
     // CHANGE 1 — scrubbing the chart area also drives the map marker (two-way sync).
     const charts = $("txCharts");
     if (charts) {
+      // Scrubbing the charts is manual hover too — cancel playback (additive).
+      charts.addEventListener("mousemove", () => { if (playbackActive) txStopPlayback(); });
+      charts.addEventListener("touchstart", () => { if (playbackActive) txStopPlayback(); });
       const idxFromPlot = (clientX, plot) => {
         const rect = plot.getBoundingClientRect();
         const n = txState.n;
