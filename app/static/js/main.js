@@ -57,6 +57,7 @@
       "label.speed":           "Speed",
       "label.throttle":        "Throttle",
       "label.brake":           "Brake",
+      "label.steering":        "Steering",
       "label.gear":            "Gear",
       "label.brakingTendency": "Braking Tendency",
       "label.throttleTendency":"Throttle Tendency",
@@ -140,6 +141,7 @@
       "label.speed":           "速度",
       "label.throttle":        "スロットル",
       "label.brake":           "ブレーキ",
+      "label.steering":        "ステアリング",
       "label.gear":            "ギア",
       "label.brakingTendency": "ブレーキの傾向",
       "label.throttleTendency":"スロットルの傾向",
@@ -1469,6 +1471,45 @@
       `<circle id="txMarker" class="tx-marker" r="${(r * 1.25).toFixed(1)}" cx="${pts[0][0]}" cy="${pts[0][1]}"/>`;
   }
 
+  // Steering-wheel widget (pure SVG, no images): parked top-right of the map
+  // frame. Built once and reused across renders; its rotation is driven live by
+  // txSetIndex. Hidden when the lap carries no steering channel (solo modes, or
+  // a reference-only lap), so it only shows in the Track Explorer.
+  function txSteerWidget(ex) {
+    const frame = $("txFrame");
+    if (!frame) return;
+    let widget = $("txSteerWidget");
+    const hasSteer = !!(ex && ex.telemetry && ex.telemetry.steering &&
+                        ex.telemetry.steering.length);
+    if (!hasSteer) {
+      if (widget) widget.hidden = true;
+      return;
+    }
+    if (!widget) {
+      widget = document.createElement("div");
+      widget.id = "txSteerWidget";
+      widget.innerHTML =
+        `<div id="txSteerInner">` +
+          `<svg viewBox="0 0 100 100" width="100" height="100" aria-hidden="true">` +
+            `<g transform="translate(50,50)">` +
+              `<circle cx="0" cy="0" r="44" fill="none" stroke="#444" stroke-width="3"/>` +
+              `<rect x="-14" y="32" width="28" height="5" rx="2" fill="#333"/>` +
+              `<line x1="0" y1="0" x2="0" y2="-26.4" stroke="#555" stroke-width="4" stroke-linecap="round"/>` +
+              `<line x1="0" y1="0" x2="22.9" y2="13.2" stroke="#555" stroke-width="4" stroke-linecap="round"/>` +
+              `<line x1="0" y1="0" x2="-22.9" y2="13.2" stroke="#555" stroke-width="4" stroke-linecap="round"/>` +
+              `<circle cx="0" cy="0" r="10" fill="#222"/>` +
+              `<circle cx="0" cy="-40" r="4" fill="#ef4444"/>` +
+            `</g>` +
+          `</svg>` +
+        `</div>` +
+        `<div class="tx-steer-label">STEER</div>`;
+      frame.appendChild(widget);
+    }
+    widget.hidden = false;
+    const inner = $("txSteerInner");           // initial state: wheel upright
+    if (inner) inner.style.transform = "rotate(0deg)";
+  }
+
   // Single shared tooltip for heat-map segment hover, created lazily on body.
   function txTooltip() {
     let el = document.getElementById("tx-tooltip");
@@ -1589,6 +1630,21 @@
     brkEl.classList.toggle("brake-on", brk != null && brk > 0.02);
     $("txGear").innerHTML = (gr == null ? "—" : String(gr));
 
+    // Steering: rotate the wheel widget (±1.0 → ±180°) and show signed % in the
+    // readout. null/NaN → upright wheel and an em-dash.
+    const steer = txAt(tel.steering, i);
+    const steerInner = $("txSteerInner");
+    if (steerInner) steerInner.style.transform = `rotate(${(steer == null ? 0 : steer) * 180}deg)`;
+    const steerEl = $("txSteer");
+    if (steerEl) {
+      if (steer == null) {
+        steerEl.textContent = "—";
+      } else {
+        const dir = steer < 0 ? "L " : (steer > 0 ? "R " : "");
+        steerEl.textContent = dir + Math.abs(steer * 100).toFixed(0) + "%";
+      }
+    }
+
     const leftPct = (n > 1) ? (2 + 96 * (i / (n - 1))) : 2;
     txState.cursorEls.forEach((c) => { c.style.left = leftPct + "%"; });
 
@@ -1641,6 +1697,8 @@
       hint.innerHTML = `<div class="tx-empty">No GPS telemetry was available for this lap, so the interactive map can't be drawn. Try a lap exported with position data.</div>`;
       const cmpWrap0 = $("txCompareWrap");
       if (cmpWrap0) cmpWrap0.hidden = true;
+      const steerW = $("txSteerWidget");
+      if (steerW) steerW.hidden = true;       // no GPS → no map → no wheel
       txState = { points: [], telemetry: {}, markers: [], n: 0, cursorEls: [], idx: 0, nearCid: undefined, refTelemetry: null };
       return;
     }
@@ -1648,6 +1706,7 @@
     readout.style.display = "";
     hint.textContent = t("tx.hint");
     txBuildSvg(ex);
+    txSteerWidget(ex);            // steering wheel parked top-right, reset upright
     const tel = ex.telemetry;
     txState = {
       points: ex.track_path.points,

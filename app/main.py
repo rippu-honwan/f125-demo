@@ -727,6 +727,8 @@ def _build_track_explorer(aligned, corners, n_points: int = 300,
         "speed": chan("game_speed_kmh", 1),
         "throttle": chan("game_throttle", 3),
         "brake": chan("game_brake", 3),
+        # SRT steering is already -1.0 (full left) .. +1.0 (full right); no scaling.
+        "steering": chan("game_steering", 3),
         "gear": [None if v is None else int(round(v)) for v in gear_raw],
     }
 
@@ -744,6 +746,9 @@ def _build_track_explorer(aligned, corners, n_points: int = 300,
                 "speed": chan("real_speed_kmh", 1),
                 "throttle": chan("real_throttle", 3),
                 "brake": chan("real_brake", 3),
+                # real_steering isn't carried by the alignment, so chan() returns []
+                # — harmless; the widget is driven by the primary lap's steering.
+                "steering": chan("real_steering", 3),
                 "gear": [None if v is None else int(round(v)) for v in ref_gear_raw],
             }
         else:

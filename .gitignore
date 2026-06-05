@@ -218,6 +218,7 @@ data/fastf1_cache/
 graphify-out/
 src/graphify-out/
 output/
+data/
 
 # Misc
 note.md

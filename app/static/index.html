@@ -32,6 +32,29 @@
     background: rgba(255,255,255,0.15); color: #fff;
   }
   .lang-btn:hover:not(.active) { color: rgba(255,255,255,0.8); }
+
+  /* Steering-wheel widget — pure SVG, top-right of the Track Explorer map. */
+  #txSteerWidget {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 100px;
+    height: 100px;
+    pointer-events: none;
+    z-index: 10;
+  }
+  #txSteerInner {
+    width: 100px;
+    height: 100px;
+    transform: rotate(0deg);
+    transition: transform 0.05s linear;
+  }
+  #txSteerWidget .tx-steer-label {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-align: center;
+    letter-spacing: 0.1em;
+  }
 </style>
 </head>
 <body>
@@ -368,6 +391,7 @@
             <div class="tx-val"><span class="txv-k" data-i18n="label.speed">Speed</span><span class="txv-v" id="txSpeed">—<i>km/h</i></span></div>
             <div class="tx-val"><span class="txv-k" data-i18n="label.throttle">Throttle</span><span class="txv-v" id="txThrottle">—<i>%</i></span></div>
             <div class="tx-val"><span class="txv-k" data-i18n="label.brake">Brake</span><span class="txv-v" id="txBrake">—<i>%</i></span></div>
+            <div class="tx-val"><span class="txv-k" data-i18n="label.steering">Steering</span><span class="txv-v" id="txSteer">—</span></div>
             <div class="tx-val"><span class="txv-k" data-i18n="label.gear">Gear</span><span class="txv-v" id="txGear">—</span></div>
           </div>
         </div>
