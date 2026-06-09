@@ -1366,7 +1366,10 @@
   function txStartPlayback() {
     const n = txState.n;
     if (!n || n < 2) return;
-    if (playbackIndex >= n - 1) playbackIndex = 0; // restart if parked at the end
+    // Resume from wherever the cursor currently sits (last txSetIndex call).
+    // txState.idx defaults to 0, so a fresh lap still starts from the beginning.
+    playbackIndex = txState.idx || 0;
+    if (playbackIndex >= n - 1) playbackIndex = 0; // parked at the end -> restart
     playbackActive = true;
     playbackLastTs = 0;
     const btn = $("txPlayBtn");
@@ -1795,6 +1798,7 @@
 
   // rAF-throttled so rapid mousemove stays smooth and visually stable.
   function txOnMove(evt) {
+    if (playbackActive) return;          // playback owns the cursor — hover is inert
     txPendingEvt = evt;
     if (txRaf) return;
     txRaf = requestAnimationFrame(() => {
@@ -2058,6 +2062,12 @@
           `background:var(--bg-2);color:var(--text);border:1px solid var(--border);` +
           `border-radius:11px;cursor:pointer;line-height:1;` +
           `transition:border-color .2s,background .2s;">▶</button>` +
+        `<button type="button" class="btn" id="txResetBtn" aria-label="Reset to start" ` +
+          `style="display:inline-flex;align-items:center;justify-content:center;` +
+          `min-width:46px;height:38px;padding:0 16px;font-size:0.9rem;font-weight:600;` +
+          `background:var(--bg-2);color:var(--text);border:1px solid var(--border);` +
+          `border-radius:11px;cursor:pointer;line-height:1;` +
+          `transition:border-color .2s,background .2s;">⏮ Reset</button>` +
         `<label style="display:inline-flex;align-items:center;gap:8px;` +
           `color:var(--text-dim);font-size:0.85rem;font-weight:600;letter-spacing:.03em;">` +
           `<span>Speed</span>` +
@@ -2066,12 +2076,20 @@
             `<option value="0.5">0.5×</option>` +
             `<option value="1" selected>1×</option>` +
             `<option value="2">2×</option>` +
+            `<option value="3">3×</option>` +
+            `<option value="4">4×</option>` +
+            `<option value="5">5×</option>` +
           `</select>` +
         `</label>`;
       readoutEl.parentNode.insertBefore(bar, readoutEl);
 
-      const playBtn = $("txPlayBtn"), speedSel = $("txSpeedSel");
+      const playBtn = $("txPlayBtn"), speedSel = $("txSpeedSel"), resetBtn = $("txResetBtn");
       if (playBtn) playBtn.addEventListener("click", txTogglePlayback);
+      if (resetBtn) resetBtn.addEventListener("click", () => {
+        txStopPlayback();          // stop if running
+        txSetIndex(0, true);       // jump marker/telemetry back to lap start
+        playbackIndex = 0;         // next Play starts from the beginning
+      });
       if (speedSel) speedSel.addEventListener("change", () => {
         // Live rate change — read next frame, so it applies mid-play.
         playbackSpeed = parseFloat(speedSel.value) || 1;
@@ -2081,7 +2099,8 @@
     // Manual interaction with the map cancels playback (hover or click), then the
     // existing hover handlers take over. These are ADDITIVE listeners — the
     // original hover/scrub logic below is untouched.
-    svg.addEventListener("mousemove", () => { if (playbackActive) txStopPlayback(); });
+    // Hover does NOT interrupt playback (see txOnMove / mouseleave early-returns).
+    // An explicit click/tap on the map still pauses.
     svg.addEventListener("click", () => { if (playbackActive) txStopPlayback(); });
     svg.addEventListener("touchstart", () => { if (playbackActive) txStopPlayback(); });
 
@@ -2092,9 +2111,11 @@
     svg.addEventListener("mousemove", txSegMove);
     svg.addEventListener("mouseenter", () => frame.classList.add("is-active"));
     svg.addEventListener("mouseleave", () => {
+      if (playbackActive) return;          // never disturb an active playback
       frame.classList.remove("is-active");
       txTooltip().style.display = "none";  // hide segment tooltip on exit
-      txSetIndex(0, true);                 // Design B: return to lap-start idle
+      // Leave the marker exactly where the user last hovered (no reset to 0), so
+      // pressing Play resumes from there.
     });
     svg.addEventListener("touchmove", (e) => {
       if (e.touches && e.touches[0]) { txOnMove(e.touches[0]); e.preventDefault(); }
