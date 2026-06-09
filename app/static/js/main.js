@@ -1317,7 +1317,7 @@
   const CORNER_NEAR_M = 35;          // hover this close (m) to an apex -> label it
   let txState = {
     points: [], telemetry: {}, markers: [], n: 0,
-    cursorEls: [], idx: 0, nearCid: undefined,
+    cursorEls: [], idx: 0, nearCid: undefined, pinned: false,
   };
   let txRaf = 0, txPendingEvt = null;
 
@@ -1805,9 +1805,9 @@
       txRaf = 0;
       const e = txPendingEvt; txPendingEvt = null;
       if (!e || !txState.points.length) return;
-      const c = txClientToVb(e);
-      if (!c) return;
-      txSetIndex(txNearestIndex(c.x, c.y), false);
+      // Click-to-seek: hovering no longer moves the cursor (the SVG "click"
+      // handler pins it). A hover highlight could update here, but we must NOT
+      // call txSetIndex(). Heat-map hover tooltips are handled by txSegMove.
     });
   }
 
@@ -1837,7 +1837,7 @@
       if (proSteerW) proSteerW.hidden = true; // no GPS → no Pro wheel either
       const pb0 = $("txPlayback");
       if (pb0) pb0.style.display = "none";    // no GPS → nothing to play back
-      txState = { points: [], telemetry: {}, markers: [], n: 0, cursorEls: [], idx: 0, nearCid: undefined, refTelemetry: null };
+      txState = { points: [], telemetry: {}, markers: [], n: 0, cursorEls: [], idx: 0, nearCid: undefined, pinned: false, refTelemetry: null };
       return;
     }
     stage.style.display = "";
@@ -1857,6 +1857,7 @@
       cursorEls: [],
       idx: 0,
       nearCid: undefined,
+      pinned: false,
       refTelemetry: ex.ref_telemetry || null,
     };
     // "Compare Driver" toggle is only offered when this run carries reference telemetry.
@@ -2087,6 +2088,7 @@
       if (playBtn) playBtn.addEventListener("click", txTogglePlayback);
       if (resetBtn) resetBtn.addEventListener("click", () => {
         txStopPlayback();          // stop if running
+        txState.pinned = false;    // mouseleave reverts to resetting again
         txSetIndex(0, true);       // jump marker/telemetry back to lap start
         playbackIndex = 0;         // next Play starts from the beginning
       });
@@ -2101,7 +2103,14 @@
     // original hover/scrub logic below is untouched.
     // Hover does NOT interrupt playback (see txOnMove / mouseleave early-returns).
     // An explicit click/tap on the map still pauses.
-    svg.addEventListener("click", () => { if (playbackActive) txStopPlayback(); });
+    svg.addEventListener("click", (e) => {
+      if (e.button !== 0) return;            // left-click only
+      if (playbackActive) txStopPlayback();  // click still pauses playback
+      const c = txClientToVb(e);
+      if (!c || !txState.points.length) return;
+      txState.pinned = true;                 // remember the user has pinned a spot
+      txSetIndex(txNearestIndex(c.x, c.y), true);  // pin cursor to the clicked point
+    });
     svg.addEventListener("touchstart", () => { if (playbackActive) txStopPlayback(); });
 
     svg.addEventListener("mousemove", txOnMove);
@@ -2114,8 +2123,9 @@
       if (playbackActive) return;          // never disturb an active playback
       frame.classList.remove("is-active");
       txTooltip().style.display = "none";  // hide segment tooltip on exit
-      // Leave the marker exactly where the user last hovered (no reset to 0), so
-      // pressing Play resumes from there.
+      // Click-to-seek: keep a pinned marker where it was clicked; if the user
+      // has never clicked, revert to lap start.
+      if (!txState.pinned) txSetIndex(0, true);
     });
     svg.addEventListener("touchmove", (e) => {
       if (e.touches && e.touches[0]) { txOnMove(e.touches[0]); e.preventDefault(); }
@@ -2153,7 +2163,9 @@
         txSetIndex(idxFromPlot(tch.clientX, plot), false);
         e.preventDefault();
       }, { passive: false });
-      charts.addEventListener("mouseleave", () => txSetIndex(0, true));  // idle, like the SVG
+      charts.addEventListener("mouseleave", () => {
+        if (!playbackActive) txSetIndex(txState.idx ?? 0, true);
+      });
     }
 
     // CHANGE 2 — Compare Driver toggle: re-render charts (single vs two-trace) in place.
