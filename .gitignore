@@ -218,7 +218,9 @@ data/fastf1_cache/
 graphify-out/
 src/graphify-out/
 output/
-data/
+data/*
+!data/reference_laps/
+!data/reference_laps/*.pkl
 
 # Misc
 note.md

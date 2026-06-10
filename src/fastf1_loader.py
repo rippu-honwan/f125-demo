@@ -137,6 +137,33 @@ def load_real_telemetry(driver: str, year: int, session: str = 'Q',
         (resampled_data, metadata)
         metadata includes 'brake_format' to inform downstream analysis.
     """
+    import pickle
+    from pathlib import Path
+
+    PREBUILD_DIR = Path(__file__).parent.parent / "data" / "reference_laps"
+    PREBUILD_DIR.mkdir(parents=True, exist_ok=True)
+
+    def _pkl_path(year, driver, session_type, track):
+        key = f"{year}_{driver}_{session_type}_{track}".lower()
+        return PREBUILD_DIR / f"{key}.pkl"
+
+    def _load_from_pkl(year, driver, session_type, track):
+        p = _pkl_path(year, driver, session_type, track)
+        if p.exists():
+            try:
+                with open(p, "rb") as f:
+                    return pickle.load(f)
+            except Exception:
+                p.unlink(missing_ok=True)  # corrupt — delete and re-fetch
+        return None
+
+    def _save_to_pkl(year, driver, session_type, track, data):
+        try:
+            with open(_pkl_path(year, driver, session_type, track), "wb") as f:
+                pickle.dump(data, f)
+        except Exception:
+            pass  # saving is best-effort; never crash the request
+
     # Resolve GP name
     if gp:
         gp_name = gp
@@ -148,6 +175,13 @@ def load_real_telemetry(driver: str, year: int, session: str = 'Q',
         raise ValueError("Must provide --track or --gp.")
 
     session_type = SESSION_MAP.get(session.upper(), session)
+
+    # Pre-built reference lap cache — serve instantly, skip FastF1 entirely
+    cached = _load_from_pkl(year, driver, session_type, track)
+    if cached is not None:
+        print(f"  ✓ Loaded from reference cache: "
+              f"{_pkl_path(year, driver, session_type, track).name}")
+        return cached
 
     print(f"  Loading: {year} {gp_name} - {session_type}")
     print(f"  Driver: {driver}")
@@ -250,5 +284,8 @@ def load_real_telemetry(driver: str, year: int, session: str = 'Q',
         'telemetry_points': len(tel),
         'brake_format': brake_format,  # NEW: downstream needs this
     }
+
+    # Persist to pre-built reference cache for next time (best-effort)
+    _save_to_pkl(year, driver, session_type, track, (resampled, meta))
 
     return resampled, meta
