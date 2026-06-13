@@ -116,6 +116,40 @@ SHORT_NAMES = {
     "hungaroring": "Hungaroring",
 }
 
+# Alternate ``trackId`` values a CSV may use (country / sponsor / alternate
+# circuit names) mapped to the canonical ``tracks/<key>.json`` stem. Consulted by
+# _detect_track_from_csv *after* an exact filename match fails and *before* the
+# loose contains-match, so explicit aliases win over fuzzy matches. Keys are
+# lowercased to match the normalised trackId. ``singapore`` and ``bahrain`` need
+# no entry — they already resolve via the exact filename match.
+TRACK_ALIASES = {
+    "austria": "spielberg",
+    "red_bull_ring": "spielberg",
+    "abu_dhabi": "yas_marina",
+    "vegas": "las_vegas",
+    "brazil": "interlagos",
+    "sao_paulo": "interlagos",
+    "canada": "montreal",
+    "australia": "melbourne",
+    "albert_park": "melbourne",
+    "mexico": "mexico_city",
+    "hermanos_rodriguez": "mexico_city",
+    "china": "shanghai",
+    "italy": "monza",
+    "belgium": "spa",
+    "netherlands": "zandvoort",
+    "hungary": "hungaroring",
+    "britain": "silverstone",
+    "british": "silverstone",
+    "spain": "barcelona",
+    "japan": "suzuka",
+    "japanese": "suzuka",
+    "saudi": "jeddah",
+    "qatar": "lusail",
+    "usa": "austin",
+    "cota": "austin",
+}
+
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
@@ -314,11 +348,18 @@ def _detect_track_from_csv(csv_path: str) -> "tuple[Optional[str], Optional[str]
         tid = str(raw["trackId"].iloc[0]).strip().lower()
         if not tid or tid in ("nan", "none", ""):
             return None, None
-        # Exact filename match first, then a loose contains-match.
+        # Exact filename match first, then known aliases, then a loose
+        # contains-match.
         try:
             return tid, load_track(tid).name
         except FileNotFoundError:
             pass
+        alias = TRACK_ALIASES.get(tid)
+        if alias:
+            try:
+                return alias, load_track(alias).name
+            except FileNotFoundError:
+                pass
         for p in (PROJECT_ROOT / "tracks").glob("*.json"):
             stem = p.stem.lower()
             if tid in stem or stem in tid:

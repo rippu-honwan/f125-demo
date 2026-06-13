@@ -1895,15 +1895,18 @@
   // rAF-throttled so rapid mousemove stays smooth and visually stable.
   function txOnMove(evt) {
     if (playbackActive) return;          // playback owns the cursor — hover is inert
+    if (txState.pinned) return;          // pinned: hover is inert until the next click
     txPendingEvt = evt;
     if (txRaf) return;
     txRaf = requestAnimationFrame(() => {
       txRaf = 0;
       const e = txPendingEvt; txPendingEvt = null;
       if (!e || !txState.points.length) return;
-      // Click-to-seek: hovering no longer moves the cursor (the SVG "click"
-      // handler pins it). A hover highlight could update here, but we must NOT
-      // call txSetIndex(). Heat-map hover tooltips are handled by txSegMove.
+      // Live hover-scrub: move the marker to the nearest point under the cursor,
+      // exactly like dragging across the charts. Clicking pins it (see below).
+      const c = txClientToVb(e);
+      if (!c) return;
+      txSetIndex(txNearestIndex(c.x, c.y), false);
     });
   }
 
