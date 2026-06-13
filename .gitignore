@@ -207,6 +207,7 @@ marimo/_lsp/
 __marimo__/
 .DS_Store
 cache/
+cache/fastf1/
 tests/
 
 # FastF1 cache (regeneratable)

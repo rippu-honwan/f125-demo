@@ -64,6 +64,7 @@ from src.loader import (  # noqa: E402
 )
 from src.corners import analyze_solo, summarize_corners  # noqa: E402
 from src.track import load_track, auto_detect_track  # noqa: E402
+from src.fastf1_loader import resolve_gp_name  # noqa: E402  (track -> official GP name)
 from src.coaching import (  # noqa: E402  (read-only consumption)
     _generate_action_plan,
     _estimate_potential,
@@ -1143,6 +1144,57 @@ def _discover_tracks() -> list:
 def tracks() -> list:
     """Supported tracks for the frontend dropdown, auto-discovered from tracks/*.json."""
     return _discover_tracks()
+
+
+# Best-qualifier lookups are expensive (a FastF1 session load), so memoise them
+# per (year, track) for the life of the process. None is cached too, so a known
+# "no data" combo isn't retried on every keystroke.
+_BEST_DRIVER_CACHE: "dict[tuple[int, str], Optional[str]]" = {}
+
+
+def _best_qualifier(year: int, track: str) -> Optional[str]:
+    """Return the pole-sitter's 3-letter code for (year, track), or None.
+
+    Uses FastF1's qualifying classification (Position == 1). Loaded with only the
+    results table (no laps/telemetry) so the lookup stays as light as possible.
+    Any failure (unknown track, missing data, network) returns None — the caller
+    is expected to fall back to a default driver.
+    """
+    key = (int(year), (track or "").strip().lower())
+    if key in _BEST_DRIVER_CACHE:
+        return _BEST_DRIVER_CACHE[key]
+
+    code: Optional[str] = None
+    try:
+        import fastf1  # local import: keep module import cheap; cache set up by src.fastf1_loader
+
+        gp_name = resolve_gp_name(key[1], key[0])
+        session = fastf1.get_session(key[0], gp_name, "Q")
+        session.load(laps=False, telemetry=False, weather=False, messages=False)
+        results = session.results
+        if results is not None and not results.empty and "Position" in results.columns:
+            pole = results.sort_values("Position").iloc[0]
+            abbr = pole.get("Abbreviation")
+            if isinstance(abbr, str) and abbr.strip():
+                code = abbr.strip().upper()
+    except Exception:
+        traceback.print_exc()
+        code = None
+
+    _BEST_DRIVER_CACHE[key] = code
+    return code
+
+
+@app.get("/best_driver")
+def best_driver(year: int = DEFAULT_YEAR, track: str = "") -> JSONResponse:
+    """Best qualifier (pole-sitter) for a year + track, for the auto-driver UI.
+
+    Returns ``{"driver": "VER"|null, "year": ..., "track": ...}``. ``driver`` is
+    null when it can't be determined; the frontend falls back to a default.
+    """
+    track = (track or "").strip().lower()
+    code = _best_qualifier(year, track) if track else None
+    return JSONResponse({"driver": code, "year": int(year), "track": track})
 
 
 @app.post("/laps")

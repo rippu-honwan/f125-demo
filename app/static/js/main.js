@@ -427,6 +427,12 @@
   const trackDetectMsg = $("trackDetectMsg");
   const trackDetectMsgText = $("trackDetectMsgText");
 
+  // Reference-driver auto-selection refs. The driver <select> is auto-set to the
+  // best qualifier but stays a normal, user-overridable dropdown (never disabled).
+  const yearSel        = $("yearSel");        // year dropdown (2023/2024/2025)
+  const driverSelect   = $("driver");         // visible driver dropdown (auto-selected, overridable)
+  const bestDriverCode = $("bestDriverCode"); // read-only "Best qualifier: XXX" code span
+
   let selectedFile = null;
   let kcData = [];          // per-corner trace data, for mini-chart hover tooltips
   let kcDriver = "Pro";     // reference driver label shown in those tooltips
@@ -573,7 +579,7 @@
       trackDetectMsg.hidden = true;
     }
   }
-  function applyDetectedTrack(key, name) {
+  function applyDetectedTrack(key, name, year) {
     if (key && trackOptionExists(key)) {
       trackSelect.value = key;             // keep the form's source of truth in sync
       trackAuto.hidden = false;
@@ -585,6 +591,45 @@
     } else {
       showManualTrack("Couldn’t detect a track from this CSV — please choose one manually.");
     }
+    // Auto-set the year from the CSV when present and offered as an option; if the
+    // CSV has no year (or it isn't in the list) leave #yearSel as-is (default 2025).
+    if (year != null && yearSel &&
+        Array.from(yearSel.options).some((o) => o.value === String(year))) {
+      yearSel.value = String(year);
+    }
+    // Track + year are now set — refresh the best-qualifier driver for the combo.
+    updateBestDriver();
+  }
+
+  // Detect a season year from the uploaded CSV's "year"/"season" column, if any.
+  // Telemetry exports can be 100MB+, so we read only the first slice (header +
+  // many rows) and match a 4-digit year. Returns the year number, or null when
+  // the column is absent/empty so the caller can keep the current selection.
+  async function detectYearFromCsv(file) {
+    try {
+      const slice = (file && file.slice) ? file.slice(0, 65536) : file;
+      const text = await slice.text();
+      const lines = text.split(/\r?\n/).filter((l) => l.length);
+      if (lines.length < 2) return null;
+      const header = lines[0];
+      // Mirror the backend's separator detection (SRT uses TAB).
+      const tabs = (header.match(/\t/g) || []).length;
+      const semis = (header.match(/;/g) || []).length;
+      const commas = (header.match(/,/g) || []).length;
+      const sep = (tabs > commas && tabs > semis) ? "\t" : (semis > commas ? ";" : ",");
+      const cols = header.split(sep).map((c) => c.trim().toLowerCase());
+      let idx = cols.indexOf("year");
+      if (idx === -1) idx = cols.indexOf("season");
+      if (idx === -1) return null;
+      for (let i = 1; i < lines.length; i++) {
+        const cell = (lines[i].split(sep)[idx] || "").trim();
+        const m = cell.match(/\b(?:19|20)\d{2}\b/);   // a plausible 4-digit year
+        if (m) return parseInt(m[0], 10);
+      }
+      return null;
+    } catch (_) {
+      return null;   // unreadable/odd file — leave the year as-is
+    }
   }
   trackChange.addEventListener("click", () => {
     trackAuto.hidden = true;
@@ -593,6 +638,54 @@
     trackDetectMsgText.textContent = "Manual override — auto-detection is off for this file.";
     trackDetectMsg.hidden = false;
   });
+
+  // -------- Auto-select the reference driver (best qualifier) --------
+  // The driver is no longer chosen by hand: whenever the year or track changes we
+  // ask the backend for the best qualifier of that (year, track) and store it in
+  // the hidden #driver input, plus echo it in the read-only "Best qualifier:" label.
+  // Any failure (network, unknown combo, empty result) falls back to VER silently.
+  let bestDriverToken = 0;   // guards against out-of-order /best_driver responses
+  function setBestDriver(code) {
+    const c = (code || "VER").trim().toUpperCase() || "VER";
+    // Auto-select the driver in the (still enabled) dropdown — only if it's a real
+    // option, so an off-grid pole-sitter never blanks the select. The user can
+    // freely change the selection afterwards; we never disable it.
+    if (driverSelect &&
+        Array.from(driverSelect.options).some((o) => o.value === c)) {
+      driverSelect.value = c;
+    }
+    if (bestDriverCode) bestDriverCode.textContent = c;
+  }
+  async function updateBestDriver() {
+    const year = (yearSel && yearSel.value || "").trim();
+    const track = (trackSelect && trackSelect.value || "").trim();
+    if (!year || !track) { setBestDriver("VER"); return; }
+
+    const token = ++bestDriverToken;
+    if (bestDriverCode) bestDriverCode.textContent = "…";   // loading hint
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    try {
+      const url = apiUrl("/best_driver?year=" + encodeURIComponent(year) +
+                         "&track=" + encodeURIComponent(track));
+      const res = await fetch(url, { method: "GET", signal: controller.signal });
+      if (token !== bestDriverToken) return;                // superseded by a newer change
+      let code = "";
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data && data.driver) code = String(data.driver);
+      }
+      setBestDriver(code || "VER");                         // empty / nothing -> VER
+    } catch (_) {
+      if (token !== bestDriverToken) return;
+      setBestDriver("VER");                                 // network/abort -> VER
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+  if (yearSel) yearSel.addEventListener("change", updateBestDriver);
+  if (trackSelect) trackSelect.addEventListener("change", updateBestDriver);
 
   dropzone.addEventListener("click", () => fileInput.click());
   dropzone.addEventListener("keydown", (e) => {
@@ -807,8 +900,11 @@
         throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
       }
 
-      // Auto-detect the track from the CSV's trackId (default path).
-      applyDetectedTrack(payload.detected_track, payload.detected_track_name);
+      // Auto-detect the track (from the backend) and the season year (read from
+      // the CSV here); applyDetectedTrack sets both, then refreshes the driver.
+      const detectedYear = await detectYearFromCsv(file);
+      if (token !== lapFetchToken) return;  // a newer upload superseded this one
+      applyDetectedTrack(payload.detected_track, payload.detected_track_name, detectedYear);
 
       lapData = Array.isArray(payload.laps) ? payload.laps : [];
       if (!payload.has_lap_index) {
@@ -1994,8 +2090,8 @@
     const fd = new FormData();
     fd.append("file", selectedFile);
     fd.append("mode", currentMode);
-    fd.append("driver", $("driver").value || "VER");
-    fd.append("year", $("year").value);
+    fd.append("driver", $("driver").value || "VER");   // hidden input, auto-set to best qualifier
+    fd.append("year", $("yearSel").value);             // year comes from the #yearSel dropdown
     fd.append("session", $("session").value);
     fd.append("track", $("track").value);
     fd.append("lap_index", selectedLapIndex == null ? "" : String(selectedLapIndex));
@@ -2349,5 +2445,5 @@
   resetTrackDetection();      // track is auto-detected from the CSV on upload
   applyI18n();                // localise all static text + controls for the saved language
   pingBackend();              // fire-and-forget: warn the user if the backend is cold-starting
-  loadTracks();               // replace the static <select> options with the backend's list
+  loadTracks().then(updateBestDriver);  // load tracks, then auto-select the best qualifier
 })();

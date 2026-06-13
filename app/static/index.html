@@ -33,6 +33,19 @@
   }
   .lang-btn:hover:not(.active) { color: rgba(255,255,255,0.8); }
 
+  /* Auto-detected best qualifier (read-only) shown beneath the track selector. */
+  .best-qualifier {
+    margin-top: 0.6rem;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.55);
+    letter-spacing: 0.01em;
+  }
+  .best-qualifier b {
+    color: #fff;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+
   /* Steering-wheel widget — pure SVG, top-right of the Track Explorer map. */
   #txSteerWidget {
     position: absolute;
@@ -163,49 +176,15 @@
       <div class="form-section">
         <div class="section-heading"><span class="sh-num">3</span> <span data-i18n="section.referenceTrack">Reference &amp; Track</span> <span class="sh-opt" id="refOpt"></span></div>
         <div class="config card" id="config">
-          <div class="field ref-field">
-            <label for="driver" data-i18n="label.driver">Driver</label>
-            <select class="control" id="driver">
-              <option value="VER" selected>VER · Verstappen</option>
-              <option value="NOR">NOR · Norris</option>
-              <option value="PIA">PIA · Piastri</option>
-              <option value="LEC">LEC · Leclerc</option>
-              <option value="SAI">SAI · Sainz</option>
-              <option value="HAM">HAM · Hamilton</option>
-              <option value="RUS">RUS · Russell</option>
-              <option value="PER">PER · Pérez</option>
-              <option value="ALO">ALO · Alonso</option>
-              <option value="STR">STR · Stroll</option>
-              <option value="GAS">GAS · Gasly</option>
-              <option value="OCO">OCO · Ocon</option>
-              <option value="ALB">ALB · Albon</option>
-              <option value="TSU">TSU · Tsunoda</option>
-              <option value="HUL">HUL · Hülkenberg</option>
-              <option value="MAG">MAG · Magnussen</option>
-              <option value="RIC">RIC · Ricciardo</option>
-              <option value="BOT">BOT · Bottas</option>
-              <option value="ZHO">ZHO · Zhou</option>
-              <option value="LAW">LAW · Lawson</option>
-              <option value="SAR">SAR · Sargeant</option>
-              <option value="ANT">ANT · Antonelli</option>
-              <option value="BEA">BEA · Bearman</option>
-              <option value="COL">COL · Colapinto</option>
-              <option value="DOO">DOO · Doohan</option>
-              <option value="HAD">HAD · Hadjar</option>
-              <option value="BOR">BOR · Bortoleto</option>
-            </select>
-          </div>
-          <div class="field ref-field">
-            <label for="year" data-i18n="label.year">Year</label>
-            <select class="control" id="year">
+          <div class="field">
+            <label for="yearSel" data-i18n="label.year">Year</label>
+            <select class="control" id="yearSel">
               <option selected>2025</option>
               <option>2024</option>
               <option>2023</option>
-              <option>2022</option>
-              <option>2021</option>
             </select>
           </div>
-          <div class="field ref-field">
+          <div class="field">
             <label for="session" data-i18n="label.session">Session</label>
             <select class="control" id="session">
               <option value="Q" selected>Qualifying</option>
@@ -215,6 +194,35 @@
               <option value="FP1">Practice 1</option>
               <option value="FP2">Practice 2</option>
               <option value="FP3">Practice 3</option>
+            </select>
+          </div>
+          <!-- Driver: auto-selected to the best qualifier for the chosen year +
+               track (see updateBestDriver / #bestDriverLabel), but remains a normal,
+               enabled dropdown so the user can override the auto-pick at any time.
+               Uses plain .field (not .ref-field) so it is never opacity-dimmed. -->
+          <div class="field">
+            <label for="driver" data-i18n="label.driver">Driver</label>
+            <select class="control" id="driver" name="driver">
+              <option value="VER" selected>VER · Verstappen</option>
+              <option value="NOR">NOR · Norris</option>
+              <option value="LEC">LEC · Leclerc</option>
+              <option value="HAM">HAM · Hamilton</option>
+              <option value="SAI">SAI · Sainz</option>
+              <option value="RUS">RUS · Russell</option>
+              <option value="PIA">PIA · Piastri</option>
+              <option value="ANT">ANT · Antonelli</option>
+              <option value="ALO">ALO · Alonso</option>
+              <option value="STR">STR · Stroll</option>
+              <option value="GAS">GAS · Gasly</option>
+              <option value="OCO">OCO · Ocon</option>
+              <option value="ALB">ALB · Albon</option>
+              <option value="SAR">SAR · Sargeant</option>
+              <option value="TSU">TSU · Tsunoda</option>
+              <option value="LAW">LAW · Lawson</option>
+              <option value="HUL">HUL · Hülkenberg</option>
+              <option value="MAG">MAG · Magnussen</option>
+              <option value="BEA">BEA · Bearman</option>
+              <option value="DOO">DOO · Doohan</option>
             </select>
           </div>
           <div class="field" id="trackField">
@@ -243,6 +251,9 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
               <span id="trackDetectMsgText"></span>
             </div>
+            <!-- Read-only: the best qualifier for the selected year + track, fetched
+                 from /best_driver and used as the comparison reference driver. -->
+            <div class="best-qualifier" id="bestDriverLabel">Best qualifier: <b id="bestDriverCode">VER</b></div>
           </div>
         </div>
         <div class="ref-hint" id="refHint">
