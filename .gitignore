@@ -219,6 +219,8 @@ data/fastf1_cache/
 graphify-out/
 src/graphify-out/
 output/
+.understand-anything/
+.claude/
 data/*
 !data/reference_laps/
 !data/reference_laps/*.pkl
