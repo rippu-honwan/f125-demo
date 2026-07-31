@@ -52,12 +52,21 @@ jobs:
           set -euo pipefail
           rm -rf _site
           mkdir -p _site
-          # Copy the entire static frontend (index.html is the site root).
-          cp -R app/static/. _site/
+          # Keep the "static/" folder so the page's relative asset paths
+          # (static/css/main.css, static/js/main.js) resolve the same way on
+          # GitHub Pages' /<repo>/ subpath as they do behind the FastAPI server.
+          cp -R app/static _site/static
+          # index.html is the site root, not a static asset.
+          mv _site/static/index.html _site/index.html
+          # Sample telemetry for the "Use Sample" button (fetched as data/...).
+          mkdir -p _site/data
+          cp data/suzuka_sample.csv _site/data/
+          # Replace the cache-bust token the FastAPI server fills at runtime.
+          sed -i "s/__BUILD__/${GITHUB_SHA::7}/g" _site/index.html
           # Disable Jekyll so files/dirs are served exactly as-is.
           touch _site/.nojekyll
           echo "Published files:"
-          ls -la _site
+          ls -laR _site
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
