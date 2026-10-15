@@ -766,7 +766,7 @@
   /* Analysis mode segmented control */
   .mode-grid {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(7, 1fr);
     gap: 10px;
   }
   .mode-btn {
@@ -1459,6 +1459,13 @@
 .l3d-msg { padding: 16px; color: var(--text-dim); }
 .l3d-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .l3d-chip { background: var(--surface-2); border: 1px solid var(--border-strong); color: var(--text); border-radius: 999px; padding: 4px 10px; cursor: pointer; font: 0.8rem var(--font-body); }
+.l3d-follow[hidden] { display: none; }
+.l3d-gap { font: 700 1.5rem var(--font-display); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.l3d-gap-slow { color: #ff5a5a; }
+.l3d-gap-fast { color: #3ddc84; }
+.l3d-pro-speed { margin-left: 8px; color: #ffb366; }
+.l3d-legend { display: flex; gap: 14px; font-size: 0.75rem; color: var(--text-dim); }
+.l3d-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 @media (max-width: 900px) {
   .l3d-main[data-view="corners"] { grid-template-columns: minmax(0, 1fr); }
 }

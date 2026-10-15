@@ -179,6 +179,11 @@
             <span class="mb-name">3D<br>Learn</span>
             <span class="mb-tag">Pro lap</span>
           </button>
+          <button type="button" class="mode-btn" data-mode="compare_3d" role="tab" aria-selected="false">
+            <span class="mb-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M8 12h8M14 9l3 3-3 3"/></svg></span>
+            <span class="mb-name">3D<br>Compare</span>
+            <span class="mb-tag">vs Pro</span>
+          </button>
         </div>
         <div class="mode-desc" id="modeDesc">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
@@ -427,7 +432,11 @@
       <!-- 3D Learn: replay a pro lap on a 3D track (driven by static/js/learn3d/) -->
       <div class="result-block l3d" id="blkLearn3d">
         <div class="l3d-head">
-          <div class="section-label">3D Pro Lap</div>
+          <div class="section-label" id="l3dTitle">3D Pro Lap</div>
+          <div class="l3d-views l3d-follow" id="l3dFollow" role="group" aria-label="Camera follows" hidden>
+            <button type="button" data-follow="you" aria-pressed="true">You</button>
+            <button type="button" data-follow="pro" aria-pressed="false">Pro</button>
+          </div>
           <div class="l3d-views" role="group" aria-label="Side panel">
             <button type="button" class="l3d-view active" data-view="telemetry" aria-pressed="true"><span aria-hidden="true">📈</span> Telemetry</button>
             <button type="button" class="l3d-view" data-view="corners" aria-pressed="false"><span aria-hidden="true">🏁</span> Corners</button>
@@ -459,7 +468,7 @@
           <input type="range" id="l3dScrub" min="0" max="1000" value="0" step="1" aria-label="Lap position" />
           <span class="l3d-time" id="l3dTime">0:00.0 / 0:00.0</span>
         </div>
-        <div class="l3d-keys">Space play/pause · ← → ±2 s · 1/2/3 camera</div>
+        <div class="l3d-keys" id="l3dKeys">Space play/pause · ← → ±2 s · 1/2/3 camera</div>
       </div>
 
       <!-- Corner cards -->

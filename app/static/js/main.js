@@ -22,6 +22,7 @@
       "btn.runAnalysis.coaching":     "Run Coaching Report",
       "btn.runAnalysis.track_map":    "Run Track Explorer",
       "btn.runAnalysis.learn_3d":     "Load 3D Lap",
+      "btn.runAnalysis.compare_3d":   "Run 3D Compare",
       "upload.dzTitle":        "Drop your telemetry CSV",
       "upload.dzHint":         "or click to browse — exported from Sim Racing Telemetry",
       "upload.dzFormats":      ".CSV · tab or comma separated",
@@ -80,6 +81,9 @@
       "mode.learn3d.name":     "3D\nLearn",
       "mode.learn3d.tag":      "Pro lap",
       "mode.learn3d.desc":     "Watch a real F1 driver's lap on a 3D track — see where they brake, lift and get back on the throttle. No CSV needed.",
+      "mode.compare3d.name":   "3D\nCompare",
+      "mode.compare3d.tag":    "vs Pro",
+      "mode.compare3d.desc":   "Race your lap against a real F1 driver on a 3D track — both cars start together, with a live time gap, overlaid telemetry and the time you gain or lose in every corner.",
       "loading.messages":      ["Connecting to F1 data servers...",
                                 "Downloading 2025 qualifying telemetry...",
                                 "Aligning your lap with the pro...",
@@ -110,6 +114,7 @@
       "btn.runAnalysis.coaching":     "コーチングレポートを実行",
       "btn.runAnalysis.track_map":    "コースエクスプローラーを実行",
       "btn.runAnalysis.learn_3d":     "3Dラップを読み込む",
+      "btn.runAnalysis.compare_3d":   "3D比較を実行",
       "upload.dzTitle":        "テレメトリーCSVをドロップ",
       "upload.dzHint":         "またはクリックして選択 — Sim Racing Telemetryからエクスポート",
       "upload.dzFormats":      ".CSV · タブまたはカンマ区切り",
@@ -168,6 +173,9 @@
       "mode.learn3d.name":     "3D\n学習",
       "mode.learn3d.tag":      "プロのラップ",
       "mode.learn3d.desc":     "実際のF1ドライバーのラップを3Dコースで再生 — ブレーキ、リフト、再加速のポイントを確認。CSV不要。",
+      "mode.compare3d.name":   "3D\n比較",
+      "mode.compare3d.tag":    "プロと比較",
+      "mode.compare3d.desc":   "自分のラップと実際のF1ドライバーを3Dコースで同時スタート — ライブのタイム差、重ねたテレメトリー、コーナーごとの得失タイムを確認。",
       "loading.messages":      ["F1データサーバーに接続中...",
                                 "2025年予選テレメトリーをダウンロード中...",
                                 "あなたのラップとプロを照合中...",
@@ -191,7 +199,7 @@
   // mode key (data-mode) -> i18n prefix used by mode.*.name/.tag/.desc
   const MODE_I18N = {
     overview: "overview", lap_analysis: "lapAnalysis", comparison: "comparison",
-    coaching: "coaching", track_map: "trackMap", learn_3d: "learn3d",
+    coaching: "coaching", track_map: "trackMap", learn_3d: "learn3d", compare_3d: "compare3d",
   };
 
   let currentLang = localStorage.getItem("f1coach_lang") || "en";
@@ -492,6 +500,13 @@
       tag: "Pro lap",
       needsReference: true,
       desc: "3D Learn — replay a real F1 driver's lap on a 3D track. No CSV needed.",
+      blocks: ["blkLearn3d"],
+    },
+    compare_3d: {
+      label: "Run 3D Compare",
+      tag: "vs Pro",
+      needsReference: true,
+      desc: "3D Compare — your lap and a real F1 driver's lap race on a 3D track, with a live time gap.",
       blocks: ["blkLearn3d"],
     },
   };
@@ -1114,9 +1129,20 @@
     else if (mode === "comparison")   renderComparison(data);
     else if (mode === "coaching")     renderCoaching(data);
     else if (mode === "track_map")    renderTrackMap(data);
+    else if (mode === "compare_3d")   renderCompare3d(data);
     setFooter(data);
     results.classList.add("show");
     results.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // 3D Compare: hand the payload to the 3D viewer (static/js/learn3d/index.js).
+  function renderCompare3d(data) {
+    if (!window.Learn3D) { showError("The 3D viewer didn't load — check your connection and reload."); return; }
+    window.Learn3D.show(data).catch((err) => {
+      window.Learn3D.unload();
+      results.classList.remove("show");
+      showError(apiErrorMessage(err, "Couldn't start the 3D compare view."));
+    });
   }
 
   // -------- Shared comparison-family pieces --------
