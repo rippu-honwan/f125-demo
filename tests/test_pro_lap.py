@@ -62,7 +62,7 @@ class TestCornerActions:
     def test_does_not_inherit_previous_corner_braking(self):
         out = _corner_actions(_corners(T2), *_lap(brake_from=380))
         assert out[0]["action"] == "brake"
-        assert out[1]["action"] != "brake"
+        assert out[1]["action"] == "flat"
 
     def test_onset_too_close_to_apex_belongs_to_next_corner(self):
         d, t, s, th, b, g = _lap()
@@ -76,3 +76,9 @@ class TestCornerActions:
         c = _corner_actions(_corners(), *_lap())[0]
         assert (c["id"], c["short"], c["direction"]) == (1, "T1", "right")
         assert (c["entry_m"], c["apex_m"], c["exit_m"]) == (400, 500, 600)
+
+    def test_lift_ignores_previous_corner_exit(self):
+        d, t, s, th, b, g = _lap()
+        th[(d >= 600) & (d < 640)] = 0.6      # partial throttle after T1 exit (600), before T2 entry (620)
+        out = _corner_actions(_corners(T2), d, t, s, th, b, g)
+        assert out[1]["action"] == "flat"

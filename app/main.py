@@ -1172,19 +1172,28 @@ BRAKE_ON = 0.5                # reference brake is 0/1 but resampling leaves ram
 def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
     """Classify each corner of a pro lap as brake / lift / flat.
 
-    All arrays are index-aligned along lap distance ``d`` (metres). Only brake
-    *onsets* count, searched in ``[max(entry - 250, prev_apex - 30), apex - 30)``
-    so a corner never inherits the previous corner's braking and an onset right
-    at an apex is credited to the next corner (validated on Bahrain + Monza).
+    All arrays are index-aligned along lap distance ``d`` (metres). Brake onsets
+    are searched in ``[max(entry - BRAKE_SEARCH_LEAD_M, prev_apex - APEX_MARGIN_M),
+    apex - APEX_MARGIN_M)`` so a corner never inherits the previous corner's
+    braking and an onset right at an apex is credited to the next corner
+    (validated on Bahrain + Monza). Lift (throttle < LIFT_THROTTLE, no brake) is
+    checked in a separate window ``[max(entry - BRAKE_SEARCH_LEAD_M, prev_exit),
+    apex - APEX_MARGIN_M)`` so low throttle right after the previous corner's exit
+    is not miscounted as a lift in the current corner.
     """
     on = brake >= BRAKE_ON
     onsets = np.flatnonzero(on & ~np.r_[False, on[:-1]])    # off -> on transitions
-    out, prev_apex = [], -np.inf
+    # Detect throttle lift onsets: transitions to throttle < LIFT_THROTTLE
+    throttle_low = throttle < LIFT_THROTTLE
+    throttle_was_high = np.r_[True, throttle >= LIFT_THROTTLE][:-1]
+    lift_onsets = np.flatnonzero(throttle_low & throttle_was_high)
+
+    out, prev_apex, prev_exit = [], -np.inf, -np.inf
     for c in corners:
         entry, apex, exit_ = float(c["entry_m"]), float(c["apex_m"]), float(c["exit_m"])
         lo = max(entry - BRAKE_SEARCH_LEAD_M, prev_apex - APEX_MARGIN_M)
         hi = apex - APEX_MARGIN_M
-        prev_apex = apex
+        lift_lo = max(entry - BRAKE_SEARCH_LEAD_M, prev_exit)
         mine = onsets[(d[onsets] >= lo) & (d[onsets] < hi)]
         action, brake_start, brake_dur = "flat", None, None
         if mine.size:
@@ -1193,8 +1202,15 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
             i1 = i0 + (int(released[0]) - 1 if released.size else on.size - 1 - i0)
             action, brake_start = "brake", float(d[i0])
             brake_dur = round(float(t[i1] - t[i0]), 2)
-        elif np.any((d >= lo) & (d < hi) & (throttle < LIFT_THROTTLE)):
-            action = "lift"
+        else:
+            # For lift: detect throttle onset (transition to low) within the window,
+            # excluding the previous corner's exit point. Only count transitions that
+            # happen AFTER the previous corner's exit to avoid false positives.
+            mine_lift = lift_onsets[(d[lift_onsets] > prev_exit) & (d[lift_onsets] >= lift_lo) & (d[lift_onsets] < hi)]
+            if mine_lift.size:
+                action = "lift"
+        prev_apex = apex
+        prev_exit = exit_
         seg = np.flatnonzero((d >= entry) & (d <= exit_))
         k = int(seg[np.argmin(speed[seg])]) if seg.size else int(np.argmin(np.abs(d - apex)))
         out.append({
