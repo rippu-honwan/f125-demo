@@ -1194,6 +1194,11 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
     The search stops before the next corner (its brake/lift onset, or its json apex if
     it's flat), so apexes stay distinct and in lap order; entry/exit ranges may still
     overlap. Corners are processed in json-apex order because some track files aren't.
+
+    Known limitation: when the json drifts far from lap distance, an onset can fall in
+    the gap between two corners' windows and a real braking corner is reported flat
+    (e.g. Spa La Source). Fix: assign each onset to the nearest json corner after its
+    slowest point.
     """
     on = brake >= BRAKE_ON
     onsets = np.flatnonzero(on & ~np.r_[False, on[:-1]])    # off -> on transitions

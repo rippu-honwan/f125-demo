@@ -172,3 +172,5 @@ localStorage（try/catch 包住）：view（遙測／彎道）、鏡頭。
 - 職業車手 brake 只有開／關，冇力度 → brake 柱只會全滿或者空
 - 賽道闊度固定 14 m；彎位 kerb、run-off 冇
 - FastF1 GPS 原始約 4 Hz，平滑後彎位線條可能同真實 racing line 有幾米誤差
+- 彎道分類靠 `tracks/*.json` 嘅彎位搵 brake／lift onset；json 同 FastF1 圈距離偏差大嘅時候，個別 onset 會跌落兩個彎搜尋範圍之間嘅空隙，真係大力 brake 嘅彎會顯示做 FLAT（例：Spa La Source；25 條 cached 圈入面約 14 條有呢個情況，Bahrain、Monza 冇）。之後另開 branch 改做「每個 onset 分配畀佢最慢點之後最近嘅 json 彎」
+- 被下一個彎截住嘅 apex 搜尋，個 apex 可能落喺唔太有意義嘅點（例：Bahrain T6 會落喺 T7 onset 前）
