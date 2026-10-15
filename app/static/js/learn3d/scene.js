@@ -10,11 +10,22 @@ const CAMS = {
   chase: { back: 9, height: 3.2, ahead: 8, look: 0.5 },
 };
 
-/** Builds the scene into `container`. Throws if WebGL is unavailable. */
+/** Builds the scene into `container`. Throws if WebGL is unavailable or the data is unusable. */
 export function createScene(container, points, corners) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
+  try {
+    return buildScene(renderer, container, points, corners);
+  } catch (err) {
+    renderer.dispose();
+    renderer.forceContextLoss();
+    renderer.domElement.remove();
+    throw err;
+  }
+}
+
+/** Everything after the renderer exists; split out so a failure can release the GL context. */
+function buildScene(renderer, container, points, corners) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  container.prepend(renderer.domElement);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x9cc3dd);
@@ -57,7 +68,7 @@ export function createScene(container, points, corners) {
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000),
     new THREE.MeshStandardMaterial({ color: 0x5d7a4a, roughness: 1 }));
   ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -0.5;
+  ground.position.y = -1.5;
   scene.add(ground);
 
   // A thin box lying across the road at lap distance d.
@@ -82,13 +93,14 @@ export function createScene(container, points, corners) {
   const car = buildCar();
   scene.add(car);
 
-  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 5000);
+  const camera = new THREE.PerspectiveCamera(60, 1, 0.5, 3500);
   const resize = () => {
     const w = container.clientWidth || 1, h = container.clientHeight || 1;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   };
+  container.prepend(renderer.domElement);
   const ro = new ResizeObserver(resize);
   ro.observe(container);
   resize();
@@ -124,6 +136,7 @@ export function createScene(container, points, corners) {
       if (o.material) o.material.dispose();
     });
     renderer.dispose();
+    renderer.forceContextLoss();   // browsers cap live WebGL contexts (~16)
     renderer.domElement.remove();
   }
 
