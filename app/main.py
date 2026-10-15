@@ -1191,9 +1191,9 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
     brake and lift corners are re-anchored on the pro's slowest point (within
     APEX_SEARCH_AFTER_M of brake release / lift end) and entry/apex/exit shift together;
     flat corners keep the json positions and report speed/gear at the json apex.
-    The search never reaches past the next corner's brake/lift onset. Corners are
-    processed and returned in lap order (by json apex), because some track files
-    aren't ordered.
+    The search stops before the next corner (its brake/lift onset, or its json apex if
+    it's flat), so apexes stay distinct and in lap order; entry/exit ranges may still
+    overlap. Corners are processed in json-apex order because some track files aren't.
     """
     on = brake >= BRAKE_ON
     onsets = np.flatnonzero(on & ~np.r_[False, on[:-1]])    # off -> on transitions
@@ -1233,6 +1233,8 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
         prev_exit = exit_
         found.append((c, action, brake_start, brake_dur, i_on, i_off))
 
+    # Where each corner starts, for capping the previous corner's apex search.
+    starts = [d[f[4]] if f[4] is not None else float(f[0]["apex_m"]) for f in found] + [np.inf]
     out = []
     for n, (c, action, brake_start, brake_dur, i_on, i_off) in enumerate(found):
         entry, apex, exit_ = float(c["entry_m"]), float(c["apex_m"]), float(c["exit_m"])
@@ -1240,17 +1242,15 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
         if i_on is None:
             k = int(np.argmin(np.abs(d - apex)))
         else:
-            cap = d[i_off] + APEX_SEARCH_AFTER_M
-            nxt = found[n + 1][4] if n + 1 < len(found) else None
-            win = np.flatnonzero((d >= d[i_on]) & (d <= cap))
-            if nxt is not None:                   # never reach into the next corner's slow zone
-                win = win[d[win] < min(cap, d[nxt])]
+            win = np.flatnonzero((d >= d[i_on]) & (d <= d[i_off] + APEX_SEARCH_AFTER_M)
+                                 & (d < starts[n + 1]))
             k = int(win[np.argmin(speed[win])]) if win.size else i_on
             shift = float(d[k]) - apex
         out.append({
             "id": c.get("id"), "short": c.get("short"), "name": c.get("name"),
             "direction": c.get("direction"),
-            "entry_m": entry + shift, "apex_m": apex + shift, "exit_m": exit_ + shift,
+            "entry_m": round(entry + shift, 1), "apex_m": round(apex + shift, 1),
+            "exit_m": round(exit_ + shift, 1),
             "action": action, "brake_start_m": brake_start, "brake_duration_s": brake_dur,
             "min_speed_kmh": round(float(speed[k]), 1), "apex_gear": int(gear[k]),
         })

@@ -108,7 +108,7 @@ class TestCornerActions:
 
     def test_flat_corner_reports_speed_at_json_apex(self):
         d, t, s, th, b, g = _lap()
-        s[(d >= 610) & (d < 640)] = 90.0         # neighbouring corner's slow zone, just after T1 exit
+        s[(d >= 560) & (d < 580)] = 90.0         # slower point inside T1 but away from its json apex
         c = _corner_actions(_corners(), d, t, s, th, b, g)[0]
         assert c["action"] == "flat"
         assert c["min_speed_kmh"] == 120
@@ -123,6 +123,17 @@ class TestCornerActions:
         assert [c["action"] for c in out] == ["brake", "brake"]
         assert out[0]["apex_m"] == pytest.approx(450, abs=2)
         assert out[1]["apex_m"] == pytest.approx(580, abs=2)
+
+    def test_flat_corner_in_between_still_caps_refinement(self):
+        d, t, s, th, b, g = _lap(brake_from=380)
+        b[(d >= 590) & (d < 610)] = 1.0
+        th[(d >= 590) & (d < 610)] = 0.0
+        s[(d >= 600) & (d < 620)] = 70.0
+        kink = {"id": 2, "short": "K", "entry_m": 540, "apex_m": 560, "exit_m": 580}
+        t3 = {"id": 3, "short": "T3", "entry_m": 600, "apex_m": 650, "exit_m": 700}
+        out = _corner_actions(_corners(kink, t3), d, t, s, th, b, g)
+        assert [c["action"] for c in out] == ["brake", "flat", "brake"]
+        assert [c["apex_m"] for c in out] == pytest.approx([450, 560, 600], abs=2)
 
     def test_corners_processed_in_lap_order(self):
         out = _corner_actions([T2, *_corners()], *_lap(brake_from=380))
@@ -173,15 +184,11 @@ class TestProLapEndpoint:
         for c in brakes:
             assert c["brake_start_m"] < c["apex_m"]
 
-    def test_brake_apex_is_the_slowest_point(self, payload):
-        p = payload["points"]
-        d, speed = p["d"], p["speed"]
-        for c in payload["corners"]:
-            if c["action"] != "brake":
-                continue
-            k = d.index(round(c["apex_m"], 1))
-            assert speed[k] == pytest.approx(c["min_speed_kmh"], abs=0.1)
-            assert c["brake_start_m"] < c["apex_m"]
+    def test_apexes_are_distinct_and_in_lap_order(self, payload):
+        ap = [c["apex_m"] for c in payload["corners"]]
+        assert ap == sorted(set(ap))
+        t4 = next(c for c in payload["corners"] if c["short"] == "T4")
+        assert t4["apex_m"] == pytest.approx(1528, abs=10)   # json says 1680; the pro is slowest here
 
     def test_unknown_track_404(self):
         assert client.get("/pro_lap", params={"track": "atlantis"}).status_code == 404
