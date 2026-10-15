@@ -208,7 +208,6 @@ __marimo__/
 .DS_Store
 cache/
 cache/fastf1/
-tests/
 
 # FastF1 cache (regeneratable)
 data/fastf1_cache/
