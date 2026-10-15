@@ -37,6 +37,23 @@ test("stateAt clamps past the end of the lap", () => {
   assert.equal(stateAt(P, -1).d, 0);
 });
 
+test("stateAt interpolates every channel and follows the path direction", () => {
+  const Q = {
+    d: [0, 10, 20], t: [0, 1, 2],
+    x: [0, 4, 4], y: [0, 8, 16], z: [0, 2, 6],
+    speed: [100, 200, 300], throttle: [1, 0.5, 0], brake: [0, 0.5, 1],
+    steer: [0, 1, -1], gear: [3, 4, 5],
+  };
+  const s = stateAt(Q, 0.5);
+  assert.equal(s.x, 2);
+  assert.equal(s.y, 4);
+  assert.equal(s.z, 1);
+  assert.equal(s.throttle, 0.75);
+  assert.equal(s.brake, 0.25);
+  assert.equal(s.heading, Math.atan2(8, 4));
+  assert.equal(stateAt(Q, 1.5).heading, Math.atan2(8, 0));   // second segment points straight +y
+});
+
 test("timeAtDistance inverts distance to time", () => {
   assert.equal(timeAtDistance(P, 25), 2.5);
   assert.equal(timeAtDistance(P, 0), 0);
