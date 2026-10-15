@@ -151,3 +151,14 @@ class TestCompare3DErrors:
         assert res.status_code == 422
         assert res.json()["detail"] == "unknown track"
         assert not ran
+
+
+@pytest.mark.parametrize("over", [{"driver": "../x"}, {"session": "../x"}, {"year": "1800"}])
+def test_analyze_rejects_bad_lap_params(monkeypatch, over):
+    import app.main as m
+    ran = []
+    monkeypatch.setattr(m, "run_pipeline", lambda *a, **k: ran.append(1))
+    res = _post_compare(mode="comparison", **over)
+    assert res.status_code == 422
+    assert res.json()["detail"] == "invalid driver, session or year"
+    assert not ran

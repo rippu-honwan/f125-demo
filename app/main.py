@@ -1352,6 +1352,13 @@ def _build_you_lap(aligned, d_grid, lap_time: float) -> dict:
     }
 
 
+def _validate_lap_params(driver: str, session: str, year: int) -> None:
+    """driver/session/year end up in the reference-lap cache filename; reject anything odd."""
+    if (not re.fullmatch(r"[A-Z0-9]{1,3}", driver) or session not in PRO_LAP_SESSIONS
+            or not PRO_LAP_FIRST_YEAR <= int(year) <= time.localtime().tm_year):
+        raise HTTPException(status_code=422, detail="invalid driver, session or year")
+
+
 def _pro_lap_payload(df, meta: dict, driver: str, year: int, session: str, track: str) -> dict:
     """The GET /pro_lap body: the 3D lap plus who / where it is."""
     track_info = json.loads((PROJECT_ROOT / "tracks" / f"{track}.json").read_text(encoding="utf-8"))
@@ -1492,10 +1499,7 @@ def pro_lap(year: int = DEFAULT_YEAR, driver: str = "NOR", track: str = "",
         raise HTTPException(status_code=404, detail="unknown track")
     driver = (driver or "").strip().upper()
     session = (session or "Q").strip().upper()
-    # driver/session/year end up in the reference-lap cache filename; reject anything odd.
-    if (not re.fullmatch(r"[A-Z0-9]{1,3}", driver) or session not in PRO_LAP_SESSIONS
-            or not PRO_LAP_FIRST_YEAR <= int(year) <= time.localtime().tm_year):
-        raise HTTPException(status_code=422, detail="invalid driver, session or year")
+    _validate_lap_params(driver, session, year)
     try:
         df, meta = load_real_telemetry(driver, int(year), session, track)
     except Exception:
@@ -1573,11 +1577,14 @@ def analyze(
     """
     driver = (driver or "").strip().upper()
     track = (track or "").strip().lower()
+    session = (session or "Q").strip().upper()
     mode = (mode or DEFAULT_MODE).strip().lower()
     if mode not in ALL_MODES:
         mode = DEFAULT_MODE
     if not track:
         raise HTTPException(status_code=422, detail="A track must be selected.")
+    if mode in COMPARISON_MODES:      # solo modes ignore the driver
+        _validate_lap_params(driver, session, year)
 
     # None -> auto-select fastest lap (unchanged behaviour); int -> that lapIndex.
     lap = _parse_lap_index(lap_index)
