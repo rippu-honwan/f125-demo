@@ -82,3 +82,15 @@ class TestCornerActions:
         th[(d >= 600) & (d < 640)] = 0.6      # partial throttle after T1 exit (600), before T2 entry (620)
         out = _corner_actions(_corners(T2), d, t, s, th, b, g)
         assert out[1]["action"] == "flat"
+
+    def test_lift_after_previous_exit_is_detected(self):
+        d, t, s, th, b, g = _lap()
+        th[(d >= 660) & (d < 690)] = 0.5      # drop starts at 660, within T2's lift window [620, 670)
+        out = _corner_actions(_corners(T2), d, t, s, th, b, g)
+        assert out[1]["action"] == "lift"
+
+    def test_lift_continuing_from_previous_corner_is_ignored(self):
+        d, t, s, th, b, g = _lap()
+        th[(d >= 590) & (d < 640)] = 0.6      # drop starts at 590 (before T1 exit), continues past it
+        out = _corner_actions(_corners(T2), d, t, s, th, b, g)
+        assert out[1]["action"] == "flat"

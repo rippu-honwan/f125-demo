@@ -1176,17 +1176,19 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
     are searched in ``[max(entry - BRAKE_SEARCH_LEAD_M, prev_apex - APEX_MARGIN_M),
     apex - APEX_MARGIN_M)`` so a corner never inherits the previous corner's
     braking and an onset right at an apex is credited to the next corner
-    (validated on Bahrain + Monza). Lift (throttle < LIFT_THROTTLE, no brake) is
-    checked in a separate window ``[max(entry - BRAKE_SEARCH_LEAD_M, prev_exit),
-    apex - APEX_MARGIN_M)`` so low throttle right after the previous corner's exit
-    is not miscounted as a lift in the current corner.
+    (validated on Bahrain + Monza). A lift is a throttle drop (from >= LIFT_THROTTLE
+    to below it) detected as an onset strictly after the previous corner's exit,
+    within the window ``[max(entry - BRAKE_SEARCH_LEAD_M, prev_exit),
+    apex - APEX_MARGIN_M)``. A lift that began before the window is intentionally
+    not counted (e.g. coasting from a previous corner).
     """
     on = brake >= BRAKE_ON
     onsets = np.flatnonzero(on & ~np.r_[False, on[:-1]])    # off -> on transitions
     # Detect throttle lift onsets: transitions to throttle < LIFT_THROTTLE
     throttle_low = throttle < LIFT_THROTTLE
-    throttle_was_high = np.r_[True, throttle >= LIFT_THROTTLE][:-1]
+    throttle_was_high = np.r_[True, ~throttle_low[:-1]]  # sample i-1 at/above threshold (sample 0 counts as high)
     lift_onsets = np.flatnonzero(throttle_low & throttle_was_high)
+    lift_d = d[lift_onsets]
 
     out, prev_apex, prev_exit = [], -np.inf, -np.inf
     for c in corners:
@@ -1206,7 +1208,7 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
             # For lift: detect throttle onset (transition to low) within the window,
             # excluding the previous corner's exit point. Only count transitions that
             # happen AFTER the previous corner's exit to avoid false positives.
-            mine_lift = lift_onsets[(d[lift_onsets] > prev_exit) & (d[lift_onsets] >= lift_lo) & (d[lift_onsets] < hi)]
+            mine_lift = lift_onsets[(lift_d > prev_exit) & (lift_d >= lift_lo) & (lift_d < hi)]
             if mine_lift.size:
                 action = "lift"
         prev_apex = apex
