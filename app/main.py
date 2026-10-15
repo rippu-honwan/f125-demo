@@ -1167,95 +1167,141 @@ def _run_comparison(csv_path: str, mode: str, driver: str, year: int,
 PRO_LAP_SESSIONS = {"Q", "R", "S", "SQ", "SS", "FP1", "FP2", "FP3"}
 PRO_LAP_FIRST_YEAR = 2018     # FastF1 has car telemetry from 2018 on
 PRO_LAP_STEP_M = 2.0          # sample spacing sent to the browser
-BRAKE_SEARCH_LEAD_M = 250.0   # earliest brake point considered before a corner's entry
-APEX_MARGIN_M = 30.0          # an onset this close to an apex belongs to the next corner
-LIFT_THROTTLE = 0.9           # throttle below this counts as a lift (checked only when no brake onset)
+BRAKE_SEARCH_LEAD_M = 250.0   # earliest lift point considered before a corner's entry
+APEX_MARGIN_M = 30.0          # a lift this close to an apex belongs to the next corner
+LIFT_THROTTLE = 0.9           # throttle below this (without braking) counts as a lift
 BRAKE_ON = 0.5                # reference brake is 0/1 but resampling leaves ramps
 APEX_SEARCH_AFTER_M = 150.0   # real apex = slowest point within this distance after brake release / lift end
+SPEED_TOL_KMH = 10.0          # re-braking without regaining this much speed is the same slow zone
+MAX_CORNER_DRIFT_M = 800.0    # a slow zone further than this from every json apex stays unmatched
+HIGH_SPEED_COST_M = 200.0     # extra matching cost for json "high_speed" corners, so kinks don't steal braking
+
+
+def _brake_zones(d, speed, brake) -> list:
+    """Braking slow zones as (onset, release, slowest) indices, in lap order.
+
+    Re-applying the brake before the car speeds up again stays in the same zone, the
+    slowest point is searched up to APEX_SEARCH_AFTER_M past release (stopping at the
+    next zone), and a brake that hardly slows the car isn't a zone.
+    """
+    on = brake >= BRAKE_ON
+    onsets = np.flatnonzero(on & ~np.r_[False, on[:-1]])    # off -> on transitions
+    starts = [int(i) for p, i in zip(np.r_[-1, onsets[:-1]], onsets)
+              if p < 0 or speed[i] - speed[p:i].min() >= SPEED_TOL_KMH]
+    zones = []
+    for i0, nxt in zip(starts, starts[1:] + [d.size]):
+        i1 = i0 + int(np.flatnonzero(on[i0:nxt])[-1])
+        win = np.flatnonzero((d >= d[i0]) & (d <= d[i1] + APEX_SEARCH_AFTER_M))
+        win = win[win < nxt]
+        k = int(win[np.argmin(speed[win])])
+        if speed[i0] - speed[k] >= SPEED_TOL_KMH:
+            zones.append((i0, i1, k))
+    return zones
+
+
+def _match_in_order(zone_d, apex, extra) -> dict:
+    """Pair slow zones with corners one-to-one, both in lap order, minimising drift.
+
+    Cost of a pair is |zone - apex| + ``extra[corner]``; leaving a zone unmatched
+    costs MAX_CORNER_DRIFT_M, leaving a corner unmatched is free (it may be flat).
+    Returns {corner index: zone index}.
+    """
+    E, C = len(zone_d), len(apex)
+    cost = np.abs(np.subtract.outer(zone_d, apex)) + extra
+    dp = np.zeros((E + 1, C + 1))
+    dp[1:, 0] = np.arange(1, E + 1) * MAX_CORNER_DRIFT_M
+    for i in range(1, E + 1):
+        for j in range(1, C + 1):
+            dp[i, j] = min(dp[i - 1, j] + MAX_CORNER_DRIFT_M, dp[i, j - 1],
+                           dp[i - 1, j - 1] + cost[i - 1, j - 1])
+    pairs, i, j = {}, E, C
+    while i and j:
+        if dp[i, j] == dp[i - 1, j - 1] + cost[i - 1, j - 1]:
+            pairs[j - 1] = i - 1
+            i, j = i - 1, j - 1
+        elif dp[i, j] == dp[i, j - 1]:
+            j -= 1
+        else:
+            i -= 1
+    return pairs
 
 
 def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
     """Classify each corner of a pro lap as brake / lift / flat.
 
-    All arrays are index-aligned along lap distance ``d`` (metres). Brake onsets
-    are searched in ``[max(entry - BRAKE_SEARCH_LEAD_M, prev_apex - APEX_MARGIN_M),
-    apex - APEX_MARGIN_M)`` so a corner never inherits the previous corner's
-    braking and an onset right at an apex is credited to the next corner
-    (validated on Bahrain + Monza). A lift is a throttle drop (from >= LIFT_THROTTLE
-    to below it) detected as an onset strictly after the previous corner's exit,
-    within the window ``[max(entry - BRAKE_SEARCH_LEAD_M, prev_exit),
-    apex - APEX_MARGIN_M)``. A lift that began before the window is intentionally
-    not counted (e.g. coasting from a previous corner).
+    All arrays are index-aligned along lap distance ``d`` (metres). The json corner
+    distances drift from FastF1 lap distance (up to ~550 m), so braking is found from
+    the lap itself: each braking slow zone (``_brake_zones``) is paired with a json
+    corner by ``_match_in_order``, and that corner is re-anchored on the zone's
+    slowest point (entry/apex/exit shift together).
 
-    The json corner distances drift from FastF1 lap distance, so after classifying,
-    brake and lift corners are re-anchored on the pro's slowest point (within
-    APEX_SEARCH_AFTER_M of brake release / lift end) and entry/apex/exit shift together;
-    flat corners keep the json positions and report speed/gear at the json apex.
-    The search stops before the next corner (its brake/lift onset, or its json apex if
-    it's flat), so apexes stay distinct and in lap order; entry/exit ranges may still
-    overlap. Corners are processed in json-apex order because some track files aren't.
-
-    Known limitation: when the json drifts far from lap distance, an onset can fall in
-    the gap between two corners' windows and a real braking corner is reported flat
-    (e.g. Spa La Source). Fix: assign each onset to the nearest json corner after its
-    slowest point.
+    Other corners are shifted by the drift interpolated from their matched neighbours,
+    which keeps every apex in lap order. A throttle drop (from >= LIFT_THROTTLE to
+    below it, with no braking before the throttle comes back) that starts inside
+    ``[max(entry - BRAKE_SEARCH_LEAD_M, previous exit), apex - APEX_MARGIN_M)``, and
+    strictly after the previous exit, is a lift; a lift that began before the window
+    is ignored (e.g. coasting from a previous corner). Lift corners are re-anchored on
+    their slowest point, stopping before the next corner starts. Flat corners report
+    speed/gear at the shifted apex. Corners are processed in json-apex order because
+    some track files aren't.
     """
+    corners = sorted(corners, key=lambda c: float(c["apex_m"]))
+    apex = np.array([float(c["apex_m"]) for c in corners])
+    zones = _brake_zones(d, speed, brake)
+    # ponytail: json types are too noisy for a finer speed-class cost (tried: wins Monaco, loses Imola/Baku).
+    extra = np.array([HIGH_SPEED_COST_M if c.get("type") == "high_speed" else 0.0 for c in corners])
+    pairs = _match_in_order(np.array([d[z[2]] for z in zones]), apex, extra)
+
+    shift = np.zeros(len(corners))
+    for j, z in pairs.items():
+        shift[j] = d[zones[z][2]] - apex[j]
+    if pairs:
+        js = sorted(pairs)
+        free = [j for j in range(len(corners)) if j not in pairs]
+        shift[free] = np.interp(apex[free], apex[js], shift[js])
+
     on = brake >= BRAKE_ON
-    onsets = np.flatnonzero(on & ~np.r_[False, on[:-1]])    # off -> on transitions
-    # Detect throttle lift onsets: transitions to throttle < LIFT_THROTTLE
     throttle_low = throttle < LIFT_THROTTLE
-    throttle_was_high = np.r_[True, ~throttle_low[:-1]]  # sample i-1 at/above threshold (sample 0 counts as high)
-    lift_onsets = np.flatnonzero(throttle_low & throttle_was_high)
-    lift_d = d[lift_onsets]
+    throttle_was_high = np.r_[True, ~throttle_low[:-1]]  # sample 0 counts as high
 
-    found, prev_apex, prev_exit = [], -np.inf, -np.inf
-    for c in sorted(corners, key=lambda c: float(c["apex_m"])):
-        entry, apex, exit_ = float(c["entry_m"]), float(c["apex_m"]), float(c["exit_m"])
-        lo = max(entry - BRAKE_SEARCH_LEAD_M, prev_apex - APEX_MARGIN_M)
-        hi = apex - APEX_MARGIN_M
-        lift_lo = max(entry - BRAKE_SEARCH_LEAD_M, prev_exit)
-        mine = onsets[(d[onsets] >= lo) & (d[onsets] < hi)]
-        action, brake_start, brake_dur = "flat", None, None
-        i_on = i_off = None                       # slow-zone span used to re-anchor the apex
-        if mine.size:
-            i0 = int(mine[0])
-            released = np.flatnonzero(~on[i0:])
-            i1 = i0 + (int(released[0]) - 1 if released.size else on.size - 1 - i0)
-            action, brake_start = "brake", float(d[i0])
-            brake_dur = round(float(t[i1] - t[i0]), 2)
-            i_on, i_off = i0, i1
+    def lift_end(i):
+        back = np.flatnonzero(~throttle_low[i:])
+        return i + (int(back[0]) - 1 if back.size else throttle.size - 1 - i)
+
+    lifts = [int(i) for i in np.flatnonzero(throttle_low & throttle_was_high)
+             if not on[i:lift_end(i) + 1].any()]
+    lift_d = d[lifts] if lifts else np.array([])
+
+    found, prev_exit = [], -np.inf
+    for j, c in enumerate(corners):
+        entry, ap, exit_ = (float(c[k]) + shift[j] for k in ("entry_m", "apex_m", "exit_m"))
+        if j in pairs:
+            i0, i1, k = zones[pairs[j]]
+            found.append(("brake", float(d[i0]), round(float(t[i1] - t[i0]), 2), i0, i1, k))
         else:
-            # For lift: detect throttle onset (transition to low) within the window,
-            # excluding the previous corner's exit point. Only count transitions that
-            # happen AFTER the previous corner's exit to avoid false positives.
-            mine_lift = lift_onsets[(lift_d > prev_exit) & (lift_d >= lift_lo) & (lift_d < hi)]
-            if mine_lift.size:
-                action = "lift"
-                i_on = int(mine_lift[0])
-                back = np.flatnonzero(~throttle_low[i_on:])
-                i_off = i_on + (int(back[0]) - 1 if back.size else throttle.size - 1 - i_on)
-        prev_apex = apex
+            lo = max(entry - BRAKE_SEARCH_LEAD_M, prev_exit)
+            mine = np.flatnonzero((lift_d > prev_exit) & (lift_d >= lo) & (lift_d < ap - APEX_MARGIN_M))
+            if mine.size:
+                i_on = lifts[int(mine[0])]
+                found.append(("lift", None, None, i_on, lift_end(i_on), None))
+            else:
+                found.append(("flat", None, None, None, None, int(np.argmin(np.abs(d - ap)))))
         prev_exit = exit_
-        found.append((c, action, brake_start, brake_dur, i_on, i_off))
 
-    # Where each corner starts, for capping the previous corner's apex search.
-    starts = [d[f[4]] if f[4] is not None else float(f[0]["apex_m"]) for f in found] + [np.inf]
+    # Where each corner starts, for capping a lift corner's apex search.
+    starts = [d[f[3]] if f[3] is not None else apex[j] + shift[j] for j, f in enumerate(found)] + [np.inf]
     out = []
-    for n, (c, action, brake_start, brake_dur, i_on, i_off) in enumerate(found):
-        entry, apex, exit_ = float(c["entry_m"]), float(c["apex_m"]), float(c["exit_m"])
-        shift = 0.0
-        if i_on is None:
-            k = int(np.argmin(np.abs(d - apex)))
-        else:
+    for j, (c, (action, brake_start, brake_dur, i_on, i_off, k)) in enumerate(zip(corners, found)):
+        if action == "lift":
             win = np.flatnonzero((d >= d[i_on]) & (d <= d[i_off] + APEX_SEARCH_AFTER_M)
-                                 & (d < starts[n + 1]))
+                                 & (d < starts[j + 1]))
             k = int(win[np.argmin(speed[win])]) if win.size else i_on
-            shift = float(d[k]) - apex
+        s = float(d[k]) - apex[j] if action != "flat" else shift[j]
         out.append({
             "id": c.get("id"), "short": c.get("short"), "name": c.get("name"),
             "direction": c.get("direction"),
-            "entry_m": round(entry + shift, 1), "apex_m": round(apex + shift, 1),
-            "exit_m": round(exit_ + shift, 1),
+            "entry_m": round(float(c["entry_m"]) + s, 1), "apex_m": round(apex[j] + s, 1),
+            "exit_m": round(float(c["exit_m"]) + s, 1),
             "action": action, "brake_start_m": brake_start, "brake_duration_s": brake_dur,
             "min_speed_kmh": round(float(speed[k]), 1), "apex_gear": int(gear[k]),
         })
