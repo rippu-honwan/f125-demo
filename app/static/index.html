@@ -423,9 +423,9 @@
       <div class="result-block l3d" id="blkLearn3d">
         <div class="l3d-head">
           <div class="section-label">3D Pro Lap</div>
-          <div class="l3d-views" role="tablist" aria-label="Side panel">
-            <button type="button" class="l3d-view active" data-view="telemetry" role="tab">📈 Telemetry</button>
-            <button type="button" class="l3d-view" data-view="corners" role="tab">🏁 Corners</button>
+          <div class="l3d-views" role="group" aria-label="Side panel">
+            <button type="button" class="l3d-view active" data-view="telemetry" aria-pressed="true"><span aria-hidden="true">📈</span> Telemetry</button>
+            <button type="button" class="l3d-view" data-view="corners" aria-pressed="false"><span aria-hidden="true">🏁</span> Corners</button>
           </div>
         </div>
         <div class="l3d-msg" id="l3dMsg" role="status" hidden></div>
@@ -435,9 +435,9 @@
             <div class="l3d-hud l3d-hud-bl" id="l3dHudBottom"></div>
             <svg class="l3d-minimap" id="l3dMinimap" aria-hidden="true"></svg>
             <div class="l3d-cams" role="group" aria-label="Camera">
-              <button type="button" data-cam="tcam" class="active">T-cam</button>
-              <button type="button" data-cam="chase">Chase</button>
-              <button type="button" data-cam="top">Top</button>
+              <button type="button" data-cam="tcam" class="active" aria-pressed="true">T-cam</button>
+              <button type="button" data-cam="chase" aria-pressed="false">Chase</button>
+              <button type="button" data-cam="top" aria-pressed="false">Top</button>
             </div>
           </div>
           <div class="l3d-corners" id="l3dCorners"></div>
@@ -446,10 +446,10 @@
         <div class="l3d-controls" id="l3dControls">
           <button type="button" id="l3dPlay" aria-label="Play">▶</button>
           <span class="l3d-rates" role="group" aria-label="Playback speed">
-            <button type="button" data-rate="0.25">0.25×</button>
-            <button type="button" data-rate="0.5">0.5×</button>
-            <button type="button" data-rate="1" class="active">1×</button>
-            <button type="button" data-rate="2">2×</button>
+            <button type="button" data-rate="0.25" aria-pressed="false">0.25×</button>
+            <button type="button" data-rate="0.5" aria-pressed="false">0.5×</button>
+            <button type="button" data-rate="1" class="active" aria-pressed="true">1×</button>
+            <button type="button" data-rate="2" aria-pressed="false">2×</button>
           </span>
           <input type="range" id="l3dScrub" min="0" max="1000" value="0" step="1" aria-label="Lap position" />
           <span class="l3d-time" id="l3dTime">0:00.0 / 0:00.0</span>
