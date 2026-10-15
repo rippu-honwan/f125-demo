@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -1163,6 +1164,8 @@ def _run_comparison(csv_path: str, mode: str, driver: str, year: int,
 # ---------------------------------------------------------------------------
 # 3D Learn mode: pro reference lap for the browser (GET /pro_lap)
 # ---------------------------------------------------------------------------
+PRO_LAP_SESSIONS = {"Q", "R", "S", "SQ", "SS", "FP1", "FP2", "FP3"}
+PRO_LAP_FIRST_YEAR = 2018     # FastF1 has car telemetry from 2018 on
 PRO_LAP_STEP_M = 2.0          # sample spacing sent to the browser
 BRAKE_SEARCH_LEAD_M = 250.0   # earliest brake point considered before a corner's entry
 APEX_MARGIN_M = 30.0          # an onset this close to an apex belongs to the next corner
@@ -1374,6 +1377,10 @@ def pro_lap(year: int = DEFAULT_YEAR, driver: str = "NOR", track: str = "",
         raise HTTPException(status_code=404, detail="unknown track")
     driver = (driver or "").strip().upper()
     session = (session or "Q").strip().upper()
+    # driver/session/year end up in the reference-lap cache filename; reject anything odd.
+    if (not re.fullmatch(r"[A-Z0-9]{1,3}", driver) or session not in PRO_LAP_SESSIONS
+            or not PRO_LAP_FIRST_YEAR <= int(year) <= time.localtime().tm_year):
+        raise HTTPException(status_code=422, detail="invalid driver, session or year")
     try:
         df, meta = load_real_telemetry(driver, int(year), session, track)
     except Exception:

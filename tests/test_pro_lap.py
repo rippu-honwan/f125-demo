@@ -126,7 +126,7 @@ class TestProLapEndpoint:
         t = np.array(payload["points"]["t"])
         assert t[0] == 0
         assert np.all(np.diff(t) > 0)
-        assert abs(t[-1] - payload["meta"]["lap_time"]) < 0.5
+        assert abs(t[-1] - payload["meta"]["lap_time"]) < 1e-3
 
     def test_steer_normalised(self, payload):
         s = np.array(payload["points"]["steer"])
@@ -157,3 +157,14 @@ class TestProLapEndpoint:
         body = res.json()
         assert body["detail"] == "no data"
         assert {"year": 2025, "driver": "NOR", "session": "Q", "track": "bahrain"} in body["available"]
+
+    @pytest.mark.parametrize("params", [
+        {"driver": "../../x"}, {"driver": "NORRIS"}, {"session": "../x"}, {"year": 1800},
+    ])
+    def test_rejects_bad_input_before_loading(self, monkeypatch, params):
+        import app.main as m
+        called = []
+        monkeypatch.setattr(m, "load_real_telemetry", lambda *a, **k: called.append(a))
+        res = client.get("/pro_lap", params={"track": "bahrain", **params})
+        assert res.status_code == 422
+        assert called == []
