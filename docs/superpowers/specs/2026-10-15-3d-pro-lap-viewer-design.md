@@ -116,7 +116,7 @@ app/static/js/learn3d/（新 ES modules，Three.js 經 CDN importmap 載入）
 - `lift`：冇 onset，但窗內 throttle 跌穿 0.9
 - 位置校正：tracks/*.json 嘅彎道距離同 FastF1 lap distance 有偏差（Bahrain 最多 ~160 m），所以 brake／lift 彎嘅 entry/apex/exit 會一齊平移，令 apex 落喺職業車手實際最低速點（brake 開始或收油至放開後 150 m 內）；flat 彎保留 json 位置，速度取 json apex 嗰點。
 - `flat`：以上都冇
-- `min_speed_kmh`、`apex_gear`：`[entry_m, exit_m]` 內最低速嗰點
+- `min_speed_kmh`、`apex_gear`：brake／lift 彎取校正後 apex（最低速點，搜尋範圍唔會越過下一個彎嘅 onset）；flat 彎取 json apex 嗰點。彎道按 json apex 距離排序後處理同輸出（monza.json 原檔次序有誤）。
 
 ### Errors
 

@@ -114,6 +114,21 @@ class TestCornerActions:
         assert c["min_speed_kmh"] == 120
         assert c["apex_m"] == 500
 
+    def test_refinement_stops_at_next_corners_onset(self):
+        d, t, s, th, b, g = _lap(brake_from=380)
+        b[(d >= 560) & (d < 600)] = 1.0
+        th[(d >= 560) & (d < 600)] = 0.0
+        s[(d >= 580) & (d < 640)] = 80.0
+        out = _corner_actions(_corners(T2), d, t, s, th, b, g)
+        assert [c["action"] for c in out] == ["brake", "brake"]
+        assert out[0]["apex_m"] == pytest.approx(450, abs=2)
+        assert out[1]["apex_m"] == pytest.approx(580, abs=2)
+
+    def test_corners_processed_in_lap_order(self):
+        out = _corner_actions([T2, *_corners()], *_lap(brake_from=380))
+        assert [c["short"] for c in out] == ["T1", "T2"]
+        assert out[0]["action"] == "brake"
+
 
 class TestProLapEndpoint:
     @pytest.fixture(scope="class")

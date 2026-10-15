@@ -1191,6 +1191,9 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
     brake and lift corners are re-anchored on the pro's slowest point (within
     APEX_SEARCH_AFTER_M of brake release / lift end) and entry/apex/exit shift together;
     flat corners keep the json positions and report speed/gear at the json apex.
+    The search never reaches past the next corner's brake/lift onset. Corners are
+    processed and returned in lap order (by json apex), because some track files
+    aren't ordered.
     """
     on = brake >= BRAKE_ON
     onsets = np.flatnonzero(on & ~np.r_[False, on[:-1]])    # off -> on transitions
@@ -1200,8 +1203,8 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
     lift_onsets = np.flatnonzero(throttle_low & throttle_was_high)
     lift_d = d[lift_onsets]
 
-    out, prev_apex, prev_exit = [], -np.inf, -np.inf
-    for c in corners:
+    found, prev_apex, prev_exit = [], -np.inf, -np.inf
+    for c in sorted(corners, key=lambda c: float(c["apex_m"])):
         entry, apex, exit_ = float(c["entry_m"]), float(c["apex_m"]), float(c["exit_m"])
         lo = max(entry - BRAKE_SEARCH_LEAD_M, prev_apex - APEX_MARGIN_M)
         hi = apex - APEX_MARGIN_M
@@ -1228,12 +1231,21 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
                 i_off = i_on + (int(back[0]) - 1 if back.size else throttle.size - 1 - i_on)
         prev_apex = apex
         prev_exit = exit_
+        found.append((c, action, brake_start, brake_dur, i_on, i_off))
+
+    out = []
+    for n, (c, action, brake_start, brake_dur, i_on, i_off) in enumerate(found):
+        entry, apex, exit_ = float(c["entry_m"]), float(c["apex_m"]), float(c["exit_m"])
         shift = 0.0
         if i_on is None:
             k = int(np.argmin(np.abs(d - apex)))
         else:
-            win = np.flatnonzero((d >= d[i_on]) & (d <= d[i_off] + APEX_SEARCH_AFTER_M))
-            k = int(win[np.argmin(speed[win])])
+            cap = d[i_off] + APEX_SEARCH_AFTER_M
+            nxt = found[n + 1][4] if n + 1 < len(found) else None
+            win = np.flatnonzero((d >= d[i_on]) & (d <= cap))
+            if nxt is not None:                   # never reach into the next corner's slow zone
+                win = win[d[win] < min(cap, d[nxt])]
+            k = int(win[np.argmin(speed[win])]) if win.size else i_on
             shift = float(d[k]) - apex
         out.append({
             "id": c.get("id"), "short": c.get("short"), "name": c.get("name"),
