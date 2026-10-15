@@ -101,7 +101,7 @@ function frame(now) {
 function draw() {
   const S = view, P = S.data.points;
   const s = stateAt(P, S.t);
-  if (S.scene) S.scene.update(s, S.cam);
+  if (S.scene) S.scene.update([s], S.cam);
   renderHud($("l3dHudTop"), $("l3dHudBottom"), S.data.meta, s, nextCue(S.data.corners, s.d, P.d[P.d.length - 1]));
   S.minimap.set(s);
   S.tele.set(s.d);
