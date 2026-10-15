@@ -22,17 +22,18 @@ async function load(url, onPickAvailable) {
   const res = await fetch(url);
   const body = await res.json().catch(() => ({}));
   if (seq !== loadSeq) return;
-  if (!res.ok) { showMessage(body, onPickAvailable); return; }
+  if (!res.ok) { showMessage(body, res.status, onPickAvailable); return; }
   await start(body, seq);
 }
 
-function showMessage(body, onPick) {
+function showMessage(body, status, onPick) {
   $("l3dMain").hidden = true;
   $("l3dControls").hidden = true;
   const avail = Array.isArray(body.available) ? body.available : [];
-  const text = body.detail === "unknown track"
-    ? "This track isn't supported."
-    : "No lap data for this driver / track / session.";
+  const text = body.detail === "unknown track" ? "This track isn't supported."
+    : status === 404 ? "No lap data for this driver / track / session."
+    : status === 422 ? "That driver, session or year isn't valid."
+    : `Couldn't load the lap (HTTP ${status}).`;
   const msg = $("l3dMsg");
   msg.innerHTML = `<p>${esc(text)}</p>` + (avail.length
     ? `<p>Laps you can load right away:</p><div class="l3d-chips">${avail.map((a, i) =>
@@ -48,6 +49,7 @@ async function start(data, seq) {
   $("l3dMain").hidden = false;
   $("l3dControls").hidden = false;
 
+  $("l3dStage").classList.remove("l3d-nogl");
   let scene = null;
   try {
     const { createScene } = await import("./scene.js");
@@ -55,7 +57,7 @@ async function start(data, seq) {
     scene = createScene($("l3dStage"), P, data.corners);
   } catch (err) {
     console.warn("3D view unavailable:", err);
-    $("l3dStage").classList.add("l3d-nogl");
+    if (seq === loadSeq) $("l3dStage").classList.add("l3d-nogl");
   }
   if (seq !== loadSeq) { if (scene) scene.dispose(); return; }
 
@@ -83,6 +85,7 @@ async function start(data, seq) {
 function frame(now) {
   const S = view;
   if (!S) return;
+  S.raf = requestAnimationFrame(frame);
   const dt = S.last ? Math.min(0.1, (now - S.last) / 1000) : 0;
   S.last = now;
   const lapTime = S.data.points.t[S.data.points.t.length - 1];
@@ -92,7 +95,6 @@ function frame(now) {
     else if (S.t >= lapTime) S.t -= lapTime;                            // loop the lap
   }
   draw();
-  S.raf = requestAnimationFrame(frame);
 }
 
 function draw() {
@@ -105,9 +107,12 @@ function draw() {
   S.list.set(s.d);
   const time = `${fmtTime(S.t)} / ${fmtTime(P.t[P.t.length - 1])}`;
   const scrub = $("l3dScrub");
-  scrub.value = String(Math.round(S.t * 10));
-  scrub.setAttribute("aria-valuetext", time);
-  $("l3dTime").textContent = time;
+  if (!scrub.matches(":active")) scrub.value = String(Math.round(S.t * 10));   // don't fight a drag
+  if (time !== S.lastTime) {                         // only when the shown tenths change
+    S.lastTime = time;
+    scrub.setAttribute("aria-valuetext", time);
+    $("l3dTime").textContent = time;
+  }
 }
 
 function seek(t) {
@@ -162,9 +167,14 @@ $("l3dPlay").addEventListener("click", () => view && setPlaying(!view.playing));
 $("l3dScrub").addEventListener("input", (e) => view && seek(+e.target.value / 10));
 document.addEventListener("keydown", (e) => {
   if (!view || $("blkLearn3d").offsetParent === null) return;          // block not visible
-  if (/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(e.target.tagName)) return;
-  if (e.code === "Space") { e.preventDefault(); setPlaying(!view.playing); }
-  else if (e.key === "ArrowLeft") seek(view.t - 2);
+  if (e.ctrlKey || e.metaKey || e.altKey) return;                      // leave browser shortcuts alone
+  const tag = e.target.tagName;
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(tag)) return;                   // typing / native range keys
+  if (e.code === "Space") {
+    if (tag === "BUTTON") return;                                      // a focused button handles Space itself
+    e.preventDefault();
+    if (!e.repeat) setPlaying(!view.playing);
+  } else if (e.key === "ArrowLeft") seek(view.t - 2);
   else if (e.key === "ArrowRight") seek(view.t + 2);
   else if (CAM_KEYS[e.key]) setCam(CAM_KEYS[e.key]);
 });
