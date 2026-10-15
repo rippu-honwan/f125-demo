@@ -229,3 +229,6 @@ note.md
 
 # brainstorming mockups
 .superpowers/
+
+# Playwright MCP screenshots
+.playwright-mcp/

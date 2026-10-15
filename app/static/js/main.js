@@ -569,6 +569,7 @@
   function setFile(file) {
     if (!file) return;
     selectedFile = file;
+    lastDetection = null;
     fcName.textContent = file.name;
     fcSize.textContent = formatBytes(file.size);
     fileChip.classList.add("show");

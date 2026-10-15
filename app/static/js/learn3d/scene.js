@@ -6,7 +6,7 @@ import { bisect, cuePoint } from "./core.js";
 // ponytail: fixed 14 m track; real widths, kerbs and run-off aren't in the data.
 const TRACK_HALF_WIDTH = 7;
 const CAMS = {
-  tcam: { back: 0.6, height: 1.25, ahead: 40, look: 0.8 },   // above the airbox
+  tcam: { back: 0.6, height: 1.7, ahead: 40, look: 1.0 },   // above the airbox
   chase: { back: 9, height: 3.2, ahead: 8, look: 0.5 },
 };
 
@@ -115,7 +115,7 @@ function buildScene(renderer, container, points, corners) {
     const p = car.position;
     if (cam === "top") {
       camera.up.copy(fwd);                                     // heading-up overhead view
-      camera.position.set(p.x, p.y + 140, p.z);
+      camera.position.set(p.x, p.y + 75, p.z);
       camera.lookAt(p);
     } else {
       const c = CAMS[cam] || CAMS.tcam;

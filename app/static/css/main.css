@@ -1467,5 +1467,6 @@
   .l3d-corners { max-height: 260px; }
   .l3d-trace { grid-template-columns: 1fr; gap: 2px; }
   .l3d-controls { flex-wrap: wrap; }
+  .l3d-controls input[type="range"] { flex: 1 1 100%; order: 3; }
   .l3d-keys { display: none; }
 }
