@@ -1307,6 +1307,37 @@ def _build_pro_lap(df, meta: dict, track_info: dict, step: float = PRO_LAP_STEP_
     }
 
 
+def _build_you_lap(aligned, d_grid, lap_time: float) -> dict:
+    """Your game lap resampled onto the pro lap's distance grid, for the 3D compare view.
+
+    ``aligned`` has one row per game metre; the pipeline's alignment anchors
+    (``aligned.attrs``) map each game metre to real lap distance, the axis ``d_grid``
+    (from ``_build_pro_lap``) uses. Time comes from integrating game speed, pinned to
+    ``lap_time`` like the pro lap.
+    """
+    game_d = aligned["lap_distance"].to_numpy(dtype=float)
+    real_d = np.interp(game_d, aligned.attrs["game_anch_d"], aligned.attrs["real_anch_d"])
+    real_d = np.maximum.accumulate(real_d) + np.arange(game_d.size) * 1e-6   # strictly increasing for interp
+    v = np.maximum(aligned["game_speed_kmh"].to_numpy(dtype=float) / 3.6, 1.0)
+    t = np.concatenate([[0.0], np.cumsum(np.diff(game_d) / ((v[1:] + v[:-1]) / 2))])
+    t *= lap_time / t[-1]
+    d_grid = np.asarray(d_grid, dtype=float)
+
+    def col(values):
+        return np.interp(d_grid, real_d, np.asarray(values, dtype=float))
+
+    def rnd(values, digits):
+        return [round(float(x), digits) for x in values]
+
+    return {
+        "t": rnd(col(t), 3),
+        "speed": rnd(col(aligned["game_speed_kmh"]), 1),
+        "throttle": rnd(col(aligned["game_throttle"]), 3),
+        "brake": rnd(col(aligned["game_brake"]), 3),
+        "gear": [int(g) for g in np.rint(col(aligned["game_gear"]))],
+    }
+
+
 def _available_pro_laps() -> list:
     """Cached reference laps, parsed from data/reference_laps/<year>_<drv>_<session>_<track>.pkl."""
     out = []
