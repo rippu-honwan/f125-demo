@@ -1,10 +1,13 @@
-// Entry point for the 3D Learn mode. main.js (a classic script) drives it via
-//   window.Learn3D.load(url, onPickAvailable, signal?) -> fetch /pro_lap and start
+// Entry point for the 3D viewer. main.js (a classic script) drives it via
+//   window.Learn3D.load(url, onPickAvailable, signal?) -> fetch /pro_lap and start (3D Learn)
+//   window.Learn3D.show(payload)                  -> start from a /analyze compare_3d payload (3D Compare)
 //   window.Learn3D.unload()                       -> stop and free WebGL
 // load() resolves once the viewer is up (or a "no data" message is shown) and
 // rejects only on network errors, which main.js reports in its error banner.
-import { stateAt, timeAtDistance, nextCue, cornerSeekRange, fmtTime } from "./core.js";
-import { esc, renderHud, createMinimap, createTelemetry, createCornerList } from "./panels.js";
+import { stateAt, timeAtDistance, nextCue, cornerSeekRange, fmtTime, youPoints, gapAt } from "./core.js";
+import {
+  esc, renderHud, renderCompareHud, createMinimap, createTelemetry, createCornerList, PRO_COLOR, YOU_COLOR,
+} from "./panels.js";
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -27,6 +30,14 @@ async function load(url, onPickAvailable, signal) {
   await start(body, seq);
 }
 
+/** 3D Compare: `payload` is the /analyze compare_3d body ({pro, you, ...}). */
+async function show(payload) {
+  unload();
+  const seq = ++loadSeq;
+  if (!payload || !payload.pro || !payload.pro.points || !payload.you) throw new Error("Malformed 3D compare response");
+  await start({ ...payload.pro, you: youPoints(payload.pro.points, payload.you) }, seq);
+}
+
 function showMessage(body, status, onPick) {
   $("l3dMain").hidden = true;
   $("l3dControls").hidden = true;
@@ -44,40 +55,53 @@ function showMessage(body, status, onPick) {
   msg.hidden = false;
 }
 
+const KEYS_LEARN = "Space play/pause · ← → ±2 s · 1/2/3 camera";
+const KEYS_COMPARE = KEYS_LEARN + " · F switch car";
+
 async function start(data, seq) {
-  const P = data.points;
+  const P = data.points, Y = data.you || null;   // Y: your lap (youPoints) in 3D Compare
   $("l3dMsg").hidden = true;
   $("l3dMain").hidden = false;
   $("l3dControls").hidden = false;
+  $("l3dFollow").hidden = !Y;
+  $("l3dTitle").textContent = Y ? "3D Compare" : "3D Pro Lap";
+  $("l3dKeys").textContent = Y ? KEYS_COMPARE : KEYS_LEARN;
 
   $("l3dStage").classList.remove("l3d-nogl");
   let scene = null;
   try {
     const { createScene } = await import("./scene.js");
     if (seq !== loadSeq) return;
-    scene = createScene($("l3dStage"), P, data.corners);
+    const cars = Y
+      ? [{ color: parseInt(PRO_COLOR.slice(1), 16), lane: -1.6 }, { color: parseInt(YOU_COLOR.slice(1), 16), lane: 1.6 }]
+      : undefined;
+    scene = createScene($("l3dStage"), P, data.corners, cars);
   } catch (err) {
     console.warn("3D view unavailable:", err);
     if (seq === loadSeq) $("l3dStage").classList.add("l3d-nogl");
   }
   if (seq !== loadSeq) { if (scene) scene.dispose(); return; }
 
+  const end = Math.max(P.t[P.t.length - 1], Y ? Y.t[Y.t.length - 1] : 0);   // both cars finish
   const S = view = {
-    data, scene, t: 0, playing: false, rate: 1, stopAt: null, raf: 0, last: 0,
-    cam: store.get("l3d_cam", "tcam"),
+    data, scene, t: 0, end, playing: false, rate: 1, stopAt: null, raf: 0, last: 0,
+    cam: store.get("l3d_cam", "tcam"), follow: Y && store.get("l3d_follow", "you") !== "pro" ? "you" : "pro",
   };
-  S.minimap = createMinimap($("l3dMinimap"), P);
-  S.tele = createTelemetry($("l3dTelemetry"), P, (d) => seek(timeAtDistance(P, d)));
+  // Distance-based seeks (telemetry click, corner replay) use the followed car's clock.
+  const timeAt = (d) => timeAtDistance(S.follow === "you" && Y ? Y : P, d);
+  S.minimap = createMinimap($("l3dMinimap"), P, Y ? [PRO_COLOR, YOU_COLOR] : undefined);
+  S.tele = createTelemetry($("l3dTelemetry"), P, (d) => seek(timeAt(d)), Y, data.meta.driver);
   S.list = createCornerList($("l3dCorners"), data.corners, (c) => {
     const [from, to] = cornerSeekRange(c);
-    seek(timeAtDistance(P, from));
-    S.stopAt = timeAtDistance(P, to);
+    seek(timeAt(from));
+    S.stopAt = timeAt(to);
     setRate(0.5);
     setPlaying(true);
-  });
-  $("l3dScrub").max = String(Math.round(P.t[P.t.length - 1] * 10));   // 0.1 s per step
+  }, !!Y);
+  $("l3dScrub").max = String(Math.round(end * 10));   // 0.1 s per step
   setView(store.get("l3d_view", "telemetry"));
   setCam(S.cam);
+  if (Y) setFollow(S.follow);
   setRate(1);
   setPlaying(false);
   S.raf = requestAnimationFrame(frame);
@@ -89,24 +113,33 @@ function frame(now) {
   S.raf = requestAnimationFrame(frame);
   const dt = S.last ? Math.min(0.1, (now - S.last) / 1000) : 0;
   S.last = now;
-  const lapTime = S.data.points.t[S.data.points.t.length - 1];
   if (S.playing) {
     S.t += dt * S.rate;
     if (S.stopAt != null && S.t >= S.stopAt) { S.t = S.stopAt; S.stopAt = null; setPlaying(false); }
-    else if (S.t >= lapTime) S.t -= lapTime;                            // loop the lap
+    else if (S.t >= S.end) S.t -= S.end;                                // loop once both cars finish
   }
   draw();
 }
 
 function draw() {
-  const S = view, P = S.data.points;
-  const s = stateAt(P, S.t);
-  if (S.scene) S.scene.update(s, S.cam);
-  renderHud($("l3dHudTop"), $("l3dHudBottom"), S.data.meta, s, nextCue(S.data.corners, s.d, P.d[P.d.length - 1]));
-  S.minimap.set(s);
-  S.tele.set(s.d);
-  S.list.set(s.d);
-  const time = `${fmtTime(S.t)} / ${fmtTime(P.t[P.t.length - 1])}`;
+  const S = view, P = S.data.points, Y = S.data.you;
+  const s = stateAt(P, S.t);       // a finished car waits at the line (stateAt clamps t)
+  let at = s;                      // the followed car: drives the cursor and corner highlight
+  if (Y) {
+    const y = stateAt(Y, S.t);
+    const youFirst = S.follow === "you";
+    at = youFirst ? y : s;
+    if (S.scene) S.scene.update([s, y], S.cam, youFirst ? 1 : 0);
+    renderCompareHud($("l3dHudTop"), $("l3dHudBottom"), S.data.meta, y, s, gapAt(P, Y, y.d));
+    S.minimap.set(s, y);
+  } else {
+    if (S.scene) S.scene.update([s], S.cam);
+    renderHud($("l3dHudTop"), $("l3dHudBottom"), S.data.meta, s, nextCue(S.data.corners, s.d, P.d[P.d.length - 1]));
+    S.minimap.set(s);
+  }
+  S.tele.set(at.d);
+  S.list.set(at.d);
+  const time = `${fmtTime(S.t)} / ${fmtTime(S.end)}`;
   const scrub = $("l3dScrub");
   if (!scrub.matches(":active")) scrub.value = String(Math.round(S.t * 10));   // don't fight a drag
   if (time !== S.lastTime) {                         // only when the shown tenths change
@@ -117,8 +150,7 @@ function draw() {
 }
 
 function seek(t) {
-  const P = view.data.points;
-  view.t = Math.min(Math.max(0, t), P.t[P.t.length - 1]);
+  view.t = Math.min(Math.max(0, t), view.end);
   view.stopAt = null;
 }
 
@@ -151,6 +183,13 @@ function setView(name) {
   document.querySelectorAll(".l3d-view").forEach((b) => markPressed(b, b.dataset.view === name));
 }
 
+function setFollow(who) {
+  view.follow = who;
+  view.stopAt = null;              // a corner replay's stop time was on the other car's clock
+  store.set("l3d_follow", who);
+  document.querySelectorAll("[data-follow]").forEach((b) => markPressed(b, b.dataset.follow === who));
+}
+
 function unload() {
   loadSeq++;
   if (!view) return;
@@ -158,12 +197,17 @@ function unload() {
   if (view.scene) view.scene.dispose();
   $("l3dStage").classList.remove("l3d-nogl");
   view = null;
+  // Back to the 3D Learn head, so an error screen after Compare doesn't keep Compare's labels.
+  $("l3dFollow").hidden = true;
+  $("l3dTitle").textContent = "3D Pro Lap";
+  $("l3dKeys").textContent = KEYS_LEARN;
 }
 
 // ---- controls (wired once; modules run after the DOM is parsed) ----
 document.querySelectorAll(".l3d-view").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
 document.querySelectorAll("[data-cam]").forEach((b) => b.addEventListener("click", () => view && setCam(b.dataset.cam)));
 document.querySelectorAll("[data-rate]").forEach((b) => b.addEventListener("click", () => view && setRate(+b.dataset.rate)));
+document.querySelectorAll("[data-follow]").forEach((b) => b.addEventListener("click", () => view && view.data.you && setFollow(b.dataset.follow)));
 $("l3dPlay").addEventListener("click", () => view && setPlaying(!view.playing));
 $("l3dScrub").addEventListener("input", (e) => view && seek(+e.target.value / 10));
 document.addEventListener("keydown", (e) => {
@@ -178,6 +222,7 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "ArrowLeft") seek(view.t - 2);
   else if (e.key === "ArrowRight") seek(view.t + 2);
   else if (CAM_KEYS[e.key]) setCam(CAM_KEYS[e.key]);
+  else if ((e.key === "f" || e.key === "F") && view.data.you) setFollow(view.follow === "you" ? "pro" : "you");
 });
 
-window.Learn3D = { load, unload };
+window.Learn3D = { load, show, unload };

@@ -81,7 +81,7 @@ LAP_INDEX_COLUMNS = ("lapIndex", "lap_index")
 #   Comparison modes run the full game-vs-real pipeline — scripts 03 (Lap
 #   Comparison), 04 (Coaching Report) and 05 (Track Map).
 SOLO_MODES = ("overview", "lap_analysis")
-COMPARISON_MODES = ("comparison", "coaching", "track_map")
+COMPARISON_MODES = ("comparison", "coaching", "track_map", "compare_3d")
 ALL_MODES = SOLO_MODES + COMPARISON_MODES
 DEFAULT_MODE = "comparison"
 DEFAULT_YEAR = 2025
@@ -1007,7 +1007,11 @@ def _run_comparison(csv_path: str, mode: str, driver: str, year: int,
     * ``track_map``  -> the interactive Track Explorer: an SVG circuit polyline
       plus your-lap telemetry sampled along it, so hovering the map drives the
       linked telemetry chart (no static PNG, no coaching prose).
+    * ``compare_3d`` -> the pro lap for the 3D viewer plus your lap on its
+      distance grid (see ``_compare_3d_payload``).
     """
+    if mode == "compare_3d" and track not in {t["key"] for t in _discover_tracks()}:
+        raise HTTPException(status_code=422, detail="unknown track")   # before run_pipeline caches anything
     args = SimpleNamespace(
         csv=csv_path,
         lap=lap,                 # None -> auto fastest; int -> chosen lapIndex
@@ -1051,6 +1055,11 @@ def _run_comparison(csv_path: str, mode: str, driver: str, year: int,
         "overall_delta": _num(report.overall_delta, 3),
         "overall_grade": report.overall_grade,
     }
+
+    # ---- 3D Compare: both laps for the 3D viewer, nothing else. ----
+    if mode == "compare_3d":
+        return _compare_3d_payload(payload, aligned, report, args.driver, args.year,
+                                   args.session, track)
 
     # ---- Lap Comparison: visual, you-vs-pro, no heatmap (that's Track Map). ----
     if mode == "comparison":
@@ -1353,6 +1362,87 @@ def _build_pro_lap(df, meta: dict, track_info: dict, step: float = PRO_LAP_STEP_
     }
 
 
+def _build_you_lap(aligned, d_grid, lap_time: float) -> dict:
+    """Your game lap resampled onto the pro lap's distance grid, for the 3D compare view.
+
+    ``aligned`` has one row per game metre; the pipeline's alignment anchors
+    (``aligned.attrs``) map each game metre to real lap distance, the axis ``d_grid``
+    (from ``_build_pro_lap``) uses. Time comes from integrating game speed, pinned to
+    ``lap_time`` like the pro lap.
+    """
+    game_d = aligned["lap_distance"].to_numpy(dtype=float)
+    game_anch = np.asarray(aligned.attrs["game_anch_d"], dtype=float)
+    real_anch = np.asarray(aligned.attrs["real_anch_d"], dtype=float)
+    d_grid = np.asarray(d_grid, dtype=float)
+    if game_anch[-1] < game_d[-1]:   # the last anchor can stop short of the lap end; close it so the tail doesn't go flat
+        game_anch = np.append(game_anch, game_d[-1])
+        real_anch = np.append(real_anch, max(real_anch[-1], d_grid[-1]))
+    real_d = np.interp(game_d, game_anch, real_anch)
+    real_d = np.maximum.accumulate(real_d) + np.arange(game_d.size) * 1e-6   # strictly increasing for interp
+    v = np.maximum(aligned["game_speed_kmh"].to_numpy(dtype=float) / 3.6, 1.0)
+    t = np.concatenate([[0.0], np.cumsum(np.diff(game_d) / ((v[1:] + v[:-1]) / 2))])
+    t *= (lap_time or t[-1]) / t[-1]
+
+    def col(values):
+        return np.interp(d_grid, real_d, np.asarray(values, dtype=float))
+
+    def rnd(values, digits):
+        return [round(float(x), digits) for x in values]
+
+    return {
+        "t": rnd(col(t), 3),
+        "speed": rnd(col(aligned["game_speed_kmh"]), 1),
+        "throttle": rnd(col(aligned["game_throttle"]), 3),
+        "brake": rnd(col(aligned["game_brake"]), 3),
+        "gear": [int(g) for g in np.rint(col(aligned["game_gear"]))],
+    }
+
+
+def _validate_lap_params(driver: str, session: str, year: int) -> None:
+    """driver/session/year end up in the reference-lap cache filename; reject anything odd."""
+    if (not re.fullmatch(r"[A-Z0-9]{1,3}", driver) or session not in PRO_LAP_SESSIONS
+            or not PRO_LAP_FIRST_YEAR <= int(year) <= time.localtime().tm_year):
+        raise HTTPException(status_code=422, detail="invalid driver, session or year")
+
+
+def _pro_lap_payload(df, meta: dict, driver: str, year: int, session: str, track: str) -> dict:
+    """The GET /pro_lap body: the 3D lap plus who / where it is."""
+    track_info = json.loads((PROJECT_ROOT / "tracks" / f"{track}.json").read_text(encoding="utf-8"))
+    payload = _build_pro_lap(df, meta, track_info)
+    payload["meta"].update({
+        "driver": driver, "year": int(year), "session": session, "track": track,
+        "track_name": SHORT_NAMES.get(track, track_info.get("name", track)),
+    })
+    return payload
+
+
+def _compare_3d_payload(payload: dict, aligned, report, driver: str, year: int,
+                        session: str, track: str) -> dict:
+    """3D Compare: the comparison header plus the pro lap (as /pro_lap) and your lap on its grid."""
+    session = (session or "Q").strip().upper()
+    try:
+        # ponytail: run_pipeline doesn't return its real lap; this second load hits the pkl cache.
+        df, meta = load_real_telemetry(driver, int(year), session, track)
+        pro = _pro_lap_payload(df, meta, driver, year, session, track)
+        you = _build_you_lap(aligned, pro["points"]["d"], float(report.game_time))
+    except Exception:
+        traceback.print_exc()
+        raise HTTPException(status_code=422, detail="No 3D data for this lap")
+
+    d = np.asarray(pro["points"]["d"])
+    s = np.asarray(you["speed"])
+    by_id = {int(ci.corner_id): ci for ci in report.corner_insights}
+    for c in pro["corners"]:
+        ci = by_id.get(int(c["id"])) if c.get("id") is not None else None
+        c["time_delta"] = _num(ci.time_delta, 3) if ci is not None else None
+        # Measured like the pro's min_speed_kmh: flat corners at the apex, others at the slowest point.
+        m = (d >= c["entry_m"]) & (d <= c["exit_m"])
+        c["your_min_speed_kmh"] = (float(s[m].min()) if c["action"] != "flat" and m.any()
+                                   else s[int(np.argmin(np.abs(d - c["apex_m"])))].item())
+    payload.update({"pro": pro, "you": you})
+    return payload
+
+
 def _available_pro_laps() -> list:
     """Cached reference laps, parsed from data/reference_laps/<year>_<drv>_<session>_<track>.pkl."""
     out = []
@@ -1456,23 +1546,14 @@ def pro_lap(year: int = DEFAULT_YEAR, driver: str = "NOR", track: str = "",
         raise HTTPException(status_code=404, detail="unknown track")
     driver = (driver or "").strip().upper()
     session = (session or "Q").strip().upper()
-    # driver/session/year end up in the reference-lap cache filename; reject anything odd.
-    if (not re.fullmatch(r"[A-Z0-9]{1,3}", driver) or session not in PRO_LAP_SESSIONS
-            or not PRO_LAP_FIRST_YEAR <= int(year) <= time.localtime().tm_year):
-        raise HTTPException(status_code=422, detail="invalid driver, session or year")
+    _validate_lap_params(driver, session, year)
     try:
         df, meta = load_real_telemetry(driver, int(year), session, track)
     except Exception:
         traceback.print_exc()
         return JSONResponse(status_code=404,
                             content={"detail": "no data", "available": _available_pro_laps()})
-    track_info = json.loads((PROJECT_ROOT / "tracks" / f"{track}.json").read_text(encoding="utf-8"))
-    payload = _build_pro_lap(df, meta, track_info)
-    payload["meta"].update({
-        "driver": driver, "year": int(year), "session": session, "track": track,
-        "track_name": SHORT_NAMES.get(track, track_info.get("name", track)),
-    })
-    return JSONResponse(payload)
+    return JSONResponse(_pro_lap_payload(df, meta, driver, year, session, track))
 
 
 @app.post("/laps")
@@ -1534,7 +1615,7 @@ def analyze(
     Run the analysis program chosen by ``mode`` on an uploaded lap.
 
     Solo modes (``overview``, ``lap_analysis``) analyse the uploaded lap on
-    its own; comparison modes (``comparison``, ``coaching``, ``track_map``)
+    its own; comparison modes (``comparison``, ``coaching``, ``track_map``, ``compare_3d``)
     run the full game-vs-real pipeline.
 
     Defined as a *sync* function on purpose: the heavy modes are CPU- and
@@ -1543,11 +1624,14 @@ def analyze(
     """
     driver = (driver or "").strip().upper()
     track = (track or "").strip().lower()
+    session = (session or "Q").strip().upper()
     mode = (mode or DEFAULT_MODE).strip().lower()
     if mode not in ALL_MODES:
         mode = DEFAULT_MODE
     if not track:
         raise HTTPException(status_code=422, detail="A track must be selected.")
+    if mode in COMPARISON_MODES:      # solo modes ignore the driver
+        _validate_lap_params(driver, session, year)
 
     # None -> auto-select fastest lap (unchanged behaviour); int -> that lapIndex.
     lap = _parse_lap_index(lap_index)

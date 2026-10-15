@@ -5,6 +5,8 @@ const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ESC[c]);
 
 const ACTION_LABEL = { brake: "BRAKE", lift: "LIFT", flat: "FLAT" };
+export const PRO_COLOR = "#ff8a00";   // index.js paints the cars from these too
+export const YOU_COLOR = "#2e7dff";
 
 const lastHtml = new WeakMap();
 /** Skip DOM writes when nothing changed (the HUD is redrawn every animation frame). */
@@ -25,8 +27,27 @@ export function renderHud(top, bottom, meta, s, cue) {
     `<span class="l3d-speed">${Math.round(s.speed)}</span>km/h · G${s.gear}`);
 }
 
-/** North-up outline of the circuit with a dot for the car. */
-export function createMinimap(svg, points) {
+/** "+0.42" / "−0.13" and its colour class; the sign comes from the rounded value, so never "−0.00". */
+function gapLabel(g) {
+  const r = Math.round(g * 100) / 100;
+  return [`${r < 0 ? "−" : "+"}${Math.abs(r).toFixed(2)}`, r > 0 ? "l3d-gap-slow" : r < 0 ? "l3d-gap-fast" : ""];
+}
+
+/** Compare HUD. Top: who vs who + live gap (red = you're behind). Bottom: your pedals and speed, the pro's speed. */
+export function renderCompareHud(top, bottom, meta, you, pro, gap) {
+  const [text, cls] = gapLabel(gap);
+  setHtml(top,
+    `<span style="color:${YOU_COLOR}">You</span> vs <span style="color:${PRO_COLOR}">${esc(meta.driver)}</span>` +
+    ` · ${esc(meta.track_name)}<br><span class="l3d-gap ${cls}">${text}</span>`);
+  setHtml(bottom,
+    `<span class="l3d-pedal" title="Your throttle"><i style="height:${Math.round(you.throttle * 100)}%;background:var(--ok)"></i></span>` +
+    `<span class="l3d-pedal" title="Your brake"><i style="height:${Math.round(you.brake * 100)}%;background:var(--accent)"></i></span>` +
+    `<span class="l3d-speed">${Math.round(you.speed)}</span>km/h · G${you.gear}` +
+    `<span class="l3d-pro-speed">${esc(meta.driver)} ${Math.round(pro.speed)}</span>`);
+}
+
+/** North-up outline of the circuit with one dot per car (`colors[k]` for `set(...states)[k]`). */
+export function createMinimap(svg, points, colors = ["var(--accent)"]) {
   const xs = [], ys = [];
   for (let i = 0; i < points.x.length; i += 5) { xs.push(points.x[i]); ys.push(points.y[i]); }
   xs.push(points.x[0]); ys.push(points.y[0]);   // close the loop
@@ -37,9 +58,13 @@ export function createMinimap(svg, points) {
     `${minX - (span - w) / 2 - pad} ${-maxY - (span - h) / 2 - pad} ${span + 2 * pad} ${span + 2 * pad}`);
   svg.innerHTML =
     `<polyline points="${xs.map((x, i) => `${x},${-ys[i]}`).join(" ")}" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="${span / 60}"/>` +
-    `<circle r="${span / 30}" fill="var(--accent)"/>`;
-  const dot = svg.querySelector("circle");
-  return { set(s) { dot.setAttribute("cx", s.x); dot.setAttribute("cy", -s.y); } };
+    colors.map((c) => `<circle r="${span / 30}" fill="${c}"/>`).join("");
+  const dots = [...svg.querySelectorAll("circle")];
+  return {
+    set(...states) {
+      states.forEach((s, k) => { dots[k].setAttribute("cx", s.x); dots[k].setAttribute("cy", -s.y); });
+    },
+  };
 }
 
 const ROWS = [
@@ -49,8 +74,24 @@ const ROWS = [
   { key: "steer", label: "Steer (est.)", color: "#c9a0ff", min: -1, max: 1 },
 ];
 
-/** Four stacked traces over lap distance, shaded brake zones, one shared cursor. Click = seek. */
-export function createTelemetry(el, points, onSeek) {
+/** Rows to draw: Learn = the four pro traces; Compare = pro vs you for speed/throttle/brake + the gap. */
+function rowsFor(points, you) {
+  if (!you) return ROWS.map((r) => ({ ...r, series: [{ vals: points[r.key], color: r.color }] }));
+  const gap = points.t.map((t, i) => you.t[i] - t);
+  const g = Math.max(0.1, ...gap.map(Math.abs));
+  return [
+    ...ROWS.slice(0, 3).map((r) => ({
+      ...r, series: [{ vals: points[r.key], color: PRO_COLOR }, { vals: you[r.key], color: YOU_COLOR }],
+    })),
+    { label: "Gap (s)", min: -g, max: g, zero: true, series: [{ vals: gap, color: "#ffd400" }] },
+  ];
+}
+
+/**
+ * Stacked traces over lap distance, shaded brake zones, one shared cursor. Click = seek.
+ * With `you` (a youPoints object) each row overlays you on the pro and a gap row is added.
+ */
+export function createTelemetry(el, points, onSeek, you = null, proName = "Pro") {
   const W = 1000, H = 48, n = points.d.length, L = points.d[n - 1];
   const step = Math.max(1, Math.floor(n / 600));
   const xOf = (d) => ((d / L) * W).toFixed(1);
@@ -64,14 +105,24 @@ export function createTelemetry(el, points, onSeek) {
   const shade = zones.map(([a, b]) =>
     `<rect x="${xOf(a)}" width="${Math.max(2, xOf(b) - xOf(a))}" y="0" height="${H}" fill="var(--accent)" opacity=".15"/>`).join("");
 
-  el.innerHTML = ROWS.map((r) => {
-    const vals = points[r.key];
-    const lo = r.min ?? Math.min(...vals), hi = r.max ?? Math.max(...vals), range = hi - lo || 1;
-    let pts = "";
-    for (let i = 0; i < n; i += step) pts += `${xOf(points.d[i])},${(H - ((vals[i] - lo) / range) * H).toFixed(1)} `;
+  const legend = you
+    ? `<div class="l3d-legend"><span><i style="background:${YOU_COLOR}"></i>You</span>` +
+      `<span><i style="background:${PRO_COLOR}"></i>${esc(proName)}</span></div>`
+    : "";
+  el.innerHTML = legend + rowsFor(points, you).map((r) => {
+    const all = r.series.flatMap((s) => s.vals);
+    const lo = r.min ?? Math.min(...all), hi = r.max ?? Math.max(...all), range = hi - lo || 1;
+    const yOf = (v) => (H - ((v - lo) / range) * H).toFixed(1);
+    const lines = r.series.map((s) => {
+      let pts = "";
+      for (let i = 0; i < n; i += step) pts += `${xOf(points.d[i])},${yOf(s.vals[i])} `;
+      return `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`;
+    }).join("");
+    const zero = r.zero
+      ? `<line x1="0" x2="${W}" y1="${yOf(0)}" y2="${yOf(0)}" stroke="rgba(255,255,255,.3)" vector-effect="non-scaling-stroke"/>`
+      : "";
     return `<div class="l3d-trace"><span class="l3d-trace-label">${r.label}</span>` +
-      `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${shade}` +
-      `<polyline points="${pts}" fill="none" stroke="${r.color}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>` +
+      `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${shade}${zero}${lines}` +
       `<line class="l3d-cursor" x1="0" x2="0" y1="0" y2="${H}" stroke="#fff" vector-effect="non-scaling-stroke"/></svg></div>`;
   }).join("");
 
@@ -88,15 +139,29 @@ export function createTelemetry(el, points, onSeek) {
   };
 }
 
-/** One row per corner (brake point → min speed, brake length). Click = replay that corner. */
-export function createCornerList(el, corners, onPick) {
+/**
+ * One row per corner. Learn: brake point → min speed, brake length.
+ * Compare: pro → your apex speed, and the time you gained (−) or lost (+) there. Click = replay that corner.
+ */
+export function createCornerList(el, corners, onPick, compare = false) {
+  const head = compare
+    ? `<span>Turn</span><span>Apex speed: pro → you</span><span>Gap</span>`
+    : `<span>Turn</span><span>Brake point → min speed</span><span>Brake</span>`;
   el.innerHTML =
-    `<div class="l3d-crow l3d-chead" aria-hidden="true"><span>Turn</span><span>Brake point → min speed</span><span>Brake</span></div>` +
+    `<div class="l3d-crow l3d-chead" aria-hidden="true">${head}</div>` +
     corners.map((c, i) => {
-      const where = c.action === "brake" ? `${Math.round(c.apex_m - c.brake_start_m)} m before apex` : esc(c.action);
-      const len = c.brake_duration_s != null ? `${c.brake_duration_s.toFixed(1)} s` : "—";
+      let mid, last;
+      if (compare) {
+        mid = `${esc(ACTION_LABEL[c.action])} · ${Math.round(c.min_speed_kmh)} → ${Math.round(c.your_min_speed_kmh)} km/h`;
+        const [text, cls] = c.time_delta == null ? ["—", ""] : gapLabel(c.time_delta);
+        last = `<span class="${cls}">${text}</span>`;
+      } else {
+        const where = c.action === "brake" ? `${Math.round(c.apex_m - c.brake_start_m)} m before apex` : esc(c.action);
+        mid = `${where} → ${Math.round(c.min_speed_kmh)} km/h · G${c.apex_gear}`;
+        last = c.brake_duration_s != null ? `${c.brake_duration_s.toFixed(1)} s` : "—";
+      }
       return `<button type="button" class="l3d-crow" data-i="${i}"><span>${esc(c.short)}</span>` +
-        `<span>${where} → ${Math.round(c.min_speed_kmh)} km/h · G${c.apex_gear}</span><span>${len}</span></button>`;
+        `<span>${mid}</span><span>${last}</span></button>`;
     }).join("");
   const rows = [...el.querySelectorAll("button.l3d-crow")];
   rows.forEach((r) => r.addEventListener("click", () => onPick(corners[+r.dataset.i])));

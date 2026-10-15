@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  bisect, stateAt, timeAtDistance, cuePoint, nextCue, cornerSeekRange, fmtTime,
+  bisect, stateAt, timeAtDistance, cuePoint, nextCue, cornerSeekRange, fmtTime, youPoints, gapAt,
 } from "../../app/static/js/learn3d/core.js";
 
 const P = {
@@ -81,4 +81,24 @@ test("fmtTime renders m:ss.t, truncating (never rounding up to :60.0)", () => {
   assert.equal(fmtTime(83.456), "1:23.4");
   assert.equal(fmtTime(5.04), "0:05.0");
   assert.equal(fmtTime(59.99), "0:59.9");
+});
+
+const Y = youPoints(P, {
+  t: [0, 2, 4, 6], speed: [50, 50, 50, 50], throttle: [0, 0, 0, 0], brake: [1, 1, 1, 1], gear: [2, 2, 2, 2],
+});
+
+test("youPoints keeps the pro's line and swaps in your timing and inputs", () => {
+  assert.deepEqual(Y.x, P.x);
+  assert.deepEqual(Y.d, P.d);
+  assert.deepEqual(Y.t, [0, 2, 4, 6]);
+  const s = stateAt(Y, 3);          // halfway between your 10 m (2 s) and 20 m (4 s)
+  assert.equal(s.d, 15);
+  assert.equal(s.speed, 50);
+  assert.equal(s.gear, 2);
+});
+
+test("gapAt is your time minus the pro's at the same distance", () => {
+  assert.equal(gapAt(P, Y, 0), 0);
+  assert.equal(gapAt(P, Y, 15), 1.5);   // you 3.0 s, pro 1.5 s
+  assert.equal(gapAt(P, Y, 30), 3);
 });

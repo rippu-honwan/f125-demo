@@ -10,11 +10,14 @@ const CAMS = {
   chase: { back: 9, height: 3.2, ahead: 8, look: 0.5 },
 };
 
+/** One entry per car: paint colour and a sideways lane offset (m) so cars at the same spot don't overlap. */
+const DEFAULT_CARS = [{ color: 0xe8002d, lane: 0 }];
+
 /** Builds the scene into `container`. Throws if WebGL is unavailable or the data is unusable. */
-export function createScene(container, points, corners) {
+export function createScene(container, points, corners, cars = DEFAULT_CARS) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   try {
-    return buildScene(renderer, container, points, corners);
+    return buildScene(renderer, container, points, corners, cars);
   } catch (err) {
     renderer.dispose();
     renderer.forceContextLoss();
@@ -24,7 +27,7 @@ export function createScene(container, points, corners) {
 }
 
 /** Everything after the renderer exists; split out so a failure can release the GL context. */
-function buildScene(renderer, container, points, corners) {
+function buildScene(renderer, container, points, corners, cars) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
   const scene = new THREE.Scene();
@@ -90,8 +93,11 @@ function buildScene(renderer, container, points, corners) {
     scene.add(apex);
   }
 
-  const car = buildCar();
-  scene.add(car);
+  const meshes = cars.map((c) => {
+    const m = buildCar(c.color);
+    scene.add(m);
+    return m;
+  });
 
   const camera = new THREE.PerspectiveCamera(60, 1, 0.5, 3500);
   const resize = () => {
@@ -107,12 +113,21 @@ function buildScene(renderer, container, points, corners) {
 
   const fwd = new THREE.Vector3(), target = new THREE.Vector3();
 
-  /** Place the car at state `s` (from core.stateAt), aim camera `cam`, render one frame. */
-  function update(s, cam) {
-    toThree(s.x, s.y, s.z, car.position).y += 0.05;
-    car.rotation.y = s.heading;
+  /**
+   * Place car k at `states[k]` (from core.stateAt), aim camera `cam` at car `follow`, render one frame.
+   */
+  function update(states, cam, follow = 0) {
+    states.forEach((s, k) => {
+      const m = meshes[k];
+      toThree(s.x, s.y, s.z, m.position).y += 0.05;
+      const lane = cars[k].lane || 0;                          // sideways, perpendicular to the heading
+      m.position.x += Math.sin(s.heading) * lane;
+      m.position.z += Math.cos(s.heading) * lane;
+      m.rotation.y = s.heading;
+    });
+    const s = states[follow];
     fwd.set(Math.cos(s.heading), 0, -Math.sin(s.heading));
-    const p = car.position;
+    const p = meshes[follow].position;
     if (cam === "top") {
       camera.up.copy(fwd);                                     // heading-up overhead view
       camera.position.set(p.x, p.y + 75, p.z);
@@ -144,9 +159,9 @@ function buildScene(renderer, container, points, corners) {
 }
 
 /** A generic open-wheel silhouette from primitives — original, no real livery or branding. Nose = +x. */
-function buildCar() {
+function buildCar(color) {
   const g = new THREE.Group();
-  const paint = new THREE.MeshStandardMaterial({ color: 0xe8002d, roughness: 0.4, metalness: 0.2 });
+  const paint = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.2 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x15161a, roughness: 0.8 });
   const add = (geo, mat, x, y, z) => {
     const m = new THREE.Mesh(geo, mat);
