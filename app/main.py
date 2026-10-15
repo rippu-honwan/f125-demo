@@ -1316,12 +1316,17 @@ def _build_you_lap(aligned, d_grid, lap_time: float) -> dict:
     ``lap_time`` like the pro lap.
     """
     game_d = aligned["lap_distance"].to_numpy(dtype=float)
-    real_d = np.interp(game_d, aligned.attrs["game_anch_d"], aligned.attrs["real_anch_d"])
+    game_anch = np.asarray(aligned.attrs["game_anch_d"], dtype=float)
+    real_anch = np.asarray(aligned.attrs["real_anch_d"], dtype=float)
+    d_grid = np.asarray(d_grid, dtype=float)
+    if game_anch[-1] < game_d[-1]:   # the last anchor can stop short of the lap end; close it so the tail doesn't go flat
+        game_anch = np.append(game_anch, game_d[-1])
+        real_anch = np.append(real_anch, max(real_anch[-1], d_grid[-1]))
+    real_d = np.interp(game_d, game_anch, real_anch)
     real_d = np.maximum.accumulate(real_d) + np.arange(game_d.size) * 1e-6   # strictly increasing for interp
     v = np.maximum(aligned["game_speed_kmh"].to_numpy(dtype=float) / 3.6, 1.0)
     t = np.concatenate([[0.0], np.cumsum(np.diff(game_d) / ((v[1:] + v[:-1]) / 2))])
-    t *= lap_time / t[-1]
-    d_grid = np.asarray(d_grid, dtype=float)
+    t *= (lap_time or t[-1]) / t[-1]
 
     def col(values):
         return np.interp(d_grid, real_d, np.asarray(values, dtype=float))
