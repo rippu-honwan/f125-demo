@@ -766,7 +766,7 @@
   /* Analysis mode segmented control */
   .mode-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     gap: 10px;
   }
   .mode-btn {
@@ -1405,3 +1405,68 @@
 #lapLoading { margin-left: auto; }
 #fixLabel { margin-top: 28px; }
 .map-hint--spaced { margin-top: 12px; }
+
+/* ------------------------------------------------------------------
+   3D Learn mode (#blkLearn3d) — driven by static/js/learn3d/
+   ------------------------------------------------------------------ */
+.l3d-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.l3d-head .section-label { flex: 1; margin: 0; }
+.l3d-views { display: flex; gap: 4px; background: var(--surface-2); border-radius: 10px; padding: 3px; }
+.l3d-views button, .l3d-cams button, .l3d-rates button {
+  background: none; border: 0; color: var(--text-dim); font: 600 0.8rem var(--font-body);
+  padding: 5px 10px; border-radius: 7px; cursor: pointer;
+}
+.l3d-views button.active, .l3d-cams button.active, .l3d-rates button.active { background: var(--accent); color: #fff; }
+.l3d-views button:focus-visible, .l3d-cams button:focus-visible, .l3d-rates button:focus-visible,
+#l3dPlay:focus-visible, .l3d-crow:focus-visible, .l3d-chip:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(232, 0, 45, 0.45); }
+.l3d-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.l3d-main[data-view="corners"] { grid-template-columns: minmax(0, 1fr) 300px; }
+.l3d-main[data-view="telemetry"] .l3d-corners,
+.l3d-main[data-view="corners"] .l3d-telemetry { display: none; }
+.l3d-stage { position: relative; height: 440px; border-radius: var(--radius-sm); overflow: hidden; background: #9cc3dd; }
+.l3d-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.l3d-stage.l3d-nogl { display: grid; place-items: center; background: var(--surface-2); }
+.l3d-stage.l3d-nogl::after { content: "3D view needs WebGL — telemetry and corners still work."; color: var(--text-dim); font-size: 0.9rem; }
+.l3d-hud { position: absolute; z-index: 1; color: #fff; background: rgba(0, 0, 0, 0.55); padding: 6px 9px; border-radius: 8px; font: 600 0.8rem var(--font-body); }
+.l3d-hud-tl { left: 10px; top: 10px; }
+.l3d-hud-bl { left: 10px; bottom: 10px; display: flex; align-items: flex-end; gap: 4px; }
+.l3d-cue { color: #ffd400; }
+.l3d-pedal { display: inline-block; width: 9px; height: 40px; background: #333; position: relative; }
+.l3d-pedal i { position: absolute; left: 0; right: 0; bottom: 0; }
+.l3d-speed { font: 700 1.6rem var(--font-display); margin: 0 4px 0 6px; line-height: 1; }
+.l3d-minimap { position: absolute; z-index: 1; right: 10px; top: 10px; width: 96px; height: 96px; background: rgba(0, 0, 0, 0.4); border-radius: 8px; }
+.l3d-cams { position: absolute; z-index: 1; right: 10px; bottom: 10px; display: flex; gap: 4px; background: rgba(0, 0, 0, 0.55); border-radius: 9px; padding: 3px; }
+.l3d-cams button { color: #fff; }
+.l3d-corners { max-height: 440px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.l3d-crow {
+  display: grid; grid-template-columns: 44px 1fr 48px; gap: 6px; text-align: left; padding: 7px 8px;
+  background: var(--surface); border: 0; border-radius: 8px; color: var(--text); font: 0.8rem var(--font-body); cursor: pointer;
+}
+.l3d-crow:hover { background: var(--surface-hover); }
+.l3d-crow.active { background: var(--minor-soft); color: #ffd27a; }
+.l3d-chead { background: none; color: var(--text-dim); cursor: default; font-size: 0.72rem; }
+.l3d-chead:hover { background: none; }
+.l3d-telemetry { display: flex; flex-direction: column; gap: 6px; }
+.l3d-trace { display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 8px; }
+.l3d-trace-label { color: var(--text-dim); font-size: 0.75rem; }
+.l3d-trace svg { width: 100%; height: 48px; cursor: crosshair; background: var(--surface); border-radius: 6px; }
+.l3d-controls { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+#l3dPlay { width: 38px; height: 34px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
+.l3d-rates { display: flex; gap: 2px; }
+.l3d-controls input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.l3d-time { font: 600 0.85rem var(--font-body); color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.l3d-keys { margin-top: 6px; font-size: 0.72rem; color: var(--text-dim); }
+.l3d-msg { padding: 16px; color: var(--text-dim); }
+.l3d-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.l3d-chip { background: var(--surface-2); border: 1px solid var(--border-strong); color: var(--text); border-radius: 999px; padding: 4px 10px; cursor: pointer; font: 0.8rem var(--font-body); }
+@media (max-width: 900px) {
+  .l3d-main[data-view="corners"] { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 768px) {
+  .l3d-stage { height: 300px; }
+  .l3d-corners { max-height: 260px; }
+  .l3d-trace { grid-template-columns: 1fr; gap: 2px; }
+  .l3d-controls { flex-wrap: wrap; }
+  .l3d-controls input[type="range"] { flex: 1 1 100%; order: 3; }
+  .l3d-keys { display: none; }
+}

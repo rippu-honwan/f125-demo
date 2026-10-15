@@ -10,6 +10,15 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="static/css/main.css?v=__BUILD__" />
+<!-- Three.js for the 3D Learn mode (pinned; only loaded when that mode runs). -->
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "./static/js/learn3d/core.js": "./static/js/learn3d/core.js?v=__BUILD__",
+  "./static/js/learn3d/panels.js": "./static/js/learn3d/panels.js?v=__BUILD__",
+  "./static/js/learn3d/scene.js": "./static/js/learn3d/scene.js?v=__BUILD__"
+} }
+</script>
 <style>
   .track-legend {
     display: flex;
@@ -96,7 +105,7 @@
 
     <section class="panel">
       <!-- ========== 1 · Telemetry file ========== -->
-      <div class="form-section">
+      <div class="form-section" id="fileSection">
         <div class="section-heading"><span class="sh-num">1</span> <span data-i18n="section.telemetryFile">Telemetry File</span> <button type="button" id="useSampleBtn" class="btn-sample" data-i18n="btn.useSample">Use Sample ▶</button></div>
         <div id="sampleStatus" class="sample-status" role="status" hidden></div>
         <div
@@ -164,6 +173,11 @@
             <span class="mb-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg></span>
             <span class="mb-name">Track<br>Explorer</span>
             <span class="mb-tag">vs Pro</span>
+          </button>
+          <button type="button" class="mode-btn" data-mode="learn_3d" role="tab" aria-selected="false">
+            <span class="mb-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg></span>
+            <span class="mb-name">3D<br>Learn</span>
+            <span class="mb-tag">Pro lap</span>
           </button>
         </div>
         <div class="mode-desc" id="modeDesc">
@@ -410,6 +424,44 @@
         <div class="tx-charts" id="txCharts"></div>
       </div>
 
+      <!-- 3D Learn: replay a pro lap on a 3D track (driven by static/js/learn3d/) -->
+      <div class="result-block l3d" id="blkLearn3d">
+        <div class="l3d-head">
+          <div class="section-label">3D Pro Lap</div>
+          <div class="l3d-views" role="group" aria-label="Side panel">
+            <button type="button" class="l3d-view active" data-view="telemetry" aria-pressed="true"><span aria-hidden="true">📈</span> Telemetry</button>
+            <button type="button" class="l3d-view" data-view="corners" aria-pressed="false"><span aria-hidden="true">🏁</span> Corners</button>
+          </div>
+        </div>
+        <div class="l3d-msg" id="l3dMsg" role="status" hidden></div>
+        <div class="l3d-main" id="l3dMain" data-view="telemetry">
+          <div class="l3d-stage" id="l3dStage">
+            <div class="l3d-hud l3d-hud-tl" id="l3dHudTop"></div>
+            <div class="l3d-hud l3d-hud-bl" id="l3dHudBottom"></div>
+            <svg class="l3d-minimap" id="l3dMinimap" aria-hidden="true"></svg>
+            <div class="l3d-cams" role="group" aria-label="Camera">
+              <button type="button" data-cam="tcam" class="active" aria-pressed="true">T-cam</button>
+              <button type="button" data-cam="chase" aria-pressed="false">Chase</button>
+              <button type="button" data-cam="top" aria-pressed="false">Top</button>
+            </div>
+          </div>
+          <div class="l3d-corners" id="l3dCorners"></div>
+          <div class="l3d-telemetry" id="l3dTelemetry"></div>
+        </div>
+        <div class="l3d-controls" id="l3dControls">
+          <button type="button" id="l3dPlay" aria-label="Play">▶</button>
+          <span class="l3d-rates" role="group" aria-label="Playback speed">
+            <button type="button" data-rate="0.25" aria-pressed="false">0.25×</button>
+            <button type="button" data-rate="0.5" aria-pressed="false">0.5×</button>
+            <button type="button" data-rate="1" class="active" aria-pressed="true">1×</button>
+            <button type="button" data-rate="2" aria-pressed="false">2×</button>
+          </span>
+          <input type="range" id="l3dScrub" min="0" max="1000" value="0" step="1" aria-label="Lap position" />
+          <span class="l3d-time" id="l3dTime">0:00.0 / 0:00.0</span>
+        </div>
+        <div class="l3d-keys">Space play/pause · ← → ±2 s · 1/2/3 camera</div>
+      </div>
+
       <!-- Corner cards -->
       <div class="result-block corners" id="blkCorners">
         <div class="section-label" id="cornersLabel" data-i18n="section.cornerBreakdown">Corner Breakdown</div>
@@ -473,6 +525,7 @@
     </footer>
   </div>
 
+<script type="module" src="static/js/learn3d/index.js?v=__BUILD__"></script>
 <script src="static/js/main.js?v=__BUILD__"></script>
 </body>
 </html>

@@ -20,7 +20,9 @@ Run
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -64,7 +66,7 @@ from src.loader import (  # noqa: E402
 )
 from src.corners import analyze_solo, summarize_corners  # noqa: E402
 from src.track import load_track, auto_detect_track  # noqa: E402
-from src.fastf1_loader import resolve_gp_name  # noqa: E402  (track -> official GP name)
+from src.fastf1_loader import resolve_gp_name, load_real_telemetry  # noqa: E402
 from src.coaching import (  # noqa: E402  (read-only consumption)
     _generate_action_plan,
     _estimate_potential,
@@ -1160,6 +1162,163 @@ def _run_comparison(csv_path: str, mode: str, driver: str, year: int,
 
 
 # ---------------------------------------------------------------------------
+# 3D Learn mode: pro reference lap for the browser (GET /pro_lap)
+# ---------------------------------------------------------------------------
+PRO_LAP_SESSIONS = {"Q", "R", "S", "SQ", "SS", "FP1", "FP2", "FP3"}
+PRO_LAP_FIRST_YEAR = 2018     # FastF1 has car telemetry from 2018 on
+PRO_LAP_STEP_M = 2.0          # sample spacing sent to the browser
+BRAKE_SEARCH_LEAD_M = 250.0   # earliest brake point considered before a corner's entry
+APEX_MARGIN_M = 30.0          # an onset this close to an apex belongs to the next corner
+LIFT_THROTTLE = 0.9           # throttle below this counts as a lift (checked only when no brake onset)
+BRAKE_ON = 0.5                # reference brake is 0/1 but resampling leaves ramps
+APEX_SEARCH_AFTER_M = 150.0   # real apex = slowest point within this distance after brake release / lift end
+
+
+def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
+    """Classify each corner of a pro lap as brake / lift / flat.
+
+    All arrays are index-aligned along lap distance ``d`` (metres). Brake onsets
+    are searched in ``[max(entry - BRAKE_SEARCH_LEAD_M, prev_apex - APEX_MARGIN_M),
+    apex - APEX_MARGIN_M)`` so a corner never inherits the previous corner's
+    braking and an onset right at an apex is credited to the next corner
+    (validated on Bahrain + Monza). A lift is a throttle drop (from >= LIFT_THROTTLE
+    to below it) detected as an onset strictly after the previous corner's exit,
+    within the window ``[max(entry - BRAKE_SEARCH_LEAD_M, prev_exit),
+    apex - APEX_MARGIN_M)``. A lift that began before the window is intentionally
+    not counted (e.g. coasting from a previous corner).
+
+    The json corner distances drift from FastF1 lap distance, so after classifying,
+    brake and lift corners are re-anchored on the pro's slowest point (within
+    APEX_SEARCH_AFTER_M of brake release / lift end) and entry/apex/exit shift together;
+    flat corners keep the json positions and report speed/gear at the json apex.
+    The search stops before the next corner (its brake/lift onset, or its json apex if
+    it's flat), so apexes stay distinct and in lap order; entry/exit ranges may still
+    overlap. Corners are processed in json-apex order because some track files aren't.
+
+    Known limitation: when the json drifts far from lap distance, an onset can fall in
+    the gap between two corners' windows and a real braking corner is reported flat
+    (e.g. Spa La Source). Fix: assign each onset to the nearest json corner after its
+    slowest point.
+    """
+    on = brake >= BRAKE_ON
+    onsets = np.flatnonzero(on & ~np.r_[False, on[:-1]])    # off -> on transitions
+    # Detect throttle lift onsets: transitions to throttle < LIFT_THROTTLE
+    throttle_low = throttle < LIFT_THROTTLE
+    throttle_was_high = np.r_[True, ~throttle_low[:-1]]  # sample i-1 at/above threshold (sample 0 counts as high)
+    lift_onsets = np.flatnonzero(throttle_low & throttle_was_high)
+    lift_d = d[lift_onsets]
+
+    found, prev_apex, prev_exit = [], -np.inf, -np.inf
+    for c in sorted(corners, key=lambda c: float(c["apex_m"])):
+        entry, apex, exit_ = float(c["entry_m"]), float(c["apex_m"]), float(c["exit_m"])
+        lo = max(entry - BRAKE_SEARCH_LEAD_M, prev_apex - APEX_MARGIN_M)
+        hi = apex - APEX_MARGIN_M
+        lift_lo = max(entry - BRAKE_SEARCH_LEAD_M, prev_exit)
+        mine = onsets[(d[onsets] >= lo) & (d[onsets] < hi)]
+        action, brake_start, brake_dur = "flat", None, None
+        i_on = i_off = None                       # slow-zone span used to re-anchor the apex
+        if mine.size:
+            i0 = int(mine[0])
+            released = np.flatnonzero(~on[i0:])
+            i1 = i0 + (int(released[0]) - 1 if released.size else on.size - 1 - i0)
+            action, brake_start = "brake", float(d[i0])
+            brake_dur = round(float(t[i1] - t[i0]), 2)
+            i_on, i_off = i0, i1
+        else:
+            # For lift: detect throttle onset (transition to low) within the window,
+            # excluding the previous corner's exit point. Only count transitions that
+            # happen AFTER the previous corner's exit to avoid false positives.
+            mine_lift = lift_onsets[(lift_d > prev_exit) & (lift_d >= lift_lo) & (lift_d < hi)]
+            if mine_lift.size:
+                action = "lift"
+                i_on = int(mine_lift[0])
+                back = np.flatnonzero(~throttle_low[i_on:])
+                i_off = i_on + (int(back[0]) - 1 if back.size else throttle.size - 1 - i_on)
+        prev_apex = apex
+        prev_exit = exit_
+        found.append((c, action, brake_start, brake_dur, i_on, i_off))
+
+    # Where each corner starts, for capping the previous corner's apex search.
+    starts = [d[f[4]] if f[4] is not None else float(f[0]["apex_m"]) for f in found] + [np.inf]
+    out = []
+    for n, (c, action, brake_start, brake_dur, i_on, i_off) in enumerate(found):
+        entry, apex, exit_ = float(c["entry_m"]), float(c["apex_m"]), float(c["exit_m"])
+        shift = 0.0
+        if i_on is None:
+            k = int(np.argmin(np.abs(d - apex)))
+        else:
+            win = np.flatnonzero((d >= d[i_on]) & (d <= d[i_off] + APEX_SEARCH_AFTER_M)
+                                 & (d < starts[n + 1]))
+            k = int(win[np.argmin(speed[win])]) if win.size else i_on
+            shift = float(d[k]) - apex
+        out.append({
+            "id": c.get("id"), "short": c.get("short"), "name": c.get("name"),
+            "direction": c.get("direction"),
+            "entry_m": round(entry + shift, 1), "apex_m": round(apex + shift, 1),
+            "exit_m": round(exit_ + shift, 1),
+            "action": action, "brake_start_m": brake_start, "brake_duration_s": brake_dur,
+            "min_speed_kmh": round(float(speed[k]), 1), "apex_gear": int(gear[k]),
+        })
+    return out
+
+
+def _build_pro_lap(df, meta: dict, track_info: dict, step: float = PRO_LAP_STEP_M) -> dict:
+    """A FastF1 reference lap -> compact column arrays (metres, seconds) for the 3D viewer."""
+    d_full = df["lap_distance"].to_numpy(dtype=float)
+    raw_x = df["world_position_X"].to_numpy(dtype=float)
+    raw_y = df["world_position_Y"].to_numpy(dtype=float)
+    raw_z = df["world_position_Z"].to_numpy(dtype=float)
+    length = float(meta.get("track_length") or d_full[-1])
+
+    # FastF1 positions are 1/10 m; derive the scale from the lap itself instead of
+    # hardcoding 0.1, so any unit change upstream can't silently break the 3D scene.
+    path = float(np.hypot(np.diff(raw_x), np.diff(raw_y)).sum())
+    scale = length / path if path > 0 else 1.0
+    xs, ys, _ = _smooth_loop_xy(raw_x * scale, raw_y * scale)
+    zs = smooth(raw_z * scale, window=25)
+
+    d = np.arange(0.0, d_full[-1] + 1e-9, step)
+
+    def col(values):
+        return np.interp(d, d_full, np.asarray(values, dtype=float))
+
+    speed, throttle, brake = col(df["speed_kmh"]), col(df["throttle"]), col(df["brake"])
+    gear = np.rint(col(df["gear"])).astype(int)
+    v = np.maximum(speed / 3.6, 1.0)
+    t = np.concatenate([[0.0], np.cumsum(np.diff(d) / ((v[1:] + v[:-1]) / 2))])
+    lap_time = float(meta.get("lap_time") or t[-1])
+    t *= lap_time / t[-1]                      # integration drifts ~0.1 s; pin to the real lap time
+
+    steer = _ref_steering_from_curvature(df, d_full, d) or [0.0] * d.size
+    steer = [0.0 if s is None else s for s in steer]
+
+    def rnd(values, digits):
+        return [round(float(x), digits) for x in values]
+
+    return {
+        "meta": {"gp_name": meta.get("gp_name"), "lap_time": round(lap_time, 3),
+                 "length_m": round(length, 1)},
+        "points": {
+            "d": rnd(d, 1), "x": rnd(col(xs), 2), "y": rnd(col(ys), 2), "z": rnd(col(zs), 2),
+            "t": rnd(t, 3), "speed": rnd(speed, 1), "throttle": rnd(throttle, 3),
+            "brake": rnd(brake, 3), "gear": gear.tolist(), "steer": rnd(steer, 3),
+        },
+        "corners": _corner_actions(track_info.get("corners", []), d, t, speed, throttle, brake, gear),
+    }
+
+
+def _available_pro_laps() -> list:
+    """Cached reference laps, parsed from data/reference_laps/<year>_<drv>_<session>_<track>.pkl."""
+    out = []
+    for p in sorted((PROJECT_ROOT / "data" / "reference_laps").glob("*.pkl")):
+        parts = p.stem.split("_", 3)
+        if len(parts) == 4 and parts[0].isdigit():
+            out.append({"year": int(parts[0]), "driver": parts[1].upper(),
+                        "session": parts[2].upper(), "track": parts[3]})
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 @app.get("/health")
@@ -1236,6 +1395,38 @@ def best_driver(year: int = DEFAULT_YEAR, track: str = "") -> JSONResponse:
     track = (track or "").strip().lower()
     code = _best_qualifier(year, track) if track else None
     return JSONResponse({"driver": code, "year": int(year), "track": track})
+
+
+@app.get("/pro_lap")
+def pro_lap(year: int = DEFAULT_YEAR, driver: str = "NOR", track: str = "",
+            session: str = "Q") -> JSONResponse:
+    """A pro reference lap as compact column arrays for the 3D Learn mode.
+
+    Served from data/reference_laps/*.pkl when cached, otherwise fetched via
+    FastF1 (slow on first call). 404 with ``available`` combos when no data.
+    """
+    track = (track or "").strip().lower()
+    if track not in {t["key"] for t in _discover_tracks()}:   # also blocks path tricks
+        raise HTTPException(status_code=404, detail="unknown track")
+    driver = (driver or "").strip().upper()
+    session = (session or "Q").strip().upper()
+    # driver/session/year end up in the reference-lap cache filename; reject anything odd.
+    if (not re.fullmatch(r"[A-Z0-9]{1,3}", driver) or session not in PRO_LAP_SESSIONS
+            or not PRO_LAP_FIRST_YEAR <= int(year) <= time.localtime().tm_year):
+        raise HTTPException(status_code=422, detail="invalid driver, session or year")
+    try:
+        df, meta = load_real_telemetry(driver, int(year), session, track)
+    except Exception:
+        traceback.print_exc()
+        return JSONResponse(status_code=404,
+                            content={"detail": "no data", "available": _available_pro_laps()})
+    track_info = json.loads((PROJECT_ROOT / "tracks" / f"{track}.json").read_text(encoding="utf-8"))
+    payload = _build_pro_lap(df, meta, track_info)
+    payload["meta"].update({
+        "driver": driver, "year": int(year), "session": session, "track": track,
+        "track_name": SHORT_NAMES.get(track, track_info.get("name", track)),
+    })
+    return JSONResponse(payload)
 
 
 @app.post("/laps")

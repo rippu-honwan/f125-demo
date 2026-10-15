@@ -21,6 +21,7 @@
       "btn.runAnalysis.comparison":   "Run Lap Comparison",
       "btn.runAnalysis.coaching":     "Run Coaching Report",
       "btn.runAnalysis.track_map":    "Run Track Explorer",
+      "btn.runAnalysis.learn_3d":     "Load 3D Lap",
       "upload.dzTitle":        "Drop your telemetry CSV",
       "upload.dzHint":         "or click to browse — exported from Sim Racing Telemetry",
       "upload.dzFormats":      ".CSV · tab or comma separated",
@@ -76,6 +77,9 @@
       "mode.comparison.desc":  "Compare every corner of your lap against a real F1 driver — speed traces, braking points and time delta.",
       "mode.coaching.desc":    "Personalised coaching report: your top priority corners, driving tendencies and a clear action plan.",
       "mode.trackMap.desc":    "Interactive circuit map: hover the track to see your speed, throttle, brake and gear at any point.",
+      "mode.learn3d.name":     "3D\nLearn",
+      "mode.learn3d.tag":      "Pro lap",
+      "mode.learn3d.desc":     "Watch a real F1 driver's lap on a 3D track — see where they brake, lift and get back on the throttle. No CSV needed.",
       "loading.messages":      ["Connecting to F1 data servers...",
                                 "Downloading 2025 qualifying telemetry...",
                                 "Aligning your lap with the pro...",
@@ -105,6 +109,7 @@
       "btn.runAnalysis.comparison":   "ラップ比較を実行",
       "btn.runAnalysis.coaching":     "コーチングレポートを実行",
       "btn.runAnalysis.track_map":    "コースエクスプローラーを実行",
+      "btn.runAnalysis.learn_3d":     "3Dラップを読み込む",
       "upload.dzTitle":        "テレメトリーCSVをドロップ",
       "upload.dzHint":         "またはクリックして選択 — Sim Racing Telemetryからエクスポート",
       "upload.dzFormats":      ".CSV · タブまたはカンマ区切り",
@@ -160,6 +165,9 @@
       "mode.comparison.desc":  "実際のF1ドライバーとすべてのコーナーを比較 — 速度トレース、ブレーキポイント、タイムデルタ。",
       "mode.coaching.desc":    "パーソナライズされたコーチングレポート：優先改善コーナー、運転傾向、明確なアクションプラン。",
       "mode.trackMap.desc":    "インタラクティブなサーキットマップ：コース上でホバーしてどの地点でも速度・スロットル・ブレーキ・ギアを確認。",
+      "mode.learn3d.name":     "3D\n学習",
+      "mode.learn3d.tag":      "プロのラップ",
+      "mode.learn3d.desc":     "実際のF1ドライバーのラップを3Dコースで再生 — ブレーキ、リフト、再加速のポイントを確認。CSV不要。",
       "loading.messages":      ["F1データサーバーに接続中...",
                                 "2025年予選テレメトリーをダウンロード中...",
                                 "あなたのラップとプロを照合中...",
@@ -183,7 +191,7 @@
   // mode key (data-mode) -> i18n prefix used by mode.*.name/.tag/.desc
   const MODE_I18N = {
     overview: "overview", lap_analysis: "lapAnalysis", comparison: "comparison",
-    coaching: "coaching", track_map: "trackMap",
+    coaching: "coaching", track_map: "trackMap", learn_3d: "learn3d",
   };
 
   let currentLang = localStorage.getItem("f1coach_lang") || "en";
@@ -434,6 +442,7 @@
   const bestDriverCode = $("bestDriverCode"); // read-only "Best qualifier: XXX" code span
 
   let selectedFile = null;
+  let lastDetection = null;   // {key, name, year} from the last /laps auto-detect, restored after 3D mode
   let kcData = [];          // per-corner trace data, for mini-chart hover tooltips
   let kcDriver = "Pro";     // reference driver label shown in those tooltips
   let lapChartData = { you: [], pro: [], delta: [], markers: [] };  // whole-lap hover
@@ -478,15 +487,24 @@
       desc: "Interactive Track Map — an SVG of the circuit you can hover point by point. The marker is the controller: it drives the telemetry panel below, reading out your speed, throttle, brake and gear at the hovered position, with every chart cursor moving together.",
       blocks: ["blkExplorer"],
     },
+    learn_3d: {
+      label: "Load 3D Lap",
+      tag: "Pro lap",
+      needsReference: true,
+      desc: "3D Learn — replay a real F1 driver's lap on a 3D track. No CSV needed.",
+      blocks: ["blkLearn3d"],
+    },
   };
   const ALL_BLOCKS = [
     "blkOverview", "blkSolo", "blkTiming", "blkLapChart", "blkCompStrip",
     "blkExplorer", "blkCorners", "blkKeyCorners", "blkSummary", "blkActionPlan", "blkSeverity",
+    "blkLearn3d",
   ];
   let currentMode = "overview";
 
   function applyModeUI(mode) {
     if (typeof txStopPlayback === "function") txStopPlayback();  // leaving a mode stops any lap playback
+    const leaving3d = currentMode === "learn_3d" && mode !== "learn_3d";
     currentMode = mode;
     const meta = MODES[mode];
 
@@ -512,12 +530,31 @@
       refHintText.textContent =
         "This mode analyses your lap on its own — only the track matters. Driver, year and session are ignored.";
     }
+
+    // 3D Learn needs no CSV: hide the upload + lap picker, use the manual track
+    // dropdown, and let the button run without a file.
+    const is3d = mode === "learn_3d";
+    $("fileSection").hidden = is3d;
+    lapBlock.hidden = is3d;
+    if (is3d) {
+      refOpt.textContent = "Pro lap to watch";
+      refHintText.textContent = "Pick the driver, year, session and track whose lap you want to study in 3D.";
+      showManualTrack();
+    } else if (leaving3d) {
+      if (window.Learn3D) window.Learn3D.unload();
+      // 3D used the manual dropdown; put the CSV's detected track/year back.
+      if (selectedFile && lastDetection) applyDetectedTrack(lastDetection.key, lastDetection.name, lastDetection.year);
+      else if (!selectedFile) resetTrackDetection();
+    }
+    // setLang() also calls applyModeUI — never re-enable the button mid-run.
+    if (!analyzeBtn.classList.contains("loading")) analyzeBtn.disabled = !is3d && !selectedFile;
   }
 
   modeGrid.querySelectorAll(".mode-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       applyModeUI(btn.dataset.mode);
       results.classList.remove("show");   // a new mode means a fresh run
+      if (window.Learn3D) window.Learn3D.unload();   // results hidden: stop the 3D loop too
       hideError();
     });
   });
@@ -532,6 +569,7 @@
   function setFile(file) {
     if (!file) return;
     selectedFile = file;
+    lastDetection = null;
     fcName.textContent = file.name;
     fcSize.textContent = formatBytes(file.size);
     fileChip.classList.add("show");
@@ -545,6 +583,7 @@
     fileChip.classList.remove("show");
     analyzeBtn.disabled = true;
     resetLapSelector();
+    lastDetection = null;
     resetTrackDetection();
   }
   function formatBytes(b) {
@@ -904,7 +943,8 @@
       // the CSV here); applyDetectedTrack sets both, then refreshes the driver.
       const detectedYear = await detectYearFromCsv(file);
       if (token !== lapFetchToken) return;  // a newer upload superseded this one
-      applyDetectedTrack(payload.detected_track, payload.detected_track_name, detectedYear);
+      lastDetection = { key: payload.detected_track, name: payload.detected_track_name, year: detectedYear };
+      applyDetectedTrack(lastDetection.key, lastDetection.name, lastDetection.year);
 
       lapData = Array.isArray(payload.laps) ? payload.laps : [];
       if (!payload.has_lap_index) {
@@ -971,7 +1011,9 @@
       : (sel && sel.value ? sel.value : "your");
     const driver = ($("driver").value || "VER").trim().toUpperCase();
     const needsRef = MODES[currentMode] && MODES[currentMode].needsReference;
-    $("loadingOverlaySub").textContent = needsRef
+    $("loadingOverlaySub").textContent = currentMode === "learn_3d"
+      ? (currentLang === "ja" ? `${driver}の${trackName}ラップを読み込み中` : `Loading ${driver}'s ${trackName} lap`)
+      : needsRef
       ? (currentLang === "ja"
           ? `${trackName}のラップを${driver}と比較中`
           : `Comparing your ${trackName} lap vs ${driver}`)
@@ -979,6 +1021,12 @@
           ? `${trackName}のラップを分析中`
           : `Analysing your ${trackName} lap`);
     // Cycle the status line every 3s (wraps around while the request runs).
+    if (currentMode === "learn_3d") {   // the cycling messages describe the CSV analysis
+      if (overlayTimer) { clearInterval(overlayTimer); overlayTimer = null; }
+      $("loadingOverlayMsg").textContent = currentLang === "ja" ? "プロのラップを取得中…（初回はダウンロードに時間がかかります）" : "Fetching the pro lap… (the first download can take a minute)";
+      ov.style.display = "flex";
+      return;
+    }
     let i = 0;
     $("loadingOverlayMsg").textContent = OVERLAY_MESSAGES[0];
     if (overlayTimer) clearInterval(overlayTimer);
@@ -2082,7 +2130,49 @@
   }
 
   // -------- Submit --------
+  // 3D Learn: no upload — load the pro lap straight into the viewer.
+  // `pick` ({year, driver, session, track}) comes from an "available lap" chip.
+  async function runLearn3d(pick) {
+    if (pick) {   // mirror the chip in the form wherever that option exists
+      for (const [id, v] of [["yearSel", pick.year], ["driver", pick.driver], ["session", pick.session], ["track", pick.track]]) {
+        const sel = $(id);
+        if ([...sel.options].some((o) => o.value === String(v))) sel.value = String(v);
+      }
+    }
+    const want = pick || {
+      year: $("yearSel").value, driver: $("driver").value || "NOR",
+      session: $("session").value, track: $("track").value,
+    };
+    hideError();
+    analyzeBtn.classList.add("loading");
+    analyzeBtn.disabled = true;
+    showLoadingOverlay();
+    const qs = new URLSearchParams({ year: want.year, driver: want.driver, session: want.session, track: want.track });
+    applyResultLayout("learn_3d");
+    results.classList.add("show");
+    // The first FastF1 download can take 30 s+; give up after 2 minutes instead of hanging.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+    try {
+      if (!window.Learn3D) throw new Error("The 3D viewer didn't load — check your connection and reload.");
+      await window.Learn3D.load(apiUrl("/pro_lap?" + qs), (c) => runLearn3d(c), controller.signal);
+      if (currentMode === "learn_3d") results.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (err) {
+      if (window.Learn3D) window.Learn3D.unload();
+      results.classList.remove("show");
+      showError(err && err.name === "AbortError"
+        ? "Loading the pro lap is taking too long — the server may be waking up or downloading data. Please try again."
+        : apiErrorMessage(err, "Couldn't load the pro lap."));
+    } finally {
+      clearTimeout(timeoutId);
+      hideLoadingOverlay();
+      analyzeBtn.classList.remove("loading");
+      analyzeBtn.disabled = currentMode !== "learn_3d" && !selectedFile;
+    }
+  }
+
   async function analyze() {
+    if (currentMode === "learn_3d") return runLearn3d();
     if (!selectedFile) { showError("Please choose a telemetry CSV first."); return; }
     hideError();
     results.classList.remove("show");
