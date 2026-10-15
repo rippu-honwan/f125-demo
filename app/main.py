@@ -81,7 +81,7 @@ LAP_INDEX_COLUMNS = ("lapIndex", "lap_index")
 #   Comparison modes run the full game-vs-real pipeline — scripts 03 (Lap
 #   Comparison), 04 (Coaching Report) and 05 (Track Map).
 SOLO_MODES = ("overview", "lap_analysis")
-COMPARISON_MODES = ("comparison", "coaching", "track_map")
+COMPARISON_MODES = ("comparison", "coaching", "track_map", "compare_3d")
 ALL_MODES = SOLO_MODES + COMPARISON_MODES
 DEFAULT_MODE = "comparison"
 DEFAULT_YEAR = 2025
@@ -1007,6 +1007,8 @@ def _run_comparison(csv_path: str, mode: str, driver: str, year: int,
     * ``track_map``  -> the interactive Track Explorer: an SVG circuit polyline
       plus your-lap telemetry sampled along it, so hovering the map drives the
       linked telemetry chart (no static PNG, no coaching prose).
+    * ``compare_3d`` -> the pro lap for the 3D viewer plus your lap on its
+      distance grid (see ``_compare_3d_payload``).
     """
     args = SimpleNamespace(
         csv=csv_path,
@@ -1051,6 +1053,11 @@ def _run_comparison(csv_path: str, mode: str, driver: str, year: int,
         "overall_delta": _num(report.overall_delta, 3),
         "overall_grade": report.overall_grade,
     }
+
+    # ---- 3D Compare: both laps for the 3D viewer, nothing else. ----
+    if mode == "compare_3d":
+        return _compare_3d_payload(payload, aligned, report, args.driver, args.year,
+                                   args.session, track)
 
     # ---- Lap Comparison: visual, you-vs-pro, no heatmap (that's Track Map). ----
     if mode == "comparison":
@@ -1343,6 +1350,42 @@ def _build_you_lap(aligned, d_grid, lap_time: float) -> dict:
     }
 
 
+def _pro_lap_payload(df, meta: dict, driver: str, year: int, session: str, track: str) -> dict:
+    """The GET /pro_lap body: the 3D lap plus who / where it is."""
+    track_info = json.loads((PROJECT_ROOT / "tracks" / f"{track}.json").read_text(encoding="utf-8"))
+    payload = _build_pro_lap(df, meta, track_info)
+    payload["meta"].update({
+        "driver": driver, "year": int(year), "session": session, "track": track,
+        "track_name": SHORT_NAMES.get(track, track_info.get("name", track)),
+    })
+    return payload
+
+
+def _compare_3d_payload(payload: dict, aligned, report, driver: str, year: int,
+                        session: str, track: str) -> dict:
+    """3D Compare: the comparison header plus the pro lap (as /pro_lap) and your lap on its grid."""
+    if track not in {t["key"] for t in _discover_tracks()}:     # the json path is built from it
+        raise HTTPException(status_code=422, detail="unknown track")
+    session = (session or "Q").strip().upper()
+    # ponytail: run_pipeline doesn't return its real lap; this second load hits the pkl cache.
+    df, meta = load_real_telemetry(driver, int(year), session, track)
+    try:
+        pro = _pro_lap_payload(df, meta, driver, year, session, track)
+    except Exception:
+        traceback.print_exc()
+        raise HTTPException(status_code=422, detail="No 3D data for this lap")
+    you = _build_you_lap(aligned, pro["points"]["d"], float(report.game_time))
+
+    d = np.asarray(pro["points"]["d"])
+    by_id = {int(ci.corner_id): ci for ci in report.corner_insights}
+    for c in pro["corners"]:
+        ci = by_id.get(int(c["id"])) if c.get("id") is not None else None
+        c["time_delta"] = _num(ci.time_delta, 3) if ci is not None else None
+        c["your_min_speed_kmh"] = you["speed"][int(np.argmin(np.abs(d - c["apex_m"])))]
+    payload.update({"pro": pro, "you": you})
+    return payload
+
+
 def _available_pro_laps() -> list:
     """Cached reference laps, parsed from data/reference_laps/<year>_<drv>_<session>_<track>.pkl."""
     out = []
@@ -1456,13 +1499,7 @@ def pro_lap(year: int = DEFAULT_YEAR, driver: str = "NOR", track: str = "",
         traceback.print_exc()
         return JSONResponse(status_code=404,
                             content={"detail": "no data", "available": _available_pro_laps()})
-    track_info = json.loads((PROJECT_ROOT / "tracks" / f"{track}.json").read_text(encoding="utf-8"))
-    payload = _build_pro_lap(df, meta, track_info)
-    payload["meta"].update({
-        "driver": driver, "year": int(year), "session": session, "track": track,
-        "track_name": SHORT_NAMES.get(track, track_info.get("name", track)),
-    })
-    return JSONResponse(payload)
+    return JSONResponse(_pro_lap_payload(df, meta, driver, year, session, track))
 
 
 @app.post("/laps")

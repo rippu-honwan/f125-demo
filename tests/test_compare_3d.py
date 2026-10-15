@@ -1,9 +1,12 @@
 """Tests for the 3D Compare mode: POST /analyze mode=compare_3d and its helpers (app/main.py)."""
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
+from fastapi.testclient import TestClient
 
-from app.main import _build_you_lap
+from app.main import _build_you_lap, app
 
 
 def _aligned(game_anch=(0.0, 1000.0), real_anch=(0.0, 1000.0), speed=180.0):
@@ -70,3 +73,42 @@ class TestBuildYouLap:
         t = np.array(you["t"])
         assert np.all(np.diff(t) > 0)
         assert t[-1] == pytest.approx(20.0, abs=0.01)
+
+
+client = TestClient(app)
+SAMPLE = Path(__file__).resolve().parents[1] / "data" / "suzuka_sample.csv"
+
+
+class TestCompare3DEndpoint:
+    # Uses the cached data/reference_laps/2025_ver_q_suzuka.pkl, so no network is needed.
+    @pytest.fixture(scope="class")
+    def payload(self):
+        with SAMPLE.open("rb") as f:
+            res = client.post("/analyze", files={"file": ("suzuka_sample.csv", f, "text/csv")},
+                              data={"mode": "compare_3d", "driver": "VER", "year": "2025",
+                                    "session": "Q", "track": "suzuka"})
+        assert res.status_code == 200, res.text
+        return res.json()
+
+    def test_has_header_pro_and_you(self, payload):
+        assert payload["mode"] == "compare_3d"
+        assert payload["game_time"] > 0 and payload["real_time"] > 0
+        assert set(payload["pro"]) >= {"meta", "points", "corners"}
+        meta = payload["pro"]["meta"]
+        assert (meta["driver"], meta["year"], meta["session"], meta["track"]) == ("VER", 2025, "Q", "suzuka")
+
+    def test_you_shares_the_pro_grid(self, payload):
+        n = len(payload["pro"]["points"]["d"])
+        assert all(len(v) == n for v in payload["you"].values())
+
+    def test_your_time_ends_at_your_lap_time(self, payload):
+        t = np.array(payload["you"]["t"])
+        assert t[0] == 0
+        assert np.all(np.diff(t) > 0)
+        assert t[-1] == pytest.approx(payload["game_time"], abs=0.1)
+
+    def test_corners_carry_your_side(self, payload):
+        corners = payload["pro"]["corners"]
+        assert corners
+        assert all("time_delta" in c and "your_min_speed_kmh" in c for c in corners)
+        assert any(c["time_delta"] is not None for c in corners)
