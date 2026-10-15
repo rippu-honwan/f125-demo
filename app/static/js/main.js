@@ -1023,7 +1023,7 @@
     // Cycle the status line every 3s (wraps around while the request runs).
     if (currentMode === "learn_3d") {   // the cycling messages describe the CSV analysis
       if (overlayTimer) { clearInterval(overlayTimer); overlayTimer = null; }
-      $("loadingOverlayMsg").textContent = currentLang === "ja" ? "プロのラップを取得中…" : "Fetching the pro lap…";
+      $("loadingOverlayMsg").textContent = currentLang === "ja" ? "プロのラップを取得中…（初回はダウンロードに時間がかかります）" : "Fetching the pro lap… (the first download can take a minute)";
       ov.style.display = "flex";
       return;
     }

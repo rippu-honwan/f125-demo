@@ -1169,7 +1169,7 @@ PRO_LAP_FIRST_YEAR = 2018     # FastF1 has car telemetry from 2018 on
 PRO_LAP_STEP_M = 2.0          # sample spacing sent to the browser
 BRAKE_SEARCH_LEAD_M = 250.0   # earliest brake point considered before a corner's entry
 APEX_MARGIN_M = 30.0          # an onset this close to an apex belongs to the next corner
-LIFT_THROTTLE = 0.9           # throttle below this (with no brake) counts as a lift
+LIFT_THROTTLE = 0.9           # throttle below this counts as a lift (checked only when no brake onset)
 BRAKE_ON = 0.5                # reference brake is 0/1 but resampling leaves ramps
 APEX_SEARCH_AFTER_M = 150.0   # real apex = slowest point within this distance after brake release / lift end
 

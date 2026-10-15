@@ -23,6 +23,7 @@ async function load(url, onPickAvailable, signal) {
   const body = await res.json().catch(() => ({}));
   if (seq !== loadSeq) return;
   if (!res.ok) { showMessage(body, res.status, onPickAvailable); return; }
+  if (!body.points) throw new Error("Malformed /pro_lap response");
   await start(body, seq);
 }
 

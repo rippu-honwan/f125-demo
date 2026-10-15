@@ -12,7 +12,12 @@
 <link rel="stylesheet" href="static/css/main.css?v=__BUILD__" />
 <!-- Three.js for the 3D Learn mode (pinned; only loaded when that mode runs). -->
 <script type="importmap">
-{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "./static/js/learn3d/core.js": "./static/js/learn3d/core.js?v=__BUILD__",
+  "./static/js/learn3d/panels.js": "./static/js/learn3d/panels.js?v=__BUILD__",
+  "./static/js/learn3d/scene.js": "./static/js/learn3d/scene.js?v=__BUILD__"
+} }
 </script>
 <style>
   .track-legend {
