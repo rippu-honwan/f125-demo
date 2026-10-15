@@ -146,7 +146,7 @@ function buildCar() {
   add(new THREE.BoxGeometry(0.9, 0.5, 0.5), paint, -0.9, 0.9, 0);     // engine cover
   add(new THREE.BoxGeometry(0.3, 0.06, 1.9), paint, 2.5, 0.25, 0);    // front wing
   add(new THREE.BoxGeometry(0.35, 0.08, 1.1), dark, -2.3, 1.0, 0);    // rear wing
-  for (const z of [0.5, -0.5]) add(new THREE.BoxGeometry(0.3, 0.06, 1.9), dark, -2.3, 0.75, z);  // wing pillars
+  for (const z of [0.5, -0.5]) add(new THREE.BoxGeometry(0.4, 0.6, 0.05), dark, -2.3, 0.75, z);  // wing pillars
   for (const [x, z] of [[1.7, 0.85], [1.7, -0.85], [-1.6, 0.85], [-1.6, -0.85]]) {
     add(new THREE.CylinderGeometry(0.36, 0.36, 0.4, 16), dark, x, 0.36, z).rotation.x = Math.PI / 2;
   }
