@@ -51,7 +51,7 @@ app/main.py  /pro_lap（新）
   ├ t：累計 Σ ds / v，再按比例縮放令最後一點 = meta.lap_time
   └ corners：json 嘅彎道 + 由 lap 計出嘅 brake 數據
         ▼
-app/static/js/learn3d.js（新 ES module，Three.js 經 CDN importmap 載入）
+app/static/js/learn3d/（新 ES modules，Three.js 經 CDN importmap 載入）
   ├ scene    賽道路面 ribbon（中線兩邊各 7 m，跟 Z 高低）、草地平面、起點線、燈光
   ├ car      自己砌嘅 low-poly 開輪車（box + cylinder），中性顏色，冇 logo
   ├ playback 時間 t → 二分搜尋 points → 插值位置／方向（方向 = 路徑切線）
@@ -66,7 +66,11 @@ app/static/js/learn3d.js（新 ES module，Three.js 經 CDN importmap 載入）
 | --- | --- |
 | `app/main.py` | 新 `GET /pro_lap`。`learn_3d` 係純前端 mode，**唔加入** `ALL_MODES`，`/analyze` 唔使改 |
 | `app/static/index.html` | 新 mode 按鈕、3D 區塊 DOM、Three.js importmap |
-| `app/static/js/learn3d.js` | 新：scene、車、播放、鏡頭、panels |
+| `app/static/js/learn3d/core.js` | 新：純函數（插值、搜尋、下一個 cue），用 `node --test` 測試 |
+| `app/static/js/learn3d/scene.js` | 新：Three.js 賽道、車、標記、鏡頭（動態 import，CDN 失敗時唔會拖死 panels） |
+| `app/static/js/learn3d/panels.js` | 新：HUD、小地圖、遙測曲線、彎道清單 |
+| `app/static/js/learn3d/index.js` | 新：入口、播放 loop、控制、`window.Learn3D` |
+| `tests/js/learn3d_core.test.mjs` | 新 |
 | `app/static/js/main.js` | 揀 `learn_3d` 時隱藏 CSV／lap 區、改為呼叫 `learn3d.load()` |
 | `app/static/css/main.css` | 3D 區塊、HUD、panels、手機排版 |
 | `tests/test_pro_lap.py` | 新 |
@@ -86,7 +90,7 @@ app/static/js/learn3d.js（新 ES module，Three.js 經 CDN importmap 載入）
     "x": [...], "y": [...], "z": [...],   // 米，已平滑
     "t": [...],                   // 秒，單調遞增
     "speed": [...], "throttle": [...], "brake": [...], "gear": [...],
-    "steer": [...]                // 度，推算，左負右正
+    "steer": [...]                // −1…+1（正規化，非角度），推算，左負右正；沿用 _ref_steering_from_curvature
   },
   "corners": [
     {"id": 4, "short": "T4", "name": "...", "direction": "right",
@@ -103,9 +107,13 @@ app/static/js/learn3d.js（新 ES module，Three.js 經 CDN importmap 載入）
 
 ### 彎道數據計法
 
-- 搜尋窗：`[entry_m − 250, apex_m]`
-- `brake`：窗內有 `brake == 1` → `brake_start_m` = 第一個 brake 點；`brake_duration_s` = 由嗰點起連續 brake 嘅時間
-- `lift`：冇 brake，但窗內 throttle 跌穿 0.9
+- brake 訊號經重新取樣後有斜坡，所以用 `brake ≥ 0.5` 當「踩緊」，只計 **onset**（由放 → 踩嘅一點）
+- 搜尋窗：`[max(entry_m − 250, 上一個彎 apex_m − 30), apex_m − 30)`
+  - 用上一個彎 apex 做下限：避免繼承上一個彎嘅 brake（原型驗證：舊規則令 Bahrain T2／T6／T13 錯誤繼承 T1／T5／T12）
+  - onset 要喺 apex 前至少 30 m：離 apex 太近嘅 onset 屬於下一個彎（Bahrain 2130 m → T7 而唔係 T6）
+  - 已用 Bahrain 同 Monza 驗證：每個 onset 只會分配俾一個彎
+- `brake`：窗內有 onset → `brake_start_m` = 第一個 onset；`brake_duration_s` = 由嗰點起連續 brake 嘅時間
+- `lift`：冇 onset，但窗內 throttle 跌穿 0.9
 - `flat`：以上都冇
 - `min_speed_kmh`、`apex_gear`：`[entry_m, exit_m]` 內最低速嗰點
 
