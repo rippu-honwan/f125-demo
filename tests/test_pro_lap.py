@@ -95,6 +95,25 @@ class TestCornerActions:
         out = _corner_actions(_corners(T2), d, t, s, th, b, g)
         assert out[1]["action"] == "flat"
 
+    def test_brake_corner_snaps_to_slowest_point(self):
+        c = _corner_actions(_corners(), *_lap(brake_from=380))[0]
+        assert c["apex_m"] == pytest.approx(450, abs=2)
+        assert c["entry_m"] == pytest.approx(350, abs=2)
+        assert c["exit_m"] == pytest.approx(550, abs=2)
+
+    def test_lift_corner_snaps_to_slowest_point(self):
+        c = _corner_actions(_corners(), *_lap(lift_from=380))[0]
+        assert c["action"] == "lift"
+        assert c["apex_m"] == pytest.approx(450, abs=2)
+
+    def test_flat_corner_reports_speed_at_json_apex(self):
+        d, t, s, th, b, g = _lap()
+        s[(d >= 610) & (d < 640)] = 90.0         # neighbouring corner's slow zone, just after T1 exit
+        c = _corner_actions(_corners(), d, t, s, th, b, g)[0]
+        assert c["action"] == "flat"
+        assert c["min_speed_kmh"] == 120
+        assert c["apex_m"] == 500
+
 
 class TestProLapEndpoint:
     @pytest.fixture(scope="class")
@@ -137,6 +156,16 @@ class TestProLapEndpoint:
         brakes = [c for c in payload["corners"] if c["action"] == "brake"]
         assert len(brakes) >= 5
         for c in brakes:
+            assert c["brake_start_m"] < c["apex_m"]
+
+    def test_brake_apex_is_the_slowest_point(self, payload):
+        p = payload["points"]
+        d, speed = p["d"], p["speed"]
+        for c in payload["corners"]:
+            if c["action"] != "brake":
+                continue
+            k = d.index(round(c["apex_m"], 1))
+            assert speed[k] == pytest.approx(c["min_speed_kmh"], abs=0.1)
             assert c["brake_start_m"] < c["apex_m"]
 
     def test_unknown_track_404(self):

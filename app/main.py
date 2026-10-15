@@ -1171,6 +1171,7 @@ BRAKE_SEARCH_LEAD_M = 250.0   # earliest brake point considered before a corner'
 APEX_MARGIN_M = 30.0          # an onset this close to an apex belongs to the next corner
 LIFT_THROTTLE = 0.9           # throttle below this (with no brake) counts as a lift
 BRAKE_ON = 0.5                # reference brake is 0/1 but resampling leaves ramps
+APEX_SEARCH_AFTER_M = 150.0   # real apex = slowest point within this distance after brake release / lift end
 
 
 def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
@@ -1185,6 +1186,11 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
     within the window ``[max(entry - BRAKE_SEARCH_LEAD_M, prev_exit),
     apex - APEX_MARGIN_M)``. A lift that began before the window is intentionally
     not counted (e.g. coasting from a previous corner).
+
+    The json corner distances drift from FastF1 lap distance, so after classifying,
+    brake and lift corners are re-anchored on the pro's slowest point (within
+    APEX_SEARCH_AFTER_M of brake release / lift end) and entry/apex/exit shift together;
+    flat corners keep the json positions and report speed/gear at the json apex.
     """
     on = brake >= BRAKE_ON
     onsets = np.flatnonzero(on & ~np.r_[False, on[:-1]])    # off -> on transitions
@@ -1202,12 +1208,14 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
         lift_lo = max(entry - BRAKE_SEARCH_LEAD_M, prev_exit)
         mine = onsets[(d[onsets] >= lo) & (d[onsets] < hi)]
         action, brake_start, brake_dur = "flat", None, None
+        i_on = i_off = None                       # slow-zone span used to re-anchor the apex
         if mine.size:
             i0 = int(mine[0])
             released = np.flatnonzero(~on[i0:])
             i1 = i0 + (int(released[0]) - 1 if released.size else on.size - 1 - i0)
             action, brake_start = "brake", float(d[i0])
             brake_dur = round(float(t[i1] - t[i0]), 2)
+            i_on, i_off = i0, i1
         else:
             # For lift: detect throttle onset (transition to low) within the window,
             # excluding the previous corner's exit point. Only count transitions that
@@ -1215,14 +1223,22 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
             mine_lift = lift_onsets[(lift_d > prev_exit) & (lift_d >= lift_lo) & (lift_d < hi)]
             if mine_lift.size:
                 action = "lift"
+                i_on = int(mine_lift[0])
+                back = np.flatnonzero(~throttle_low[i_on:])
+                i_off = i_on + (int(back[0]) - 1 if back.size else throttle.size - 1 - i_on)
         prev_apex = apex
         prev_exit = exit_
-        seg = np.flatnonzero((d >= entry) & (d <= exit_))
-        k = int(seg[np.argmin(speed[seg])]) if seg.size else int(np.argmin(np.abs(d - apex)))
+        shift = 0.0
+        if i_on is None:
+            k = int(np.argmin(np.abs(d - apex)))
+        else:
+            win = np.flatnonzero((d >= d[i_on]) & (d <= d[i_off] + APEX_SEARCH_AFTER_M))
+            k = int(win[np.argmin(speed[win])])
+            shift = float(d[k]) - apex
         out.append({
             "id": c.get("id"), "short": c.get("short"), "name": c.get("name"),
             "direction": c.get("direction"),
-            "entry_m": entry, "apex_m": apex, "exit_m": exit_,
+            "entry_m": entry + shift, "apex_m": apex + shift, "exit_m": exit_ + shift,
             "action": action, "brake_start_m": brake_start, "brake_duration_s": brake_dur,
             "min_speed_kmh": round(float(speed[k]), 1), "apex_gear": int(gear[k]),
         })

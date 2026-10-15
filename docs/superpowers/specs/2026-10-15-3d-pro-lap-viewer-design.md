@@ -114,6 +114,7 @@ app/static/js/learn3d/（新 ES modules，Three.js 經 CDN importmap 載入）
   - 已用 Bahrain 同 Monza 驗證：每個 onset 只會分配俾一個彎
 - `brake`：窗內有 onset → `brake_start_m` = 第一個 onset；`brake_duration_s` = 由嗰點起連續 brake 嘅時間
 - `lift`：冇 onset，但窗內 throttle 跌穿 0.9
+- 位置校正：tracks/*.json 嘅彎道距離同 FastF1 lap distance 有偏差（Bahrain 最多 ~160 m），所以 brake／lift 彎嘅 entry/apex/exit 會一齊平移，令 apex 落喺職業車手實際最低速點（brake 開始或收油至放開後 150 m 內）；flat 彎保留 json 位置，速度取 json apex 嗰點。
 - `flat`：以上都冇
 - `min_speed_kmh`、`apex_gear`：`[entry_m, exit_m]` 內最低速嗰點
 
