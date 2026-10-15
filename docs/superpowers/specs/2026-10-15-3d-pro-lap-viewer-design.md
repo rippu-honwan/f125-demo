@@ -108,15 +108,17 @@ app/static/js/learn3d/（新 ES modules，Three.js 經 CDN importmap 載入）
 ### 彎道數據計法
 
 - brake 訊號經重新取樣後有斜坡，所以用 `brake ≥ 0.5` 當「踩緊」，只計 **onset**（由放 → 踩嘅一點）
-- 搜尋窗：`[max(entry_m − 250, 上一個彎 apex_m − 30), apex_m − 30)`
-  - 用上一個彎 apex 做下限：避免繼承上一個彎嘅 brake（原型驗證：舊規則令 Bahrain T2／T6／T13 錯誤繼承 T1／T5／T12）
-  - onset 要喺 apex 前至少 30 m：離 apex 太近嘅 onset 屬於下一個彎（Bahrain 2130 m → T7 而唔係 T6）
-  - 已用 Bahrain 同 Monza 驗證：每個 onset 只會分配俾一個彎
-- `brake`：窗內有 onset → `brake_start_m` = 第一個 onset；`brake_duration_s` = 由嗰點起連續 brake 嘅時間
-- `lift`：冇 onset，但窗內 throttle 跌穿 0.9
-- 位置校正：tracks/*.json 嘅彎道距離同 FastF1 lap distance 有偏差（Bahrain 最多 ~160 m），所以 brake／lift 彎嘅 entry/apex/exit 會一齊平移，令 apex 落喺職業車手實際最低速點（brake 開始或收油至放開後 150 m 內）；flat 彎保留 json 位置，速度取 json apex 嗰點。
-- `flat`：以上都冇
-- `min_speed_kmh`、`apex_gear`：brake／lift 彎取校正後 apex（最低速點，搜尋範圍止於下一個彎嘅 onset；下一個彎係 flat 就止於佢嘅 json apex，所以 apex 一定唔重複兼按圈序）；flat 彎取 json apex 嗰點。彎道按 json apex 距離排序後處理同輸出（monza.json 原檔次序有誤）。
+- **減速區**：連續嘅 onset 之間如果車速冇回升 10 km/h 以上，就當係同一個減速區；最慢點喺第一個 onset 起，到放 brake 後 150 m 內搵，搵到下一個減速區開始就停。如果 brake 之後減速唔夠 10 km/h，就唔當係減速區。
+- **配對**：tracks/*.json 嘅彎道距離同 FastF1 lap distance 偏差好大（Baku 起步差 ~560 m），所以唔用 json 搜尋窗，改為將減速區同 json 彎按圈序一對一配對，總成本最小（DP）。
+  - 成本：`|最慢點 − json apex|`；json `type` 係 `high_speed` 嘅彎額外加 200 m，避免 kink 搶走真 brake 彎（Spa La Source vs Eau Rouge Entry）。
+  - 減速區冇配對到嘅成本係 800 m；彎冇配對到冇成本，可以係 flat 或 lift。
+  - 試過按 json `type` 逐級加罰：Monaco 尾段啱咗，但 Imola、Baku、Montreal 錯咗，json type 太唔可靠，所以冇用。
+- `brake`：有配對到嘅彎。`brake_start_m` 係減速區第一個 onset；`brake_duration_s` 計到最後一次放 brake 為止。entry/apex/exit 一齊平移，令 apex 落喺最慢點。
+- 其他彎嘅位置：用前後有配對嘅彎嘅偏差做線性插值去平移，所以 apex 一定按圈序。
+- `lift`：冇配對到 brake，而且喺 `[max(平移後 entry − 250, 上一個彎 exit), 平移後 apex − 30)` 入面，throttle 由 ≥ 0.9 跌落 0.9 以下，而且 throttle 回升之前冇踩過 brake。apex 落喺收油至回油後 150 m 內嘅最慢點，搵到下一個彎開始（佢嘅 onset，或者 flat 彎嘅 apex）就停。
+- `flat`：以上都冇；速度同波段取平移後 apex 嗰點。
+- 彎道按 json apex 距離排序後先處理同輸出（monza.json 原檔次序有誤）。
+- 驗證：26 條 cached 圈，所有明顯減速位（>30 km/h）都有對應嘅彎，apex 全部按圈序。舊做法有 20 個減速位冇對應嘅彎。
 
 ### Errors
 
@@ -172,5 +174,4 @@ localStorage（try/catch 包住）：view（遙測／彎道）、鏡頭。
 - 職業車手 brake 只有開／關，冇力度 → brake 柱只會全滿或者空
 - 賽道闊度固定 14 m；彎位 kerb、run-off 冇
 - FastF1 GPS 原始約 4 Hz，平滑後彎位線條可能同真實 racing line 有幾米誤差
-- 彎道分類靠 `tracks/*.json` 嘅彎位搵 brake／lift onset；json 同 FastF1 圈距離偏差大嘅時候，個別 onset 會跌落兩個彎搜尋範圍之間嘅空隙，真係大力 brake 嘅彎會顯示做 FLAT（例：Spa La Source；25 條 cached 圈入面約 14 條有呢個情況，Bahrain、Monza 冇）。之後另開 branch 改做「每個 onset 分配畀佢最慢點之後最近嘅 json 彎」
-- 被下一個彎截住嘅 apex 搜尋，個 apex 可能落喺唔太有意義嘅點（例：Bahrain T6 會落喺 T7 onset 前）
+- 彎道「名」準唔準受 `tracks/*.json` 質素限制：json 位置偏差大嘅路段，減速區可能配咗去隔籬嘅彎名（例：Spa Les Combes 標咗做 Malmedy、Imola Villeneuve 標咗做 Tosa、Monaco 尾段推後一格）。brake／lift 標記同位置以實際圈數據為準，唔受影響；要準確名就要修 json

@@ -54,9 +54,9 @@ class TestCornerActions:
         c = _corner_actions(_corners(), *_lap())[0]
         assert c["action"] == "flat"
 
-    def test_brake_far_before_entry_is_ignored(self):
+    def test_brake_that_does_not_slow_the_car_is_ignored(self):
         d, t, s, th, b, g = _lap()
-        b[(d >= 100) & (d < 140)] = 1.0          # > 250 m before T1 entry (400)
+        b[(d >= 100) & (d < 140)] = 1.0          # still 250 km/h afterwards
         assert _corner_actions(_corners(), d, t, s, th, b, g)[0]["action"] == "flat"
 
     def test_does_not_inherit_previous_corner_braking(self):
@@ -64,13 +64,38 @@ class TestCornerActions:
         assert out[0]["action"] == "brake"
         assert out[1]["action"] == "flat"
 
-    def test_onset_too_close_to_apex_belongs_to_next_corner(self):
+    def test_brake_goes_to_corner_nearest_its_slowest_point(self):
         d, t, s, th, b, g = _lap()
-        b[(d >= 485) & (d < 495)] = 1.0          # 15 m before T1 apex (500)
+        b[(d >= 485) & (d < 560)] = 1.0          # starts at T1's apex (500)...
+        s[(d >= 640) & (d < 660)] = 80.0         # ...but the car is slowest near T2 (700)
         out = _corner_actions(_corners(T2), d, t, s, th, b, g)
         assert out[0]["action"] != "brake"
         assert out[1]["action"] == "brake"
         assert out[1]["brake_start_m"] == pytest.approx(486, abs=2)
+        assert out[1]["apex_m"] == pytest.approx(640, abs=2)
+
+    def test_brake_far_from_json_corner_is_still_matched(self):
+        d, t, s, th, b, g = _lap()                # json apex 500, but the pro brakes for it at 100
+        b[(d >= 100) & (d < 180)] = 1.0
+        s[(d >= 180) & (d < 200)] = 90.0
+        c = _corner_actions(_corners(), d, t, s, th, b, g)[0]
+        assert c["action"] == "brake"
+        assert c["apex_m"] == pytest.approx(180, abs=2)
+
+    def test_rebraking_without_speeding_up_is_one_zone(self):
+        d, t, s, th, b, g = _lap(brake_from=380)
+        b[(d >= 420) & (d < 430)] = 0.0          # brief release, car keeps slowing
+        out = _corner_actions(_corners(T2), d, t, s, th, b, g)
+        assert [c["action"] for c in out] == ["brake", "flat"]
+        assert out[0]["brake_start_m"] == pytest.approx(380, abs=2)
+
+    def test_zones_pair_one_to_one_in_order(self):
+        d, t, s, th, b, g = _lap(brake_from=380)  # zone 1 slowest at 450
+        b[(d >= 560) & (d < 600)] = 1.0          # zone 2 slowest at 600, still nearer T1 (500) than T2 (700)
+        s[(d >= 600) & (d < 620)] = 80.0
+        out = _corner_actions(_corners(T2), d, t, s, th, b, g)
+        assert [c["action"] for c in out] == ["brake", "brake"]
+        assert [c["apex_m"] for c in out] == pytest.approx([450, 600], abs=2)
 
     def test_carries_corner_identity(self):
         c = _corner_actions(_corners(), *_lap())[0]
@@ -124,16 +149,17 @@ class TestCornerActions:
         assert out[0]["apex_m"] == pytest.approx(450, abs=2)
         assert out[1]["apex_m"] == pytest.approx(580, abs=2)
 
-    def test_flat_corner_in_between_still_caps_refinement(self):
+    def test_high_speed_kink_does_not_steal_braking(self):
         d, t, s, th, b, g = _lap(brake_from=380)
         b[(d >= 590) & (d < 610)] = 1.0
         th[(d >= 590) & (d < 610)] = 0.0
         s[(d >= 600) & (d < 620)] = 70.0
-        kink = {"id": 2, "short": "K", "entry_m": 540, "apex_m": 560, "exit_m": 580}
+        kink = {"id": 2, "short": "K", "type": "high_speed", "entry_m": 540, "apex_m": 560, "exit_m": 580}
         t3 = {"id": 3, "short": "T3", "entry_m": 600, "apex_m": 650, "exit_m": 700}
         out = _corner_actions(_corners(kink, t3), d, t, s, th, b, g)
         assert [c["action"] for c in out] == ["brake", "flat", "brake"]
-        assert [c["apex_m"] for c in out] == pytest.approx([450, 560, 600], abs=2)
+        # both neighbours sit 50 m early, so the flat kink moves with them
+        assert [c["apex_m"] for c in out] == pytest.approx([450, 510, 600], abs=2)
 
     def test_corners_processed_in_lap_order(self):
         out = _corner_actions([T2, *_corners()], *_lap(brake_from=380))
