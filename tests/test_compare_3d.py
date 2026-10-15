@@ -96,6 +96,7 @@ class TestCompare3DEndpoint:
         assert set(payload["pro"]) >= {"meta", "points", "corners"}
         meta = payload["pro"]["meta"]
         assert (meta["driver"], meta["year"], meta["session"], meta["track"]) == ("VER", 2025, "Q", "suzuka")
+        assert set(payload["you"]) == {"t", "speed", "throttle", "brake", "gear"}
 
     def test_you_shares_the_pro_grid(self, payload):
         n = len(payload["pro"]["points"]["d"])
@@ -112,3 +113,41 @@ class TestCompare3DEndpoint:
         assert corners
         assert all("time_delta" in c and "your_min_speed_kmh" in c for c in corners)
         assert any(c["time_delta"] is not None for c in corners)
+
+    def test_your_min_speed_is_the_window_minimum(self, payload):
+        d = np.array(payload["pro"]["points"]["d"])
+        s = np.array(payload["you"]["speed"])
+        for c in payload["pro"]["corners"]:
+            m = (d >= c["entry_m"]) & (d <= c["exit_m"])
+            if m.any():
+                assert c["your_min_speed_kmh"] == pytest.approx(s[m].min())
+                assert c["your_min_speed_kmh"] <= s[m].max()
+
+
+def _post_compare(**over):
+    data = {"mode": "compare_3d", "driver": "VER", "year": "2025", "session": "Q", "track": "suzuka"}
+    data.update(over)
+    with SAMPLE.open("rb") as f:
+        return client.post("/analyze", files={"file": ("suzuka_sample.csv", f, "text/csv")}, data=data)
+
+
+class TestCompare3DErrors:
+    def test_pro_lap_load_failure_is_422(self, monkeypatch):
+        import app.main as m
+
+        def flaky(*a, **k):     # app.main's own call only; src.pipeline uses its own import
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(m, "load_real_telemetry", flaky)
+        res = _post_compare()
+        assert res.status_code == 422
+        assert res.json()["detail"] == "No 3D data for this lap"
+
+    def test_unknown_track_fails_before_the_pipeline(self, monkeypatch):
+        import app.main as m
+        ran = []
+        monkeypatch.setattr(m, "run_pipeline", lambda *a, **k: ran.append(1))
+        res = _post_compare(track="suzuka_x")
+        assert res.status_code == 422
+        assert res.json()["detail"] == "unknown track"
+        assert not ran

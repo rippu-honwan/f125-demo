@@ -1010,6 +1010,8 @@ def _run_comparison(csv_path: str, mode: str, driver: str, year: int,
     * ``compare_3d`` -> the pro lap for the 3D viewer plus your lap on its
       distance grid (see ``_compare_3d_payload``).
     """
+    if mode == "compare_3d" and track not in {t["key"] for t in _discover_tracks()}:
+        raise HTTPException(status_code=422, detail="unknown track")   # before run_pipeline caches anything
     args = SimpleNamespace(
         csv=csv_path,
         lap=lap,                 # None -> auto fastest; int -> chosen lapIndex
@@ -1364,24 +1366,25 @@ def _pro_lap_payload(df, meta: dict, driver: str, year: int, session: str, track
 def _compare_3d_payload(payload: dict, aligned, report, driver: str, year: int,
                         session: str, track: str) -> dict:
     """3D Compare: the comparison header plus the pro lap (as /pro_lap) and your lap on its grid."""
-    if track not in {t["key"] for t in _discover_tracks()}:     # the json path is built from it
-        raise HTTPException(status_code=422, detail="unknown track")
     session = (session or "Q").strip().upper()
-    # ponytail: run_pipeline doesn't return its real lap; this second load hits the pkl cache.
-    df, meta = load_real_telemetry(driver, int(year), session, track)
     try:
+        # ponytail: run_pipeline doesn't return its real lap; this second load hits the pkl cache.
+        df, meta = load_real_telemetry(driver, int(year), session, track)
         pro = _pro_lap_payload(df, meta, driver, year, session, track)
+        you = _build_you_lap(aligned, pro["points"]["d"], float(report.game_time))
     except Exception:
         traceback.print_exc()
         raise HTTPException(status_code=422, detail="No 3D data for this lap")
-    you = _build_you_lap(aligned, pro["points"]["d"], float(report.game_time))
 
     d = np.asarray(pro["points"]["d"])
+    s = np.asarray(you["speed"])
     by_id = {int(ci.corner_id): ci for ci in report.corner_insights}
     for c in pro["corners"]:
         ci = by_id.get(int(c["id"])) if c.get("id") is not None else None
         c["time_delta"] = _num(ci.time_delta, 3) if ci is not None else None
-        c["your_min_speed_kmh"] = you["speed"][int(np.argmin(np.abs(d - c["apex_m"])))]
+        m = (d >= c["entry_m"]) & (d <= c["exit_m"])
+        c["your_min_speed_kmh"] = (float(s[m].min()) if m.any()
+                                   else s[int(np.argmin(np.abs(d - c["apex_m"])))].item())
     payload.update({"pro": pro, "you": you})
     return payload
 
@@ -1561,7 +1564,7 @@ def analyze(
     Run the analysis program chosen by ``mode`` on an uploaded lap.
 
     Solo modes (``overview``, ``lap_analysis``) analyse the uploaded lap on
-    its own; comparison modes (``comparison``, ``coaching``, ``track_map``)
+    its own; comparison modes (``comparison``, ``coaching``, ``track_map``, ``compare_3d``)
     run the full game-vs-real pipeline.
 
     Defined as a *sync* function on purpose: the heavy modes are CPU- and
