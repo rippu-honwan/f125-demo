@@ -37,7 +37,7 @@ Upload a game lap (Sim Racing Telemetry CSV), pick the pro (driver / year / sess
   1. Loads the pro lap with `load_real_telemetry(driver, year, session, track)`. It comes from the cache, so it is cheap. `run_pipeline` doesn't return its real data, and `src/` stays untouched.
   2. Calls `pro = _build_pro_lap(df, meta, track_info)`, the same payload as `/pro_lap`.
   3. Calls `you = _build_you_lap(aligned, pro["points"]["d"], report.game_time)` (new; see below).
-  4. Adds to each pro corner `your_min_speed_kmh` (your speed at that corner's apex) and `time_delta` (from the `corner_insights` with the same `id`, or `null`).
+  4. Adds to each pro corner `time_delta` (from the `corner_insights` with the same `id`, or `null`) and `your_min_speed_kmh`. That value is measured like the pro's `min_speed_kmh`: for brake and lift corners it is your slowest point in `[entry_m, exit_m]`; for flat corners it is your speed at the apex.
   5. Returns the usual comparison header (`game_time`, `real_time`, `overall_delta`, …) plus `pro` and `you`.
 - `_build_you_lap(aligned, d_grid, lap_time)` returns column arrays on the pro's 2 m grid `d_grid`:
   - `real_d = interp(game_d, game_anch_d, real_anch_d)`, where `game_d` is `aligned["lap_distance"]`.
@@ -52,7 +52,7 @@ Upload a game lap (Sim Racing Telemetry CSV), pick the pro (driver / year / sess
 - A new mode card, **3D Compare**, with i18n in en and ja like the other cards. It uses the CSV upload and pro pickers like the comparison modes. After Analyze, it shows the 3D block instead of the report.
 - It reuses the `learn3d/` modules:
   - `scene.js` takes a list of cars instead of one. The pro car is orange and your car is blue.
-  - `core.js` adds `posAtTime(t, tArr, dArr)`, which looks up distance from time by binary search. It is pure and tested with node.
+  - `core.js` adds `youPoints(pro, you)`, which builds your lap as a `points` object (the pro's line with your `t` and inputs), so the existing `stateAt` gives your car's position at time t. It also adds `gapAt(pro, you, d)` for the live gap. Both are pure and tested with node.
   - `index.js` gets one shared clock. Each car's position is `posAtTime(clock, car.t, d)`. A car that has finished waits at the line, and the clock ends when both are done.
 - The camera follows your car by default; a toggle switches it to the pro. T-cam, Chase and Top work as in #1.
 - **HUD**: a large live delta (`+0.42` in red when slower, `−0.13` in green when faster), read as `you.t[i] − pro.t[i]` at your car's index. Next to it are your speed and the pro's speed.
@@ -66,7 +66,7 @@ Upload a game lap (Sim Racing Telemetry CSV), pick the pro (driver / year / sess
 - pytest:
   - `_build_you_lap` on synthetic data checks the column lengths, that `t` is strictly increasing, that it ends at the lap time, and that the anchors are honoured: a shifted anchor moves your samples.
   - An endpoint test posts `data/suzuka_sample.csv` with `mode=compare_3d`, `driver=VER` and `track=suzuka`. It checks a 200 response, that `pro` and `you` have equal lengths, and that `you.t[-1]` ≈ `game_time`.
-- node: `posAtTime` returns the start, the end and points in between.
+- node: `youPoints` keeps the pro's geometry and uses your timing; `gapAt` returns your time minus the pro's.
 - Playwright: run the Suzuka sample in 3D Compare and check that both cars move, the delta updates and the B/C panels render.
 
 ## 7. Known limitations
