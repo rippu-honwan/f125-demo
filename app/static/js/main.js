@@ -2202,6 +2202,7 @@
     if (!selectedFile) { showError("Please choose a telemetry CSV first."); return; }
     hideError();
     results.classList.remove("show");
+    if (window.Learn3D) window.Learn3D.unload();   // a previous 3D Compare would keep rendering while hidden
     analyzeBtn.classList.add("loading");
     analyzeBtn.disabled = true;
     showLoadingOverlay();

@@ -5,7 +5,7 @@ const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ESC[c]);
 
 const ACTION_LABEL = { brake: "BRAKE", lift: "LIFT", flat: "FLAT" };
-export const PRO_COLOR = "#ff8a00";   // keep in sync with the car paint in index.js
+export const PRO_COLOR = "#ff8a00";   // index.js paints the cars from these too
 export const YOU_COLOR = "#2e7dff";
 
 const lastHtml = new WeakMap();
@@ -27,12 +27,18 @@ export function renderHud(top, bottom, meta, s, cue) {
     `<span class="l3d-speed">${Math.round(s.speed)}</span>km/h · G${s.gear}`);
 }
 
+/** "+0.42" / "−0.13" and its colour class; the sign comes from the rounded value, so never "−0.00". */
+function gapLabel(g) {
+  const r = Math.round(g * 100) / 100;
+  return [`${r < 0 ? "−" : "+"}${Math.abs(r).toFixed(2)}`, r > 0 ? "l3d-gap-slow" : r < 0 ? "l3d-gap-fast" : ""];
+}
+
 /** Compare HUD. Top: who vs who + live gap (red = you're behind). Bottom: your pedals and speed, the pro's speed. */
 export function renderCompareHud(top, bottom, meta, you, pro, gap) {
-  const cls = gap > 0.005 ? "l3d-gap-slow" : gap < -0.005 ? "l3d-gap-fast" : "";
+  const [text, cls] = gapLabel(gap);
   setHtml(top,
     `<span style="color:${YOU_COLOR}">You</span> vs <span style="color:${PRO_COLOR}">${esc(meta.driver)}</span>` +
-    ` · ${esc(meta.track_name)}<br><span class="l3d-gap ${cls}">${gap < 0 ? "−" : "+"}${Math.abs(gap).toFixed(2)}</span>`);
+    ` · ${esc(meta.track_name)}<br><span class="l3d-gap ${cls}">${text}</span>`);
   setHtml(bottom,
     `<span class="l3d-pedal" title="Your throttle"><i style="height:${Math.round(you.throttle * 100)}%;background:var(--ok)"></i></span>` +
     `<span class="l3d-pedal" title="Your brake"><i style="height:${Math.round(you.brake * 100)}%;background:var(--accent)"></i></span>` +
@@ -147,9 +153,8 @@ export function createCornerList(el, corners, onPick, compare = false) {
       let mid, last;
       if (compare) {
         mid = `${esc(ACTION_LABEL[c.action])} · ${Math.round(c.min_speed_kmh)} → ${Math.round(c.your_min_speed_kmh)} km/h`;
-        const g = c.time_delta;
-        last = g == null ? "—"
-          : `<span class="${g > 0.005 ? "l3d-gap-slow" : g < -0.005 ? "l3d-gap-fast" : ""}">${g < 0 ? "−" : "+"}${Math.abs(g).toFixed(2)}</span>`;
+        const [text, cls] = c.time_delta == null ? ["—", ""] : gapLabel(c.time_delta);
+        last = `<span class="${cls}">${text}</span>`;
       } else {
         const where = c.action === "brake" ? `${Math.round(c.apex_m - c.brake_start_m)} m before apex` : esc(c.action);
         mid = `${where} → ${Math.round(c.min_speed_kmh)} km/h · G${c.apex_gear}`;

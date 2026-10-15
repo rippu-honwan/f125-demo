@@ -73,4 +73,5 @@ Upload a game lap (Sim Racing Telemetry CSV), pick the pro (driver / year / sess
 
 - Your car follows the pro's line, so line differences aren't shown.
 - The live delta depends on the pipeline alignment. Where the anchors are sparse, the gap can drift by a few tenths.
+- The corner **Gap** column uses the pipeline's integrated `time_delta`, while the HUD and the gap trace use `you.t − pro.t` on the resampled grid. Their change across a corner can differ by a few hundredths of a second.
 - The pro lap is loaded twice: once inside `run_pipeline` and once for the 3D payload. The second load comes from the pkl cache.

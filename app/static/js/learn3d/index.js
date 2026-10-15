@@ -85,7 +85,7 @@ async function start(data, seq) {
   const end = Math.max(P.t[P.t.length - 1], Y ? Y.t[Y.t.length - 1] : 0);   // both cars finish
   const S = view = {
     data, scene, t: 0, end, playing: false, rate: 1, stopAt: null, raf: 0, last: 0,
-    cam: store.get("l3d_cam", "tcam"), follow: Y ? store.get("l3d_follow", "you") : "pro",
+    cam: store.get("l3d_cam", "tcam"), follow: Y && store.get("l3d_follow", "you") !== "pro" ? "you" : "pro",
   };
   // Distance-based seeks (telemetry click, corner replay) use the followed car's clock.
   const timeAt = (d) => timeAtDistance(S.follow === "you" && Y ? Y : P, d);
@@ -185,6 +185,7 @@ function setView(name) {
 
 function setFollow(who) {
   view.follow = who;
+  view.stopAt = null;              // a corner replay's stop time was on the other car's clock
   store.set("l3d_follow", who);
   document.querySelectorAll("[data-follow]").forEach((b) => markPressed(b, b.dataset.follow === who));
 }
@@ -196,6 +197,10 @@ function unload() {
   if (view.scene) view.scene.dispose();
   $("l3dStage").classList.remove("l3d-nogl");
   view = null;
+  // Back to the 3D Learn head, so an error screen after Compare doesn't keep Compare's labels.
+  $("l3dFollow").hidden = true;
+  $("l3dTitle").textContent = "3D Pro Lap";
+  $("l3dKeys").textContent = KEYS_LEARN;
 }
 
 // ---- controls (wired once; modules run after the DOM is parsed) ----
