@@ -1,5 +1,5 @@
 // Entry point for the 3D Learn mode. main.js (a classic script) drives it via
-//   window.Learn3D.load(url, onPickAvailable)   -> fetch /pro_lap and start
+//   window.Learn3D.load(url, onPickAvailable, signal?) -> fetch /pro_lap and start
 //   window.Learn3D.unload()                       -> stop and free WebGL
 // load() resolves once the viewer is up (or a "no data" message is shown) and
 // rejects only on network errors, which main.js reports in its error banner.
@@ -16,10 +16,10 @@ const CAM_KEYS = { 1: "tcam", 2: "chase", 3: "top" };
 let view = null;      // the running session, or null
 let loadSeq = 0;      // guards against overlapping load() calls
 
-async function load(url, onPickAvailable) {
+async function load(url, onPickAvailable, signal) {
   unload();
   const seq = ++loadSeq;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal });
   const body = await res.json().catch(() => ({}));
   if (seq !== loadSeq) return;
   if (!res.ok) { showMessage(body, res.status, onPickAvailable); return; }

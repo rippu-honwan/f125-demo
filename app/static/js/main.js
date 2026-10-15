@@ -442,6 +442,7 @@
   const bestDriverCode = $("bestDriverCode"); // read-only "Best qualifier: XXX" code span
 
   let selectedFile = null;
+  let lastDetection = null;   // {key, name, year} from the last /laps auto-detect, restored after 3D mode
   let kcData = [];          // per-corner trace data, for mini-chart hover tooltips
   let kcDriver = "Pro";     // reference driver label shown in those tooltips
   let lapChartData = { you: [], pro: [], delta: [], markers: [] };  // whole-lap hover
@@ -503,6 +504,7 @@
 
   function applyModeUI(mode) {
     if (typeof txStopPlayback === "function") txStopPlayback();  // leaving a mode stops any lap playback
+    const leaving3d = currentMode === "learn_3d" && mode !== "learn_3d";
     currentMode = mode;
     const meta = MODES[mode];
 
@@ -538,9 +540,11 @@
       refOpt.textContent = "Pro lap to watch";
       refHintText.textContent = "Pick the driver, year, session and track whose lap you want to study in 3D.";
       showManualTrack();
-    } else {
+    } else if (leaving3d) {
       if (window.Learn3D) window.Learn3D.unload();
-      if (!selectedFile) resetTrackDetection();
+      // 3D used the manual dropdown; put the CSV's detected track/year back.
+      if (selectedFile && lastDetection) applyDetectedTrack(lastDetection.key, lastDetection.name, lastDetection.year);
+      else if (!selectedFile) resetTrackDetection();
     }
     // setLang() also calls applyModeUI — never re-enable the button mid-run.
     if (!analyzeBtn.classList.contains("loading")) analyzeBtn.disabled = !is3d && !selectedFile;
@@ -550,6 +554,7 @@
     btn.addEventListener("click", () => {
       applyModeUI(btn.dataset.mode);
       results.classList.remove("show");   // a new mode means a fresh run
+      if (window.Learn3D) window.Learn3D.unload();   // results hidden: stop the 3D loop too
       hideError();
     });
   });
@@ -577,6 +582,7 @@
     fileChip.classList.remove("show");
     analyzeBtn.disabled = true;
     resetLapSelector();
+    lastDetection = null;
     resetTrackDetection();
   }
   function formatBytes(b) {
@@ -936,7 +942,8 @@
       // the CSV here); applyDetectedTrack sets both, then refreshes the driver.
       const detectedYear = await detectYearFromCsv(file);
       if (token !== lapFetchToken) return;  // a newer upload superseded this one
-      applyDetectedTrack(payload.detected_track, payload.detected_track_name, detectedYear);
+      lastDetection = { key: payload.detected_track, name: payload.detected_track_name, year: detectedYear };
+      applyDetectedTrack(lastDetection.key, lastDetection.name, lastDetection.year);
 
       lapData = Array.isArray(payload.laps) ? payload.laps : [];
       if (!payload.has_lap_index) {
@@ -1013,6 +1020,12 @@
           ? `${trackName}のラップを分析中`
           : `Analysing your ${trackName} lap`);
     // Cycle the status line every 3s (wraps around while the request runs).
+    if (currentMode === "learn_3d") {   // the cycling messages describe the CSV analysis
+      if (overlayTimer) { clearInterval(overlayTimer); overlayTimer = null; }
+      $("loadingOverlayMsg").textContent = currentLang === "ja" ? "プロのラップを取得中…" : "Fetching the pro lap…";
+      ov.style.display = "flex";
+      return;
+    }
     let i = 0;
     $("loadingOverlayMsg").textContent = OVERLAY_MESSAGES[0];
     if (overlayTimer) clearInterval(overlayTimer);
@@ -2117,34 +2130,43 @@
 
   // -------- Submit --------
   // 3D Learn: no upload — load the pro lap straight into the viewer.
-  async function runLearn3d() {
+  // `pick` ({year, driver, session, track}) comes from an "available lap" chip.
+  async function runLearn3d(pick) {
+    if (pick) {   // mirror the chip in the form wherever that option exists
+      for (const [id, v] of [["yearSel", pick.year], ["driver", pick.driver], ["session", pick.session], ["track", pick.track]]) {
+        const sel = $(id);
+        if ([...sel.options].some((o) => o.value === String(v))) sel.value = String(v);
+      }
+    }
+    const want = pick || {
+      year: $("yearSel").value, driver: $("driver").value || "NOR",
+      session: $("session").value, track: $("track").value,
+    };
     hideError();
     analyzeBtn.classList.add("loading");
     analyzeBtn.disabled = true;
     showLoadingOverlay();
-    const qs = new URLSearchParams({
-      year: $("yearSel").value, driver: $("driver").value || "NOR",
-      session: $("session").value, track: $("track").value,
-    });
+    const qs = new URLSearchParams({ year: want.year, driver: want.driver, session: want.session, track: want.track });
     applyResultLayout("learn_3d");
     results.classList.add("show");
+    // The first FastF1 download can take 30 s+; give up after 2 minutes instead of hanging.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
     try {
       if (!window.Learn3D) throw new Error("The 3D viewer didn't load — check your connection and reload.");
-      await window.Learn3D.load(apiUrl("/pro_lap?" + qs), (c) => {
-        $("yearSel").value = String(c.year);
-        $("driver").value = c.driver;
-        $("session").value = c.session;
-        $("track").value = c.track;
-        runLearn3d();
-      });
-      results.scrollIntoView({ behavior: "smooth", block: "start" });
+      await window.Learn3D.load(apiUrl("/pro_lap?" + qs), (c) => runLearn3d(c), controller.signal);
+      if (currentMode === "learn_3d") results.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (err) {
+      if (window.Learn3D) window.Learn3D.unload();
       results.classList.remove("show");
-      showError(apiErrorMessage(err, "Couldn't load the pro lap."));
+      showError(err && err.name === "AbortError"
+        ? "Loading the pro lap is taking too long — the server may be waking up or downloading data. Please try again."
+        : apiErrorMessage(err, "Couldn't load the pro lap."));
     } finally {
+      clearTimeout(timeoutId);
       hideLoadingOverlay();
       analyzeBtn.classList.remove("loading");
-      analyzeBtn.disabled = false;
+      analyzeBtn.disabled = currentMode !== "learn_3d" && !selectedFile;
     }
   }
 
