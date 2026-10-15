@@ -1160,6 +1160,54 @@ def _run_comparison(csv_path: str, mode: str, driver: str, year: int,
 
 
 # ---------------------------------------------------------------------------
+# 3D Learn mode: pro reference lap for the browser (GET /pro_lap)
+# ---------------------------------------------------------------------------
+PRO_LAP_STEP_M = 2.0          # sample spacing sent to the browser
+BRAKE_SEARCH_LEAD_M = 250.0   # earliest brake point considered before a corner's entry
+APEX_MARGIN_M = 30.0          # an onset this close to an apex belongs to the next corner
+LIFT_THROTTLE = 0.9           # throttle below this (with no brake) counts as a lift
+BRAKE_ON = 0.5                # reference brake is 0/1 but resampling leaves ramps
+
+
+def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
+    """Classify each corner of a pro lap as brake / lift / flat.
+
+    All arrays are index-aligned along lap distance ``d`` (metres). Only brake
+    *onsets* count, searched in ``[max(entry - 250, prev_apex - 30), apex - 30)``
+    so a corner never inherits the previous corner's braking and an onset right
+    at an apex is credited to the next corner (validated on Bahrain + Monza).
+    """
+    on = brake >= BRAKE_ON
+    onsets = np.flatnonzero(on & ~np.r_[False, on[:-1]])    # off -> on transitions
+    out, prev_apex = [], -np.inf
+    for c in corners:
+        entry, apex, exit_ = float(c["entry_m"]), float(c["apex_m"]), float(c["exit_m"])
+        lo = max(entry - BRAKE_SEARCH_LEAD_M, prev_apex - APEX_MARGIN_M)
+        hi = apex - APEX_MARGIN_M
+        prev_apex = apex
+        mine = onsets[(d[onsets] >= lo) & (d[onsets] < hi)]
+        action, brake_start, brake_dur = "flat", None, None
+        if mine.size:
+            i0 = int(mine[0])
+            released = np.flatnonzero(~on[i0:])
+            i1 = i0 + (int(released[0]) - 1 if released.size else on.size - 1 - i0)
+            action, brake_start = "brake", float(d[i0])
+            brake_dur = round(float(t[i1] - t[i0]), 2)
+        elif np.any((d >= lo) & (d < hi) & (throttle < LIFT_THROTTLE)):
+            action = "lift"
+        seg = np.flatnonzero((d >= entry) & (d <= exit_))
+        k = int(seg[np.argmin(speed[seg])]) if seg.size else int(np.argmin(np.abs(d - apex)))
+        out.append({
+            "id": c.get("id"), "short": c.get("short"), "name": c.get("name"),
+            "direction": c.get("direction"),
+            "entry_m": entry, "apex_m": apex, "exit_m": exit_,
+            "action": action, "brake_start_m": brake_start, "brake_duration_s": brake_dur,
+            "min_speed_kmh": round(float(speed[k]), 1), "apex_gear": int(gear[k]),
+        })
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 @app.get("/health")
