@@ -1389,8 +1389,9 @@ def _compare_3d_payload(payload: dict, aligned, report, driver: str, year: int,
     for c in pro["corners"]:
         ci = by_id.get(int(c["id"])) if c.get("id") is not None else None
         c["time_delta"] = _num(ci.time_delta, 3) if ci is not None else None
+        # Measured like the pro's min_speed_kmh: flat corners at the apex, others at the slowest point.
         m = (d >= c["entry_m"]) & (d <= c["exit_m"])
-        c["your_min_speed_kmh"] = (float(s[m].min()) if m.any()
+        c["your_min_speed_kmh"] = (float(s[m].min()) if c["action"] != "flat" and m.any()
                                    else s[int(np.argmin(np.abs(d - c["apex_m"])))].item())
     payload.update({"pro": pro, "you": you})
     return payload

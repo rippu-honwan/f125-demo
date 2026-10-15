@@ -114,14 +114,19 @@ class TestCompare3DEndpoint:
         assert all("time_delta" in c and "your_min_speed_kmh" in c for c in corners)
         assert any(c["time_delta"] is not None for c in corners)
 
-    def test_your_min_speed_is_the_window_minimum(self, payload):
+    def test_your_corner_speed_is_measured_like_the_pros(self, payload):
+        # brake/lift: the pro's slowest point vs your slowest point in the corner window;
+        # flat: the pro's speed at the apex vs yours at the same point.
         d = np.array(payload["pro"]["points"]["d"])
         s = np.array(payload["you"]["speed"])
-        for c in payload["pro"]["corners"]:
+        corners = payload["pro"]["corners"]
+        assert any(c["action"] == "flat" for c in corners) and any(c["action"] != "flat" for c in corners)
+        for c in corners:
             m = (d >= c["entry_m"]) & (d <= c["exit_m"])
-            if m.any():
+            if c["action"] == "flat":
+                assert c["your_min_speed_kmh"] == s[int(np.argmin(np.abs(d - c["apex_m"])))]
+            elif m.any():
                 assert c["your_min_speed_kmh"] == pytest.approx(s[m].min())
-                assert c["your_min_speed_kmh"] <= s[m].max()
 
 
 def _post_compare(**over):

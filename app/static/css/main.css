@@ -1471,6 +1471,8 @@
 }
 @media (max-width: 768px) {
   .l3d-stage { height: 300px; }
+  .l3d-hud-bl { max-width: calc(100% - 190px); flex-wrap: wrap; }   /* stay clear of the camera buttons */
+  .l3d-pro-speed { margin-left: 0; }
   .l3d-corners { max-height: 260px; }
   .l3d-trace { grid-template-columns: 1fr; gap: 2px; }
   .l3d-controls { flex-wrap: wrap; }
