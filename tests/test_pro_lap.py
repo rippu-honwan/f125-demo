@@ -94,3 +94,66 @@ class TestCornerActions:
         th[(d >= 590) & (d < 640)] = 0.6      # drop starts at 590 (before T1 exit), continues past it
         out = _corner_actions(_corners(T2), d, t, s, th, b, g)
         assert out[1]["action"] == "flat"
+
+
+class TestProLapEndpoint:
+    @pytest.fixture(scope="class")
+    def payload(self):
+        res = client.get("/pro_lap", params={"year": 2025, "driver": "NOR", "track": "bahrain"})
+        assert res.status_code == 200, res.text
+        return res.json()
+
+    def test_meta(self, payload):
+        m = payload["meta"]
+        assert (m["driver"], m["year"], m["session"], m["track"]) == ("NOR", 2025, "Q", "bahrain")
+        assert m["track_name"] == "Bahrain"
+        assert m["lap_time"] == pytest.approx(90.267, abs=1e-3)
+
+    def test_columns_same_length(self, payload):
+        p = payload["points"]
+        assert set(p) == {"d", "x", "y", "z", "t", "speed", "throttle", "brake", "gear", "steer"}
+        n = len(p["d"])
+        assert n > 2000
+        assert all(len(v) == n for v in p.values())
+
+    def test_units_are_metres(self, payload):
+        x, y = np.array(payload["points"]["x"]), np.array(payload["points"]["y"])
+        path = np.hypot(np.diff(x), np.diff(y)).sum()
+        length = payload["meta"]["length_m"]
+        assert abs(path - length) / length < 0.05
+
+    def test_time_monotonic_and_matches_lap_time(self, payload):
+        t = np.array(payload["points"]["t"])
+        assert t[0] == 0
+        assert np.all(np.diff(t) > 0)
+        assert abs(t[-1] - payload["meta"]["lap_time"]) < 0.5
+
+    def test_steer_normalised(self, payload):
+        s = np.array(payload["points"]["steer"])
+        assert s.min() >= -1 and s.max() <= 1
+        assert np.abs(s).max() > 0.5                 # it actually turns
+
+    def test_brake_points_before_apex(self, payload):
+        brakes = [c for c in payload["corners"] if c["action"] == "brake"]
+        assert len(brakes) >= 5
+        for c in brakes:
+            assert c["brake_start_m"] < c["apex_m"]
+
+    def test_unknown_track_404(self):
+        assert client.get("/pro_lap", params={"track": "atlantis"}).status_code == 404
+
+    def test_path_traversal_rejected(self):
+        assert client.get("/pro_lap", params={"track": "../pyproject"}).status_code == 404
+
+    def test_no_data_lists_available(self, monkeypatch):
+        import app.main as m
+
+        def offline(*args, **kwargs):
+            raise RuntimeError("offline")
+
+        monkeypatch.setattr(m, "load_real_telemetry", offline)
+        res = client.get("/pro_lap", params={"year": 2019, "driver": "XXX", "track": "bahrain"})
+        assert res.status_code == 404
+        body = res.json()
+        assert body["detail"] == "no data"
+        assert {"year": 2025, "driver": "NOR", "session": "Q", "track": "bahrain"} in body["available"]

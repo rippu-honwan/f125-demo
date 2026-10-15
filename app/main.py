@@ -20,6 +20,7 @@ Run
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -64,7 +65,7 @@ from src.loader import (  # noqa: E402
 )
 from src.corners import analyze_solo, summarize_corners  # noqa: E402
 from src.track import load_track, auto_detect_track  # noqa: E402
-from src.fastf1_loader import resolve_gp_name  # noqa: E402  (track -> official GP name)
+from src.fastf1_loader import resolve_gp_name, load_real_telemetry  # noqa: E402
 from src.coaching import (  # noqa: E402  (read-only consumption)
     _generate_action_plan,
     _estimate_potential,
@@ -1225,6 +1226,62 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
     return out
 
 
+def _build_pro_lap(df, meta: dict, track_info: dict, step: float = PRO_LAP_STEP_M) -> dict:
+    """A FastF1 reference lap -> compact column arrays (metres, seconds) for the 3D viewer."""
+    d_full = df["lap_distance"].to_numpy(dtype=float)
+    raw_x = df["world_position_X"].to_numpy(dtype=float)
+    raw_y = df["world_position_Y"].to_numpy(dtype=float)
+    raw_z = df["world_position_Z"].to_numpy(dtype=float)
+    length = float(meta.get("track_length") or d_full[-1])
+
+    # FastF1 positions are 1/10 m; derive the scale from the lap itself instead of
+    # hardcoding 0.1, so any unit change upstream can't silently break the 3D scene.
+    path = float(np.hypot(np.diff(raw_x), np.diff(raw_y)).sum())
+    scale = length / path if path > 0 else 1.0
+    xs, ys, _ = _smooth_loop_xy(raw_x * scale, raw_y * scale)
+    zs = smooth(raw_z * scale, window=25)
+
+    d = np.arange(0.0, d_full[-1] + 1e-9, step)
+
+    def col(values):
+        return np.interp(d, d_full, np.asarray(values, dtype=float))
+
+    speed, throttle, brake = col(df["speed_kmh"]), col(df["throttle"]), col(df["brake"])
+    gear = np.rint(col(df["gear"])).astype(int)
+    v = np.maximum(speed / 3.6, 1.0)
+    t = np.concatenate([[0.0], np.cumsum(np.diff(d) / ((v[1:] + v[:-1]) / 2))])
+    lap_time = float(meta.get("lap_time") or t[-1])
+    t *= lap_time / t[-1]                      # integration drifts ~0.1 s; pin to the real lap time
+
+    steer = _ref_steering_from_curvature(df, d_full, d) or [0.0] * d.size
+    steer = [0.0 if s is None else s for s in steer]
+
+    def rnd(values, digits):
+        return [round(float(x), digits) for x in values]
+
+    return {
+        "meta": {"gp_name": meta.get("gp_name"), "lap_time": round(lap_time, 3),
+                 "length_m": round(length, 1)},
+        "points": {
+            "d": rnd(d, 1), "x": rnd(col(xs), 2), "y": rnd(col(ys), 2), "z": rnd(col(zs), 2),
+            "t": rnd(t, 3), "speed": rnd(speed, 1), "throttle": rnd(throttle, 3),
+            "brake": rnd(brake, 3), "gear": gear.tolist(), "steer": rnd(steer, 3),
+        },
+        "corners": _corner_actions(track_info.get("corners", []), d, t, speed, throttle, brake, gear),
+    }
+
+
+def _available_pro_laps() -> list:
+    """Cached reference laps, parsed from data/reference_laps/<year>_<drv>_<session>_<track>.pkl."""
+    out = []
+    for p in sorted((PROJECT_ROOT / "data" / "reference_laps").glob("*.pkl")):
+        parts = p.stem.split("_", 3)
+        if len(parts) == 4 and parts[0].isdigit():
+            out.append({"year": int(parts[0]), "driver": parts[1].upper(),
+                        "session": parts[2].upper(), "track": parts[3]})
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -1302,6 +1359,34 @@ def best_driver(year: int = DEFAULT_YEAR, track: str = "") -> JSONResponse:
     track = (track or "").strip().lower()
     code = _best_qualifier(year, track) if track else None
     return JSONResponse({"driver": code, "year": int(year), "track": track})
+
+
+@app.get("/pro_lap")
+def pro_lap(year: int = DEFAULT_YEAR, driver: str = "NOR", track: str = "",
+            session: str = "Q") -> JSONResponse:
+    """A pro reference lap as compact column arrays for the 3D Learn mode.
+
+    Served from data/reference_laps/*.pkl when cached, otherwise fetched via
+    FastF1 (slow on first call). 404 with ``available`` combos when no data.
+    """
+    track = (track or "").strip().lower()
+    if track not in {t["key"] for t in _discover_tracks()}:   # also blocks path tricks
+        raise HTTPException(status_code=404, detail="unknown track")
+    driver = (driver or "").strip().upper()
+    session = (session or "Q").strip().upper()
+    try:
+        df, meta = load_real_telemetry(driver, int(year), session, track)
+    except Exception:
+        traceback.print_exc()
+        return JSONResponse(status_code=404,
+                            content={"detail": "no data", "available": _available_pro_laps()})
+    track_info = json.loads((PROJECT_ROOT / "tracks" / f"{track}.json").read_text(encoding="utf-8"))
+    payload = _build_pro_lap(df, meta, track_info)
+    payload["meta"].update({
+        "driver": driver, "year": int(year), "session": session, "track": track,
+        "track_name": SHORT_NAMES.get(track, track_info.get("name", track)),
+    })
+    return JSONResponse(payload)
 
 
 @app.post("/laps")
