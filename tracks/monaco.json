@@ -4,196 +4,25 @@
   "short": "monaco",
   "length_m": 3337,
   "corners": [
-    {
-      "id": 1,
-      "name": "Sainte Devote",
-      "short": "T1",
-      "type": "low_speed",
-      "direction": "right",
-      "entry_m": 80,
-      "apex_m": 190,
-      "exit_m": 260
-    },
-    {
-      "id": 2,
-      "name": "Beau Rivage",
-      "short": "T2",
-      "type": "high_speed",
-      "direction": "left",
-      "entry_m": 380,
-      "apex_m": 450,
-      "exit_m": 550
-    },
-    {
-      "id": 3,
-      "name": "Massenet",
-      "short": "T3",
-      "type": "high_speed",
-      "direction": "left",
-      "entry_m": 570,
-      "apex_m": 640,
-      "exit_m": 740
-    },
-    {
-      "id": 4,
-      "name": "Casino",
-      "short": "T4",
-      "type": "medium_speed",
-      "direction": "right",
-      "entry_m": 670,
-      "apex_m": 760,
-      "exit_m": 850
-    },
-    {
-      "id": 5,
-      "name": "Mirabeau Haute",
-      "short": "T5",
-      "type": "low_speed",
-      "direction": "right",
-      "entry_m": 870,
-      "apex_m": 980,
-      "exit_m": 1050
-    },
-    {
-      "id": 6,
-      "name": "Fairmont Hairpin",
-      "short": "T6",
-      "type": "low_speed",
-      "direction": "right",
-      "entry_m": 1020,
-      "apex_m": 1130,
-      "exit_m": 1200
-    },
-    {
-      "id": 7,
-      "name": "Mirabeau Bas",
-      "short": "T7",
-      "type": "low_speed",
-      "direction": "right",
-      "entry_m": 1160,
-      "apex_m": 1270,
-      "exit_m": 1340
-    },
-    {
-      "id": 8,
-      "name": "Portier",
-      "short": "T8",
-      "type": "low_speed",
-      "direction": "right",
-      "entry_m": 1370,
-      "apex_m": 1480,
-      "exit_m": 1550
-    },
-    {
-      "id": 9,
-      "name": "Tunnel",
-      "short": "T9",
-      "type": "high_speed",
-      "direction": "right",
-      "entry_m": 1710,
-      "apex_m": 1780,
-      "exit_m": 1880
-    },
-    {
-      "id": 10,
-      "name": "Nouvelle Chicane",
-      "short": "T10",
-      "type": "low_speed",
-      "direction": "right",
-      "entry_m": 1940,
-      "apex_m": 2050,
-      "exit_m": 2120
-    },
-    {
-      "id": 11,
-      "name": "Nouvelle Chicane",
-      "short": "T11",
-      "type": "low_speed",
-      "direction": "left",
-      "entry_m": 2000,
-      "apex_m": 2110,
-      "exit_m": 2180
-    },
-    {
-      "id": 12,
-      "name": "Tabac",
-      "short": "T12",
-      "type": "high_speed",
-      "direction": "left",
-      "entry_m": 2250,
-      "apex_m": 2320,
-      "exit_m": 2420
-    },
-    {
-      "id": 13,
-      "name": "Louis Chiron",
-      "short": "T13",
-      "type": "medium_speed",
-      "direction": "left",
-      "entry_m": 2390,
-      "apex_m": 2480,
-      "exit_m": 2570
-    },
-    {
-      "id": 14,
-      "name": "Piscine",
-      "short": "T14",
-      "type": "medium_speed",
-      "direction": "right",
-      "entry_m": 2470,
-      "apex_m": 2560,
-      "exit_m": 2650
-    },
-    {
-      "id": 15,
-      "name": "Piscine",
-      "short": "T15",
-      "type": "medium_speed",
-      "direction": "right",
-      "entry_m": 2550,
-      "apex_m": 2640,
-      "exit_m": 2730
-    },
-    {
-      "id": 16,
-      "name": "Piscine",
-      "short": "T16",
-      "type": "medium_speed",
-      "direction": "left",
-      "entry_m": 2630,
-      "apex_m": 2720,
-      "exit_m": 2810
-    },
-    {
-      "id": 17,
-      "name": "La Rascasse",
-      "short": "T17",
-      "type": "low_speed",
-      "direction": "right",
-      "entry_m": 2840,
-      "apex_m": 2950,
-      "exit_m": 3020
-    },
-    {
-      "id": 18,
-      "name": "Anthony Noghes",
-      "short": "T18",
-      "type": "low_speed",
-      "direction": "right",
-      "entry_m": 3010,
-      "apex_m": 3120,
-      "exit_m": 3190
-    },
-    {
-      "id": 19,
-      "name": "Turn 19",
-      "short": "T19",
-      "type": "medium_speed",
-      "direction": "right",
-      "entry_m": 3130,
-      "apex_m": 3220,
-      "exit_m": 3310
-    }
+    {"id": 1, "name": "Sainte Devote", "short": "T1", "type": "low_speed", "direction": "right", "entry_m": 101, "apex_m": 181, "exit_m": 261},
+    {"id": 2, "name": "Beau Rivage", "short": "T2", "type": "high_speed", "direction": "right", "entry_m": 499, "apex_m": 579, "exit_m": 659},
+    {"id": 3, "name": "Massenet", "short": "T3", "type": "medium_speed", "direction": "left", "entry_m": 668, "apex_m": 748, "exit_m": 812},
+    {"id": 4, "name": "Casino", "short": "T4", "type": "medium_speed", "direction": "right", "entry_m": 813, "apex_m": 877, "exit_m": 957},
+    {"id": 5, "name": "Mirabeau Haute", "short": "T5", "type": "low_speed", "direction": "right", "entry_m": 1026, "apex_m": 1106, "exit_m": 1166},
+    {"id": 6, "name": "Fairmont Hairpin", "short": "T6", "type": "low_speed", "direction": "left", "entry_m": 1167, "apex_m": 1227, "exit_m": 1268},
+    {"id": 7, "name": "Mirabeau Bas", "short": "T7", "type": "low_speed", "direction": "right", "entry_m": 1268, "apex_m": 1309, "exit_m": 1356},
+    {"id": 8, "name": "Portier", "short": "T8", "type": "low_speed", "direction": "right", "entry_m": 1357, "apex_m": 1404, "exit_m": 1484},
+    {"id": 9, "name": "Tunnel", "short": "T9", "type": "high_speed", "direction": "right", "entry_m": 1665, "apex_m": 1745, "exit_m": 1825},
+    {"id": 10, "name": "Nouvelle Chicane", "short": "T10", "type": "low_speed", "direction": "left", "entry_m": 1996, "apex_m": 2076, "exit_m": 2102},
+    {"id": 11, "name": "Nouvelle Chicane", "short": "T11", "type": "low_speed", "direction": "right", "entry_m": 2103, "apex_m": 2129, "exit_m": 2209},
+    {"id": 12, "name": "Tabac", "short": "T12", "type": "medium_speed", "direction": "left", "entry_m": 2286, "apex_m": 2366, "exit_m": 2444},
+    {"id": 13, "name": "Louis Chiron", "short": "T13", "type": "high_speed", "direction": "left", "entry_m": 2445, "apex_m": 2523, "exit_m": 2533},
+    {"id": 14, "name": "Piscine", "short": "T14", "type": "high_speed", "direction": "right", "entry_m": 2534, "apex_m": 2544, "exit_m": 2614},
+    {"id": 15, "name": "Piscine", "short": "T15", "type": "medium_speed", "direction": "right", "entry_m": 2615, "apex_m": 2685, "exit_m": 2696},
+    {"id": 16, "name": "Piscine", "short": "T16", "type": "medium_speed", "direction": "left", "entry_m": 2696, "apex_m": 2707, "exit_m": 2742},
+    {"id": 17, "name": "La Rascasse", "short": "T17", "type": "medium_speed", "direction": "left", "entry_m": 2742, "apex_m": 2777, "exit_m": 2838},
+    {"id": 18, "name": "Anthony Noghes", "short": "T18", "type": "low_speed", "direction": "right", "entry_m": 2838, "apex_m": 2899, "exit_m": 2946},
+    {"id": 19, "name": "Turn 19", "short": "T19", "type": "low_speed", "direction": "right", "entry_m": 2946, "apex_m": 2993, "exit_m": 3073}
   ],
   "compound_zones": [],
   "sectors": [
