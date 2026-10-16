@@ -1182,6 +1182,7 @@ LIFT_THROTTLE = 0.9           # throttle below this (without braking) counts as 
 BRAKE_ON = 0.5                # reference brake is 0/1 but resampling leaves ramps
 APEX_SEARCH_AFTER_M = 150.0   # real apex = slowest point within this distance after brake release / lift end
 SPEED_TOL_KMH = 10.0          # re-braking without regaining this much speed is the same slow zone
+CHICANE_SHARE = 0.5           # brake goes to a chicane's first part once it has shed this share of the zone's speed loss
 MAX_CORNER_DRIFT_M = 800.0    # a slow zone further than this from every json apex stays unmatched
 HIGH_SPEED_COST_M = 200.0     # extra matching cost for json "high_speed" corners, so kinks don't steal braking
 
@@ -1242,7 +1243,10 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
     distances drift from FastF1 lap distance (up to ~550 m), so braking is found from
     the lap itself: each braking slow zone (``_brake_zones``) is paired with a json
     corner by ``_match_in_order``, and that corner is re-anchored on the zone's
-    slowest point (entry/apex/exit shift together).
+    slowest point (entry/apex/exit shift together). In a chicane the slowest point is
+    often the second part; when the unmatched corner before it lies inside the zone and
+    the car has already shed CHICANE_SHARE of the zone's speed loss there, the braking
+    belongs to that first part, which keeps its own apex (the second part goes flat).
 
     Other corners are shifted by the drift interpolated from their matched neighbours,
     which keeps every apex in lap order. A throttle drop (from >= LIFT_THROTTLE to
@@ -1261,9 +1265,20 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
     extra = np.array([HIGH_SPEED_COST_M if c.get("type") == "high_speed" else 0.0 for c in corners])
     pairs = _match_in_order(np.array([d[z[2]] for z in zones]), apex, extra)
 
+    own_apex = {}                       # corner -> its apex index, for braking moved to a chicane's first part
+    for j, z in sorted(pairs.items()):
+        i0, _, k = zones[z]
+        if j == 0 or j - 1 in pairs:
+            continue
+        a = apex[j - 1] + d[k] - apex[j]   # first part's apex, with the second part's drift
+        i = int(np.argmin(np.abs(d - a)))
+        if d[i0] < a < d[k] and speed[i0] - speed[i] >= CHICANE_SHARE * (speed[i0] - speed[k]):
+            pairs[j - 1] = pairs.pop(j)
+            own_apex[j - 1] = i
+
     shift = np.zeros(len(corners))
     for j, z in pairs.items():
-        shift[j] = d[zones[z][2]] - apex[j]
+        shift[j] = d[own_apex.get(j, zones[z][2])] - apex[j]
     if pairs:
         js = sorted(pairs)
         free = [j for j in range(len(corners)) if j not in pairs]
@@ -1286,7 +1301,7 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
         entry, ap, exit_ = (float(c[k]) + shift[j] for k in ("entry_m", "apex_m", "exit_m"))
         if j in pairs:
             i0, i1, k = zones[pairs[j]]
-            found.append(("brake", float(d[i0]), round(float(t[i1] - t[i0]), 2), i0, i1, k))
+            found.append(("brake", float(d[i0]), round(float(t[i1] - t[i0]), 2), i0, i1, own_apex.get(j, k)))
         else:
             lo = max(entry - BRAKE_SEARCH_LEAD_M, prev_exit)
             mine = np.flatnonzero((lift_d > prev_exit) & (lift_d >= lo) & (lift_d < ap - APEX_MARGIN_M))

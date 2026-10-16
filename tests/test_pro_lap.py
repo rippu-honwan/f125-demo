@@ -74,6 +74,17 @@ class TestCornerActions:
         assert out[1]["brake_start_m"] == pytest.approx(486, abs=2)
         assert out[1]["apex_m"] == pytest.approx(640, abs=2)
 
+    def test_chicane_brake_goes_to_first_part(self):
+        d, t, s, th, b, g = _lap(brake_from=380)  # 250 -> 120 by T1 (500)...
+        s[(d >= 570) & (d < 590)] = 80.0         # ...slowest at the second part (T2, 570)
+        t2 = {**T2, "entry_m": 530, "apex_m": 570, "exit_m": 620}
+        out = _corner_actions(_corners(t2), d, t, s, th, b, g)
+        assert [c["action"] for c in out] == ["brake", "flat"]
+        assert out[0]["brake_start_m"] == pytest.approx(380, abs=2)
+        assert out[0]["apex_m"] == pytest.approx(500, abs=2)   # keeps its own apex
+        assert out[0]["min_speed_kmh"] == 120
+        assert out[1]["min_speed_kmh"] == 80
+
     def test_brake_far_from_json_corner_is_still_matched(self):
         d, t, s, th, b, g = _lap()                # json apex 500, but the pro brakes for it at 100
         b[(d >= 100) & (d < 180)] = 1.0
