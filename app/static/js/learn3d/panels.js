@@ -46,6 +46,18 @@ export function renderCompareHud(top, bottom, meta, you, pro, gap) {
     `<span class="l3d-pro-speed">${esc(meta.driver)} ${Math.round(pro.speed)}</span>`);
 }
 
+/** Drive HUD. Top: lap clock, live gap to the pro, off-track note. Bottom: your pedals, speed and gear. */
+export function renderDriveHud(top, bottom, meta, v) {
+  const [text, cls] = gapLabel(v.gap);
+  setHtml(top,
+    `You vs ${esc(meta.driver)} (ghost) · ${fmtTime(v.t)}<br><span class="l3d-gap ${cls}">${text}</span>` +
+    (v.invalid ? `<br><span class="l3d-cue">${v.offTrack ? "Off track · " : ""}lap invalid</span>` : ""));
+  setHtml(bottom,
+    `<span class="l3d-pedal" title="Throttle"><i style="height:${v.throttle * 100}%;background:var(--ok)"></i></span>` +
+    `<span class="l3d-pedal" title="Brake"><i style="height:${v.brake * 100}%;background:var(--accent)"></i></span>` +
+    `<span class="l3d-speed">${Math.round(v.kmh)}</span>km/h · G${v.gear}`);
+}
+
 /** North-up outline of the circuit with one dot per car (`colors[k]` for `set(...states)[k]`). */
 export function createMinimap(svg, points, colors = ["var(--accent)"]) {
   const xs = [], ys = [];

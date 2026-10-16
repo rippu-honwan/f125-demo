@@ -6,9 +6,10 @@
 // rejects only on network errors, which main.js reports in its error banner.
 import { stateAt, timeAtDistance, nextCue, cornerSeekRange, fmtTime, youPoints, gapAt } from "./core.js";
 import {
-  esc, renderHud, renderCompareHud, createMinimap, createTelemetry, createCornerList, PRO_COLOR, YOU_COLOR,
+  esc, renderHud, renderCompareHud, renderDriveHud, createMinimap, createTelemetry, createCornerList, PRO_COLOR, YOU_COLOR,
 } from "./panels.js";
 import * as practice from "./practice.js";
+import * as drive from "./drive.js";
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -16,6 +17,10 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode: ignore */ } },
 };
 const CAM_KEYS = { 1: "tcam", 2: "chase", 3: "top" };
+const LEARN_CAR_COLOR = 0xe8002d;
+const hex = (css) => parseInt(css.slice(1), 16);
+/** Practice or Drive is open: Learn's playback, scrub and seeks stay locked. */
+const locked = () => practice.isOpen() || drive.isOpen();
 
 let view = null;      // the running session, or null
 let loadSeq = 0;      // guards against overlapping load() calls
@@ -74,8 +79,8 @@ async function start(data, seq) {
     const { createScene } = await import("./scene.js");
     if (seq !== loadSeq) return;
     const cars = Y
-      ? [{ color: parseInt(PRO_COLOR.slice(1), 16), lane: -1.6 }, { color: parseInt(YOU_COLOR.slice(1), 16), lane: 1.6 }]
-      : undefined;
+      ? [{ color: hex(PRO_COLOR), lane: -1.6 }, { color: hex(YOU_COLOR), lane: 1.6 }]
+      : [{ color: LEARN_CAR_COLOR, lane: 0 }, { color: hex(YOU_COLOR), lane: 0 }];   // car 1 = you, in Drive only
     scene = createScene($("l3dStage"), P, data.corners, cars);
   } catch (err) {
     console.warn("3D view unavailable:", err);
@@ -91,9 +96,9 @@ async function start(data, seq) {
   // Distance-based seeks (telemetry click, corner replay) use the followed car's clock.
   const timeAt = (d) => timeAtDistance(S.follow === "you" && Y ? Y : P, d);
   S.minimap = createMinimap($("l3dMinimap"), P, Y ? [PRO_COLOR, YOU_COLOR] : undefined);
-  S.tele = createTelemetry($("l3dTelemetry"), P, (d) => practice.isOpen() || seek(timeAt(d)), Y, data.meta.driver);
+  S.tele = createTelemetry($("l3dTelemetry"), P, (d) => locked() || seek(timeAt(d)), Y, data.meta.driver);
   S.list = createCornerList($("l3dCorners"), data.corners, (c) => {
-    if (practice.isOpen()) return;
+    if (locked()) return;
     const [from, to] = cornerSeekRange(c);
     seek(timeAt(from));
     S.stopAt = timeAt(to);
@@ -101,15 +106,26 @@ async function start(data, seq) {
     setPlaying(true);
   }, !!Y);
   $("l3dScrub").max = String(Math.round(end * 10));   // 0.1 s per step
-  if (Y) practice.detach();
-  else practice.attach({
-    points: P, corners: data.corners, meta: data.meta, store,
-    // Judge an input at its own event time, not the last frame's (up to a frame early otherwise).
-    getT: (ts) => (S.playing && ts && S.last
-      ? Math.min(S.end, S.t + Math.min(0.1, Math.max(0, (ts - S.last) / 1000)) * S.rate) : S.t),
-    seek, setPlaying, setRate,
-    setCues: (on) => { if (S.scene) S.scene.setCues(on); },
-  });
+  if (Y) {
+    practice.detach();
+    drive.detach();
+  } else {
+    practice.attach({
+      points: P, corners: data.corners, meta: data.meta, store,
+      // Judge an input at its own event time, not the last frame's (up to a frame early otherwise).
+      getT: (ts) => (S.playing && ts && S.last
+        ? Math.min(S.end, S.t + Math.min(0.1, Math.max(0, (ts - S.last) / 1000)) * S.rate) : S.t),
+      seek, setPlaying, setRate,
+      setCues: (on) => { if (S.scene) S.scene.setCues(on); },
+      blocked: drive.isOpen,
+    });
+    if (S.scene) drive.attach({
+      points: P, corners: data.corners, meta: data.meta, store, setPlaying,
+      setLine: (on) => { if (S.scene) S.scene.setLine(on); },
+      blocked: practice.isOpen,
+    });
+    else drive.detach();                                               // no WebGL: nothing to drive in
+  }
   setView(store.get("l3d_view", "telemetry"));
   setCam(S.cam);
   if (Y) setFollow(S.follow);
@@ -124,7 +140,8 @@ function frame(now) {
   S.raf = requestAnimationFrame(frame);
   const dt = S.last ? Math.min(0.1, (now - S.last) / 1000) : 0;
   S.last = now;
-  if (S.playing) {
+  if (drive.isOpen()) drive.frame(dt);
+  else if (S.playing) {
     S.t += dt * S.rate;
     if (practice.isRunning() && S.t >= S.end) { S.t = S.end; setPlaying(false); practice.finish(); }
     else if (S.stopAt != null && S.t >= S.stopAt) { S.t = S.stopAt; S.stopAt = null; setPlaying(false); }
@@ -136,6 +153,17 @@ function frame(now) {
 
 function draw() {
   const S = view, P = S.data.points, Y = S.data.you;
+  const dv = drive.view();
+  if (S.scene) S.scene.setGhost(0, !!dv);
+  if (dv) {                        // Drive: the pro is the ghost, the camera follows you
+    const g = stateAt(P, dv.t);
+    if (S.scene) S.scene.update([dv.ghost ? g : null, dv.you], S.cam, 1);
+    renderDriveHud($("l3dHudTop"), $("l3dHudBottom"), S.data.meta, dv);
+    S.minimap.set(dv.you);
+    S.tele.set(dv.d);
+    S.list.set(dv.d);
+    return;
+  }
   const s = stateAt(P, S.t);       // a finished car waits at the line (stateAt clamps t)
   let at = s;                      // the followed car: drives the cursor and corner highlight
   if (Y) {
@@ -207,7 +235,8 @@ function setFollow(who) {
 function unload() {
   loadSeq++;
   if (!view) return;
-  practice.detach();               // before the scene and view go away: it restores cues and controls
+  practice.detach();               // before the scene and view go away: they restore cues and controls
+  drive.detach();
   cancelAnimationFrame(view.raf);
   if (view.scene) view.scene.dispose();
   $("l3dStage").classList.remove("l3d-nogl");
@@ -221,14 +250,14 @@ function unload() {
 // ---- controls (wired once; modules run after the DOM is parsed) ----
 document.querySelectorAll(".l3d-view").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
 document.querySelectorAll("[data-cam]").forEach((b) => b.addEventListener("click", () => view && setCam(b.dataset.cam)));
-document.querySelectorAll("[data-rate]").forEach((b) => b.addEventListener("click", () => view && !practice.isOpen() && setRate(+b.dataset.rate)));
+document.querySelectorAll("[data-rate]").forEach((b) => b.addEventListener("click", () => view && !locked() && setRate(+b.dataset.rate)));
 document.querySelectorAll("[data-follow]").forEach((b) => b.addEventListener("click", () => view && view.data.you && setFollow(b.dataset.follow)));
-$("l3dPlay").addEventListener("click", () => view && !practice.isOpen() && setPlaying(!view.playing));
-$("l3dScrub").addEventListener("input", (e) => view && !practice.isOpen() && seek(+e.target.value / 10));
+$("l3dPlay").addEventListener("click", () => view && !locked() && setPlaying(!view.playing));
+$("l3dScrub").addEventListener("input", (e) => view && !locked() && seek(+e.target.value / 10));
 document.addEventListener("keydown", (e) => {
   if (!view || $("blkLearn3d").offsetParent === null) return;          // block not visible
   if (e.ctrlKey || e.metaKey || e.altKey) return;                      // leave browser shortcuts alone
-  if (practice.keydown(e)) return;                                     // practice owns Space/↓/Esc
+  if (practice.keydown(e) || drive.keydown(e)) return;                 // an open mode owns its keys
   const tag = e.target.tagName;
   if (/^(INPUT|SELECT|TEXTAREA)$/.test(tag)) return;                   // typing / native range keys
   if (e.code === "Space") {
@@ -240,6 +269,10 @@ document.addEventListener("keydown", (e) => {
   else if (CAM_KEYS[e.key]) setCam(CAM_KEYS[e.key]);
   else if ((e.key === "f" || e.key === "F") && view.data.you) setFollow(view.follow === "you" ? "pro" : "you");
 });
-document.addEventListener("keyup", (e) => { if (view) practice.keyup(e); });
+document.addEventListener("keyup", (e) => {
+  if (!view) return;
+  practice.keyup(e);
+  drive.keyup(e);
+});
 
 window.Learn3D = { load, show, unload };

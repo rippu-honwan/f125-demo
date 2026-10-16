@@ -10,11 +10,11 @@ const CAMS = {
   chase: { back: 9, height: 3.2, ahead: 8, look: 0.5 },
 };
 
-/** One entry per car: paint colour and a sideways lane offset (m) so cars at the same spot don't overlap. */
-const DEFAULT_CARS = [{ color: 0xe8002d, lane: 0 }];
-
-/** Builds the scene into `container`. Throws if WebGL is unavailable or the data is unusable. */
-export function createScene(container, points, corners, cars = DEFAULT_CARS) {
+/**
+ * Builds the scene into `container`. Throws if WebGL is unavailable or the data is unusable.
+ * `cars`: one {color, lane} per car; lane = sideways offset (m) so cars at the same spot don't overlap.
+ */
+export function createScene(container, points, corners, cars) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   try {
     return buildScene(renderer, container, points, corners, cars);
@@ -47,25 +47,42 @@ function buildScene(renderer, container, points, corners, cars) {
   const pos = Array.from({ length: n }, (_, i) => toThree(points.x[i], points.y[i], points.z[i]));
   const up = new THREE.Vector3(0, 1, 0);
 
-  // Road ribbon: offset the centre line sideways by ±half width.
-  const verts = new Float32Array(n * 6);
-  const side = new THREE.Vector3();
-  for (let i = 0; i < n; i++) {
-    side.subVectors(pos[Math.min(n - 1, i + 1)], pos[Math.max(0, i - 1)]).cross(up).normalize()
-      .multiplyScalar(TRACK_HALF_WIDTH);
-    const p = pos[i];
-    verts.set([p.x + side.x, p.y + 0.05, p.z + side.z, p.x - side.x, p.y + 0.05, p.z - side.z], i * 6);
-  }
-  const index = [];
-  for (let i = 0; i < n; i++) {
-    const a = 2 * i, b = a + 1, c = (2 * (i + 1)) % (2 * n), d = c + 1;   // last quad closes the loop
-    index.push(a, c, b, b, c, d);
-  }
-  const road = new THREE.BufferGeometry();
-  road.setAttribute("position", new THREE.BufferAttribute(verts, 3));
-  road.setIndex(index);
+  // A strip along the line, offset sideways by ±half; the last quad closes the loop.
+  const ribbon = (half, lift) => {
+    const verts = new Float32Array(n * 6);
+    const side = new THREE.Vector3();
+    for (let i = 0; i < n; i++) {
+      side.subVectors(pos[Math.min(n - 1, i + 1)], pos[Math.max(0, i - 1)]).cross(up).normalize().multiplyScalar(half);
+      const p = pos[i];
+      verts.set([p.x + side.x, p.y + lift, p.z + side.z, p.x - side.x, p.y + lift, p.z - side.z], i * 6);
+    }
+    const index = [];
+    for (let i = 0; i < n; i++) {
+      const a = 2 * i, b = a + 1, c = (2 * (i + 1)) % (2 * n), d = c + 1;
+      index.push(a, c, b, b, c, d);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(verts, 3));
+    g.setIndex(index);
+    return g;
+  };
+  const road = ribbon(TRACK_HALF_WIDTH, 0.05);
   road.computeVertexNormals();
   scene.add(new THREE.Mesh(road, new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.9, side: THREE.DoubleSide })));
+
+  // Racing line for Drive: the pro's line, red where braking, green at full throttle, yellow between.
+  const lineGeo = ribbon(0.35, 0.12);
+  const cols = new Float32Array(n * 6), col = new THREE.Color();
+  for (let i = 0; i < n; i++) {
+    col.set(points.brake[i] >= 0.5 ? 0xff2e2e : points.throttle[i] >= 0.95 ? 0x3ddc84 : 0xffd400);
+    cols.set([col.r, col.g, col.b, col.r, col.g, col.b], i * 6);
+  }
+  lineGeo.setAttribute("color", new THREE.BufferAttribute(cols, 3));
+  const line = new THREE.Mesh(lineGeo, new THREE.MeshBasicMaterial({
+    vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2,
+  }));
+  line.visible = false;
+  scene.add(line);
 
   // ponytail: flat ground at the lowest point; hilly tracks show the road raised above it.
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000),
@@ -116,11 +133,14 @@ function buildScene(renderer, container, points, corners, cars) {
   const fwd = new THREE.Vector3(), target = new THREE.Vector3();
 
   /**
-   * Place car k at `states[k]` (from core.stateAt), aim camera `cam` at car `follow`, render one frame.
+   * Place car k at `states[k]` ({x, y, z, heading}, e.g. from core.stateAt), aim camera `cam` at car
+   * `follow`, render one frame. A car with no state (missing or null) is hidden.
    */
   function update(states, cam, follow = 0) {
-    states.forEach((s, k) => {
-      const m = meshes[k];
+    meshes.forEach((m, k) => {
+      const s = states[k];
+      m.visible = !!s;
+      if (!s) return;
       toThree(s.x, s.y, s.z, m.position).y += 0.05;
       const lane = cars[k].lane || 0;                          // sideways, perpendicular to the heading
       m.position.x += Math.sin(s.heading) * lane;
@@ -162,7 +182,26 @@ function buildScene(renderer, container, points, corners, cars) {
     for (const m of cues) m.visible = on;
   }
 
-  return { update, dispose, setCues };
+  const ghosted = cars.map(() => false);
+  /** Draw car k see-through (Drive's ghost) or solid. */
+  function setGhost(k, on) {
+    if (ghosted[k] === on) return;
+    ghosted[k] = on;
+    meshes[k].traverse((o) => {
+      if (!o.material) return;
+      o.material.transparent = on;
+      o.material.opacity = on ? 0.35 : 1;
+      o.material.depthWrite = !on;
+      o.material.needsUpdate = true;
+    });
+  }
+
+  /** Show or hide the racing line. */
+  function setLine(on) {
+    line.visible = on;
+  }
+
+  return { update, dispose, setCues, setGhost, setLine };
 }
 
 /** A generic open-wheel silhouette from primitives — original, no real livery or branding. Nose = +x. */
