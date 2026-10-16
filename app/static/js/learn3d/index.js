@@ -168,6 +168,8 @@ function draw() {
   let at = s;                      // the followed car: drives the cursor and corner highlight
   if (Y) {
     const y = stateAt(Y, S.t);
+    y.done = S.t >= Y.t[Y.t.length - 1];       // crossed the line: waiting for the other car
+    s.done = S.t >= P.t[P.t.length - 1];
     const youFirst = S.follow === "you";
     at = youFirst ? y : s;
     if (S.scene) S.scene.update([s, y], S.cam, youFirst ? 1 : 0);

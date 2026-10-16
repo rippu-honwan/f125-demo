@@ -33,17 +33,21 @@ function gapLabel(g) {
   return [`${r < 0 ? "−" : "+"}${Math.abs(r).toFixed(2)}`, r > 0 ? "l3d-gap-slow" : r < 0 ? "l3d-gap-fast" : ""];
 }
 
-/** Compare HUD. Top: who vs who + live gap (red = you're behind). Bottom: your pedals and speed, the pro's speed. */
+/**
+ * Compare HUD. Top: who vs who + live gap (red = you're behind). Bottom: your pedals and speed, the
+ * pro's speed. A car with `done` set has crossed the line: it shows "finished", not its last speed.
+ */
 export function renderCompareHud(top, bottom, meta, you, pro, gap) {
   const [text, cls] = gapLabel(gap);
   setHtml(top,
     `<span style="color:${YOU_COLOR}">You</span> vs <span style="color:${PRO_COLOR}">${esc(meta.driver)}</span>` +
     ` · ${esc(meta.track_name)}<br><span class="l3d-gap ${cls}">${text}</span>`);
+  const pedal = (v) => (you.done ? 0 : Math.round(v * 100));
   setHtml(bottom,
-    `<span class="l3d-pedal" title="Your throttle"><i style="height:${Math.round(you.throttle * 100)}%;background:var(--ok)"></i></span>` +
-    `<span class="l3d-pedal" title="Your brake"><i style="height:${Math.round(you.brake * 100)}%;background:var(--accent)"></i></span>` +
-    `<span class="l3d-speed">${Math.round(you.speed)}</span>km/h · G${you.gear}` +
-    `<span class="l3d-pro-speed">${esc(meta.driver)} ${Math.round(pro.speed)}</span>`);
+    `<span class="l3d-pedal" title="Your throttle"><i style="height:${pedal(you.throttle)}%;background:var(--ok)"></i></span>` +
+    `<span class="l3d-pedal" title="Your brake"><i style="height:${pedal(you.brake)}%;background:var(--accent)"></i></span>` +
+    (you.done ? `<span class="l3d-speed">Finished</span>` : `<span class="l3d-speed">${Math.round(you.speed)}</span>km/h · G${you.gear}`) +
+    `<span class="l3d-pro-speed">${esc(meta.driver)} ${pro.done ? "finished" : Math.round(pro.speed)}</span>`);
 }
 
 /** Drive HUD. Top: lap clock, live gap to the pro, off-track note. Bottom: your pedals, speed and gear. */
