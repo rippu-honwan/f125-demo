@@ -12,7 +12,7 @@ const BRAKE_KEYS = new Set(["Space", "ArrowDown"]);
 const KEYS_PRACTICE = "Hold Space or ↓ to brake · Esc quits practice";
 
 const $ = (id) => document.getElementById(id);
-// host: {points, corners, meta, store, getT, seek, setPlaying, setRate, setCues}, set by attach().
+// host: {points, corners, meta, store, getT, seek, setPlaying, setRate, setCues, blocked}, set by attach().
 let host = null;
 let phase = "off";                              // off | setup | run | results
 let judge = null, bars = [], keysBefore = "", lastScore = "";
@@ -45,7 +45,7 @@ export const isOpen = () => phase !== "off";
 export const hintsOn = () => phase !== "run" || settings.diff === "easy";
 
 function open() {
-  if (!host || phase !== "off") return;
+  if (!host || phase !== "off" || host.blocked()) return;
   settings = {
     diff: host.store.get("l3d_practice_diff", "easy") === "hard" ? "hard" : "easy",
     rate: host.store.get("l3d_practice_rate", "1") === "0.5" ? 0.5 : 1,
