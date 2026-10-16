@@ -45,34 +45,33 @@ export function lookup(table, v) {
 
 /** Limits and line geometry from the pro's lap (`points` as from GET /pro_lap; the lap is a closed loop). */
 export function buildModel(points) {
-  const { d, x, y } = points, n = d.length;
+  const { d, x, y } = points, np = d.length;
   const v = points.speed.map((s) => s / KMH);
-  const step = (d[n - 1] - d[0]) / (n - 1);
+  const ds = (d[np - 1] - d[0]) / (np - 1);
   // Heading = direction of the chord p[i-w] -> p[i+w]; curvature = its change over the same span.
   // Chords, not neighbours: the positions stall and jitter by a metre or so against d.
-  const w = Math.max(1, Math.round(SMOOTH_M / step));
-  const loop = n - 1;                                         // the last point repeats the first
+  const w = Math.max(1, Math.round(SMOOTH_M / ds));
+  const loop = np - 1;                                        // index np-1 sits on (or within a few m of) the start: wrap on np-1 points
   const at = (j) => ((j % loop) + loop) % loop;
-  const heading = new Array(n);
-  for (let i = 0; i < n; i++) {
+  const heading = new Array(np);
+  for (let i = 0; i < np; i++) {
     heading[i] = Math.atan2(y[at(i + w)] - y[at(i - w)], x[at(i + w)] - x[at(i - w)]);
     if (i) heading[i] += 2 * Math.PI * Math.round((heading[i - 1] - heading[i]) / (2 * Math.PI));
   }
   const turn = heading[loop] - heading[0];                    // ±2π for a lap
   const hAt = (j) => heading[at(j)] + turn * Math.floor(j / loop);
-  const kappa = heading.map((_, i) => (hAt(i + w) - hAt(i - w)) / (2 * w * step));
+  const kappa = heading.map((_, i) => (hAt(i + w) - hAt(i - w)) / (2 * w * ds));
 
   const nb = Math.ceil(Math.max(...v) / BIN) + 2;
   const aLat = binTable(v.map((vi, i) => [vi, vi * vi * Math.abs(kappa[i])]), nb, PCT);
   for (let i = 1; i < nb; i++) aLat[i] = Math.max(aLat[i], aLat[i - 1]);   // downforce: grip never drops with speed
   const acc = [], brk = [];
-  for (let i = 0; i < n - 1; i++) {
+  for (let i = 0; i < np - 1; i++) {
     const a = (v[i + 1] ** 2 - v[i] ** 2) / (2 * (d[i + 1] - d[i]));
     if (points.throttle[i] >= 0.95 && a > 0) acc.push([v[i], a]);
     if (points.brake[i] >= 0.5 && a < 0) brk.push([v[i], -a]);
   }
   const accel = binTable(acc, nb, PCT), vTop = Math.max(...v);
-  accel.forEach((_, i) => { if (i * BIN > vTop) accel[i] = 0; });   // no faster than the pro's top speed
   const counts = Array.from({ length: nb }, () => new Map());
   v.forEach((vi, i) => {
     const c = counts[Math.min(nb - 1, Math.round(vi / BIN))];
@@ -80,7 +79,7 @@ export function buildModel(points) {
   });
   const gear = fillNearest(counts.map((c) => (c.size ? [...c].sort((a, b) => b[1] - a[1])[0][0] : null)));
   return {
-    d, heading, kappa, lapLength: d[n - 1], v0: v[0],
+    d, heading, kappa, lapLength: d[np - 1], v0: v[0], vTop,
     aLat: aLat.map((a) => Math.min(A_LAT_CAP, a) * GRIP_MARGIN), accel, brake: binTable(brk, nb, PCT), gear,
   };
 }
@@ -111,8 +110,9 @@ export function step(m, car, input, dt = DT) {
   const off = Math.abs(car.n) > HALF_WIDTH;
   const v0 = car.v;
   let a = input.brake ? -lookup(m.brake, v0) : input.throttle ? lookup(m.accel, v0) : -COAST_K * v0 * v0;
-  if (off) a -= GRASS_DRAG;
-  if (Math.abs(car.n) >= WALL) a -= WALL_SCRUB;
+  if (v0 >= m.vTop) a = Math.min(a, 0);                 // no faster than the pro's top speed
+  // Grass and wall slow you to about 60 km/h but never stop you: below that, accel can be less than the drag.
+  if (v0 > SPIN_RESET_V) a -= (off ? GRASS_DRAG : 0) + (Math.abs(car.n) >= WALL ? WALL_SCRUB : 0);
   car.v = Math.max(0, v0 + a * dt);
 
   const k = along(m, m.kappa, car.s);
@@ -127,6 +127,7 @@ export function step(m, car, input, dt = DT) {
     steer = car.axis;
   }
   const kSteer = Math.max(-1, Math.min(1, steer)) * kMax;
+  // ponytail: s advances with 1/(1 - n·kappa), so the inside of a hairpin is shorter, as on a 14 m-wide road.
   const sDot = car.v * Math.cos(car.psi) / Math.max(0.2, 1 - car.n * k);
   car.n += car.v * Math.sin(car.psi) * dt;
   car.psi += (car.v * kSteer - k * sDot) * dt;

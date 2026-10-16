@@ -59,7 +59,6 @@ test("buildModel reads curvature, lateral grip, acceleration and braking from th
   assert.ok(Math.abs(lookup(M.aLat, V_ARC) - V_ARC ** 2 / R) < 1.5, `aLat ${lookup(M.aLat, V_ARC)}`);
   assert.ok(Math.abs(lookup(M.accel, 40) - ACC) < 0.6);
   assert.ok(Math.abs(lookup(M.brake, 50) - BRK) < 1.2);
-  assert.equal(lookup(M.accel, 200), 0);                          // above the pro's top speed
   assert.equal(gearAt(M, V_ARC), 3);
 });
 
@@ -117,12 +116,36 @@ test("a spin puts the car back on the line at 60 km/h", () => {
   assert.deepEqual([car.n, car.psi, Math.round(car.v * KMH)], [0, 0, 60]);
 });
 
+test("brake wins over throttle, grass adds drag, and throttle stops at the pro's top speed", () => {
+  const v = 50;
+  let car = createCar(M, "assist");
+  car.s = 300; car.v = v;
+  step(M, car, { throttle: 1, brake: 1 });
+  assert.ok(Math.abs(car.v - (v - lookup(M.brake, v) * DT)) < 1e-9);
+  car = createCar(M, "assist");
+  car.s = 300; car.v = v; car.n = HALF_WIDTH + 1;
+  step(M, car, { throttle: 0, brake: 0 });
+  assert.ok(car.v < v - 7.9 * DT, `grass v ${car.v}`);
+  car = createCar(M, "assist");
+  car.s = 300; car.v = M.vTop;
+  step(M, car, { throttle: 1, brake: 0 });
+  assert.ok(car.v <= M.vTop);
+});
+
+test("a car stopped at the wall can drive away", () => {
+  const car = createCar(M, "manual");
+  car.s = 300; car.n = WALL; car.v = 0;
+  for (let i = 0; i < 240; i++) step(M, car, { throttle: 1, brake: 0, steer: -1 });
+  assert.ok(car.v > 5, `v ${car.v}`);
+  assert.ok(Math.abs(car.n) < WALL, `n ${car.n}`);
+});
+
 test("advance runs fixed steps for the frame time, capped at 0.1 s", () => {
   const car = createCar(M, "assist");
-  advance(M, car, { throttle: 1, brake: 0 }, 0.05);
+  advance(M, car, { throttle: 1, brake: 0 }, 0.05 + DT / 2);
   assert.equal(car.trace.t.length - 1, 6);
   advance(M, car, { throttle: 1, brake: 0 }, 5);
-  assert.ok(Math.abs(car.t - (0.05 + 0.1)) < DT);
+  assert.ok(Math.abs(car.t - (0.05 + 0.1)) < 2 * DT);
 });
 
 test("the finish time is interpolated inside the last step", () => {
@@ -136,10 +159,10 @@ test("the finish time is interpolated inside the last step", () => {
 
 test("pose moves the car to the left of the line for positive n", () => {
   const car = createCar(M, "assist");
-  car.s = 300; car.n = 2;
+  car.s = 300; car.n = 2; car.psi = 0.1;
   const p = pose(P, M, car);
   assert.ok(Math.abs(p.x - 300) < 0.5 && Math.abs(p.y - 2) < 0.1, JSON.stringify(p));
-  assert.ok(Math.abs(p.heading) < 0.01);
+  assert.ok(Math.abs(p.heading - 0.1) < 0.01);
 });
 
 test("gapAt and cornerStats compare a trace with the pro", () => {
