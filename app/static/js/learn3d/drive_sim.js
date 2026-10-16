@@ -179,26 +179,33 @@ function traceAt(trace, key, s) {
 }
 
 /**
- * One row per corner: your brake point vs the pro's, your min speed vs the pro's, and the time lost.
- * A row's stretch starts 150 m before the brake point (or entry) but never before the previous
- * corner's exit, so braking for a neighbour isn't counted here and rows don't overlap.
+ * One row per corner: your brake point vs the pro's, your min speed vs the pro's, and the time lost
+ * from 150 m before the brake point (or entry) to the exit. On close corners those stretches overlap.
  */
 export function cornerStats(trace, points, corners) {
-  const byEntry = [...corners].sort((a, b) => a.entry_m - b.entry_m);
+  const from = (c) => (c.brake_start_m ?? c.entry_m) - 150;
+  // Each brake press goes to one corner: the brake corner whose brake point is nearest, else the
+  // first lift/flat corner whose stretch it falls in. A press is never counted for two corners.
+  const presses = new Map(corners.map((c) => [c, []]));
+  for (let j = 0; j < trace.d.length; j++) {
+    if (!trace.brake[j] || trace.brake[j - 1]) continue;
+    const s = trace.d[j];
+    const near = corners.filter((c) => s >= from(c) && s <= c.apex_m);
+    const brakes = near.filter((c) => c.brake_start_m != null);
+    const owner = brakes.length
+      ? brakes.reduce((a, b) => (Math.abs(b.brake_start_m - s) < Math.abs(a.brake_start_m - s) ? b : a))
+      : near[0];
+    if (owner) presses.get(owner).push(s);
+  }
   return corners.map((c) => {
-    const prev = byEntry[byEntry.indexOf(c) - 1];
-    const start = Math.max(prev ? prev.exit_m : 0, (c.brake_start_m ?? c.entry_m) - 150);
-    const onsets = [];
+    const own = presses.get(c), pro = c.brake_start_m ?? null;
+    // Several presses: the one nearest the pro's brake point is this corner's.
+    const brakeAt = !own.length ? null : pro == null ? own[0]
+      : own.reduce((a, b) => (Math.abs(b - pro) < Math.abs(a - pro) ? b : a));
     let minV = Infinity;
     for (let j = 0; j < trace.d.length; j++) {
-      const s = trace.d[j];
-      if (trace.brake[j] && !trace.brake[j - 1] && s >= start && s <= c.apex_m) onsets.push(s);
-      if (s >= c.entry_m && s <= c.exit_m) minV = Math.min(minV, trace.v[j]);
+      if (trace.d[j] >= c.entry_m && trace.d[j] <= c.exit_m) minV = Math.min(minV, trace.v[j]);
     }
-    const pro = c.brake_start_m ?? null;
-    // Several presses in the stretch: the one nearest the pro's brake point is this corner's.
-    const brakeAt = !onsets.length ? null : pro == null ? onsets[0]
-      : onsets.reduce((a, b) => (Math.abs(b - pro) < Math.abs(a - pro) ? b : a));
     // Like the backend's min_speed_kmh: flat corners at the apex, the others at the slowest point.
     const v = c.action === "flat" ? traceAt(trace, "v", c.apex_m) : minV;
     return {
@@ -207,7 +214,7 @@ export function cornerStats(trace, points, corners) {
       proBrakeAt: pro,
       minKmh: Number.isFinite(v) ? v * KMH : null,
       proMinKmh: c.min_speed_kmh,
-      lost: gapAt(trace, points, c.exit_m) - gapAt(trace, points, start),
+      lost: gapAt(trace, points, c.exit_m) - gapAt(trace, points, Math.max(0, from(c))),
     };
   });
 }

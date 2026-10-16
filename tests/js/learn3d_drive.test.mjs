@@ -179,7 +179,7 @@ test("gapAt and cornerStats compare a trace with the pro", () => {
   assert.deepEqual([t2.brakeAt, t2.proBrakeAt, Math.round(t2.minKmh)], [null, null, 46]);
 });
 
-test("cornerStats keeps each corner's brake point and time to its own stretch of track", () => {
+test("cornerStats gives each brake press to one corner", () => {
   const pro = { d: [0, 1000], t: [0, 10] };
   const d = [], t = [], v = [], brake = [];
   for (let s = 0; s <= 1000; s += 10) {
@@ -197,7 +197,15 @@ test("cornerStats keeps each corner's brake point and time to its own stretch of
   assert.equal(a.brakeAt, 400);                                   // nearest the pro's, not the stray tap
   assert.equal(b.brakeAt, 500);                                   // not A's 400, though it's within 150 m
   assert.ok(Math.abs(a.lost) < 1e-9);
-  assert.ok(Math.abs(b.lost - 0.12) < 1e-9);                      // from A's exit (480) to B's exit (600)
+  assert.ok(Math.abs(b.lost - 0.12) < 1e-9);                      // you only lose time after 480 m
+  // A flat corner whose stretch holds the next corner's brake point: the press is the brake corner's.
+  const overlap = [
+    { short: "F", action: "flat", brake_start_m: null, entry_m: 300, apex_m: 520, exit_m: 560, min_speed_kmh: 50 },
+    { short: "G", action: "brake", brake_start_m: 505, entry_m: 530, apex_m: 560, exit_m: 600, min_speed_kmh: 50 },
+  ];
+  const [f, g] = cornerStats({ d, t, v, brake }, pro, overlap);
+  assert.equal(g.brakeAt, 500);
+  assert.equal(f.brakeAt, 260);                                   // F keeps only the press no brake corner wants
 });
 
 test("bot test: Assist following the pro's speed laps Suzuka on track, within 3 % of the pro", () => {
