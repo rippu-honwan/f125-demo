@@ -91,9 +91,9 @@ async function start(data, seq) {
   // Distance-based seeks (telemetry click, corner replay) use the followed car's clock.
   const timeAt = (d) => timeAtDistance(S.follow === "you" && Y ? Y : P, d);
   S.minimap = createMinimap($("l3dMinimap"), P, Y ? [PRO_COLOR, YOU_COLOR] : undefined);
-  S.tele = createTelemetry($("l3dTelemetry"), P, (d) => practice.isRunning() || seek(timeAt(d)), Y, data.meta.driver);
+  S.tele = createTelemetry($("l3dTelemetry"), P, (d) => practice.isOpen() || seek(timeAt(d)), Y, data.meta.driver);
   S.list = createCornerList($("l3dCorners"), data.corners, (c) => {
-    if (practice.isRunning()) return;
+    if (practice.isOpen()) return;
     const [from, to] = cornerSeekRange(c);
     seek(timeAt(from));
     S.stopAt = timeAt(to);
@@ -104,7 +104,10 @@ async function start(data, seq) {
   if (Y) practice.detach();
   else practice.attach({
     points: P, corners: data.corners, meta: data.meta, store,
-    getT: () => S.t, seek, setPlaying, setRate,
+    // Judge an input at its own event time, not the last frame's (up to a frame early otherwise).
+    getT: (ts) => (S.playing && ts && S.last
+      ? Math.min(S.end, S.t + Math.min(0.1, Math.max(0, (ts - S.last) / 1000)) * S.rate) : S.t),
+    seek, setPlaying, setRate,
     setCues: (on) => { if (S.scene) S.scene.setCues(on); },
   });
   setView(store.get("l3d_view", "telemetry"));
@@ -218,10 +221,10 @@ function unload() {
 // ---- controls (wired once; modules run after the DOM is parsed) ----
 document.querySelectorAll(".l3d-view").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
 document.querySelectorAll("[data-cam]").forEach((b) => b.addEventListener("click", () => view && setCam(b.dataset.cam)));
-document.querySelectorAll("[data-rate]").forEach((b) => b.addEventListener("click", () => view && !practice.isRunning() && setRate(+b.dataset.rate)));
+document.querySelectorAll("[data-rate]").forEach((b) => b.addEventListener("click", () => view && !practice.isOpen() && setRate(+b.dataset.rate)));
 document.querySelectorAll("[data-follow]").forEach((b) => b.addEventListener("click", () => view && view.data.you && setFollow(b.dataset.follow)));
-$("l3dPlay").addEventListener("click", () => view && !practice.isRunning() && setPlaying(!view.playing));
-$("l3dScrub").addEventListener("input", (e) => view && !practice.isRunning() && seek(+e.target.value / 10));
+$("l3dPlay").addEventListener("click", () => view && !practice.isOpen() && setPlaying(!view.playing));
+$("l3dScrub").addEventListener("input", (e) => view && !practice.isOpen() && seek(+e.target.value / 10));
 document.addEventListener("keydown", (e) => {
   if (!view || $("blkLearn3d").offsetParent === null) return;          // block not visible
   if (e.ctrlKey || e.metaKey || e.altKey) return;                      // leave browser shortcuts alone

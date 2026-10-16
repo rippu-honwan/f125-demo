@@ -81,6 +81,22 @@ test("score: points, max, accuracy and combo", () => {
   assert.equal(createJudge([]).score().accuracy, 1);
 });
 
+test("a press while a note is held is ignored", () => {
+  const j = fresh();
+  j.press(1.0);
+  assert.equal(j.press(1.05), null);
+  assert.equal(j.holding.corner.short, "T1");
+});
+
+test("tick(Infinity) closes a held note and misses the rest", () => {
+  const j = fresh();
+  j.press(1.0);
+  const out = j.tick(Infinity);
+  assert.deepEqual(out.map((o) => [o.note.corner.short, o.kind, o.grade]),
+    [["T2", "press", "miss"], ["T1", "release", "miss"]]);
+  assert.equal(j.release(9), null);
+});
+
 test("dtMetres converts a timing error to metres at a speed", () => {
   assert.equal(dtMetres(0.08, 270), 6);
 });

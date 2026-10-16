@@ -16,6 +16,7 @@ const $ = (id) => document.getElementById(id);
 let host = null;
 let phase = "off";                              // off | setup | run | results
 let judge = null, bars = [], keysBefore = "", lastScore = "";
+const inputs = new Set();                      // brake inputs held now (key codes, "ptr<id>"); brake is on while any is
 let settings = { diff: "easy", rate: 1 };
 
 function markPressed(b, on) {
@@ -32,12 +33,14 @@ export function attach(h) {
 
 /** Leave practice (if any) and stop offering it. */
 export function detach() {
-  if (phase !== "off") close();
+  if (phase !== "off") close(false);
   host = null;
   $("l3dPracticeBtn").hidden = true;
 }
 
 export const isRunning = () => phase === "run";
+/** Practice is open (setup, run or results): the Learn controls stay locked. */
+export const isOpen = () => phase !== "off";
 /** False only while a Hard lap runs: index.js hides the HUD's "brake in N m" cue then. */
 export const hintsOn = () => phase !== "run" || settings.diff === "easy";
 
@@ -88,6 +91,8 @@ function begin() {
   $("l3dScore").hidden = false;
   $("l3dBrake").hidden = false;
   lastScore = "";
+  inputs.clear();
+  clearPop();
   showPanel(null);
   if (document.activeElement) document.activeElement.blur();   // Space must not click a focused button
   phase = "run";
@@ -131,12 +136,13 @@ function drawLane(t) {
 
 function popup(j) {
   let text = GRADE_LABEL[j.grade];
-  if (j.dt != null) {
+  if (j.dt == null) text += j.kind === "press" ? " · brake point" : " · release";
+  else {
     if (Math.abs(j.dt) < 0.005) text += " · on time";
     else {
       const speed = stateAt(host.points, j.kind === "press" ? j.note.start : j.note.end).speed;
       const m = Math.round(Math.abs(dtMetres(j.dt, speed)));
-      text += ` · ${j.dt > 0 ? "late" : "early"} ${Math.abs(j.dt).toFixed(2)} s ≈ ${m < 1 ? "< 1" : m} m`;
+      text += ` · ${j.dt > 0 ? "late" : "early"} ${Math.abs(j.dt).toFixed(2)} s ${m < 1 ? "<" : "≈"} ${Math.max(1, m)} m`;
     }
   }
   const pop = $("l3dPop");
@@ -146,18 +152,30 @@ function popup(j) {
   pop.classList.add("show");
 }
 
-function brakeDown() {
-  if (phase !== "run") return;
+function clearPop() {
+  const pop = $("l3dPop");
+  pop.className = "l3d-pop";
+  pop.textContent = "";
+}
+
+/** Brake input `id` goes down at event time `ts`; the first one held presses the brake. */
+function brakeDown(id, ts) {
+  if (phase !== "run" || inputs.has(id)) return;
+  inputs.add(id);
+  if (inputs.size > 1) return;
   $("l3dBrake").classList.add("active");
-  const j = judge.press(host.getT());
+  const j = judge.press(host.getT(ts));
   if (j) popup(j);
 }
 
-function brakeUp() {
-  if (phase !== "run") return;
+/** Brake input `id` comes up; the brake is released when the last one does. Returns whether it was held. */
+function brakeUp(id, ts) {
+  if (!inputs.delete(id)) return false;
+  if (inputs.size || phase !== "run") return true;
   $("l3dBrake").classList.remove("active");
-  const j = judge.release(host.getT());
+  const j = judge.release(host.getT(ts));
   if (j) popup(j);
+  return true;
 }
 
 /** The lap ended: judge what's left, show the results. */
@@ -197,8 +215,10 @@ function renderResults() {
     `<button type="button" data-practice="back">Back to Learn</button></div>`;
 }
 
-function close() {
+function close(restoreFocus = true) {
   phase = "off";
+  inputs.clear();
+  clearPop();
   showPanel(null);
   $("l3dLane").hidden = true;
   $("l3dScore").hidden = true;
@@ -211,6 +231,7 @@ function close() {
     host.setPlaying(false);
     host.setRate(1);
     $("l3dPracticeBtn").hidden = false;
+    if (restoreFocus) $("l3dPracticeBtn").focus();
   }
 }
 
@@ -223,17 +244,14 @@ export function keydown(e) {
   }
   if (phase === "run" && BRAKE_KEYS.has(e.code)) {
     e.preventDefault();
-    if (!e.repeat) brakeDown();
-    return true;
+    if (!e.repeat) brakeDown(e.code, e.timeStamp);
   }
-  return phase === "run";                       // Learn shortcuts are off while a lap runs
+  return true;                                  // Learn shortcuts are off while practice is open
 }
 
 export function keyup(e) {
-  if (phase === "run" && BRAKE_KEYS.has(e.code)) {
-    e.preventDefault();
-    brakeUp();
-  }
+  // Also after the lap ended: a Space held over the line mustn't click the focused Retry.
+  if (BRAKE_KEYS.has(e.code) && brakeUp(e.code, e.timeStamp)) e.preventDefault();
 }
 
 // ---- controls (wired once; modules run after the DOM is parsed) ----
@@ -247,7 +265,7 @@ document.querySelectorAll("[data-prate]").forEach((b) => b.addEventListener("cli
   syncSetup();
 }));
 $("l3dPracticeStart").addEventListener("click", () => phase === "setup" && begin());
-$("l3dPracticeCancel").addEventListener("click", close);
+$("l3dPracticeCancel").addEventListener("click", () => close());
 $("l3dPracticeResults").addEventListener("click", (e) => {
   const act = e.target.closest("[data-practice]")?.dataset.practice;
   if (act === "retry") begin();
@@ -255,9 +273,14 @@ $("l3dPracticeResults").addEventListener("click", (e) => {
 });
 const brakeBtn = $("l3dBrake");
 brakeBtn.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return;                   // primary button / touch / pen only
   e.preventDefault();
   brakeBtn.setPointerCapture(e.pointerId);
-  brakeDown();
+  brakeDown(`ptr${e.pointerId}`, e.timeStamp);
 });
-for (const ev of ["pointerup", "pointercancel"]) brakeBtn.addEventListener(ev, brakeUp);
-window.addEventListener("blur", brakeUp);       // switching windows while holding = letting go
+for (const ev of ["pointerup", "pointercancel"]) {
+  brakeBtn.addEventListener(ev, (e) => brakeUp(`ptr${e.pointerId}`, e.timeStamp));
+}
+brakeBtn.addEventListener("contextmenu", (e) => e.preventDefault());
+// Switching windows while holding = letting go of everything.
+window.addEventListener("blur", () => [...inputs].forEach((id) => brakeUp(id)));
