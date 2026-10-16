@@ -1500,13 +1500,20 @@
 .l3d-dt { color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .l3d.l3d-practicing .l3d-controls, .l3d.l3d-practicing .l3d-corners, .l3d.l3d-practicing .l3d-telemetry { pointer-events: none; opacity: 0.45; }
 .l3d.l3d-hard .l3d-corners, .l3d.l3d-hard .l3d-telemetry { visibility: hidden; }   /* brake zones there would be hints */
+.l3d-countdown[hidden], .l3d-pedals[hidden], .l3d-views button[hidden] { display: none; }
+.l3d-countdown { position: absolute; z-index: 2; inset: 0; display: grid; place-items: center; pointer-events: none; color: #fff; font: 800 4rem var(--font-display); text-shadow: 0 4px 14px #000; }
+.l3d-pedals { position: absolute; z-index: 2; left: 10px; right: 10px; bottom: 96px; display: flex; justify-content: space-between; pointer-events: none; }
+.l3d-pedals button { pointer-events: auto; width: 92px; height: 92px; border-radius: 50%; border: 0; color: #fff; font: 800 0.95rem var(--font-display); cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.l3d-pedals [data-pedal="brake"] { background: var(--accent); }
+.l3d-pedals [data-pedal="throttle"] { background: var(--ok); }
+.l3d-pedals button.active { transform: scale(0.94); filter: brightness(1.3); }
 @media (max-width: 900px) {
   .l3d-main[data-view="corners"] { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 768px) {
   .l3d-stage { height: 300px; }
   .l3d-hud-bl { max-width: calc(100% - 190px); flex-wrap: wrap; }   /* stay clear of the camera buttons */
-  .l3d.l3d-practicing .l3d-hud-tl { display: none; }                 /* the practice score sits there */
+  .l3d.l3d-practicing:not(.l3d-driving) .l3d-hud-tl { display: none; }   /* the practice score sits there */
   .l3d-pro-speed { margin-left: 0; }
   .l3d-corners { max-height: 260px; }
   .l3d-trace { grid-template-columns: 1fr; gap: 2px; }

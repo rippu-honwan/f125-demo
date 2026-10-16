@@ -18,7 +18,9 @@
   "./static/js/learn3d/panels.js": "./static/js/learn3d/panels.js?v=__BUILD__",
   "./static/js/learn3d/scene.js": "./static/js/learn3d/scene.js?v=__BUILD__",
   "./static/js/learn3d/rhythm.js": "./static/js/learn3d/rhythm.js?v=__BUILD__",
-  "./static/js/learn3d/practice.js": "./static/js/learn3d/practice.js?v=__BUILD__"
+  "./static/js/learn3d/practice.js": "./static/js/learn3d/practice.js?v=__BUILD__",
+  "./static/js/learn3d/drive_sim.js": "./static/js/learn3d/drive_sim.js?v=__BUILD__",
+  "./static/js/learn3d/drive.js": "./static/js/learn3d/drive.js?v=__BUILD__"
 } }
 </script>
 <style>
@@ -478,6 +480,30 @@
               </div>
               <div id="l3dPracticeResults" hidden></div>
             </div>
+            <div class="l3d-countdown" id="l3dCountdown" aria-live="assertive" hidden></div>
+            <div class="l3d-pedals" id="l3dPedals" hidden>
+              <button type="button" data-pedal="brake">BRAKE</button>
+              <button type="button" data-pedal="throttle">GAS</button>
+            </div>
+            <div class="l3d-practice" id="l3dDrive" role="dialog" aria-modal="true" aria-label="Drive" hidden>
+              <div id="l3dDriveSetup">
+                <h3>Drive the lap</h3>
+                <p>One flying lap against the pro's ghost. <kbd>↑</kbd> throttle, <kbd>↓</kbd> or <kbd>Space</kbd> brake; in Manual, <kbd>←</kbd> <kbd>→</kbd> steer. Too fast into a corner and you run wide.</p>
+                <div class="l3d-views" role="group" aria-label="Steering">
+                  <button type="button" data-dmode="assist" aria-pressed="true">Assist · auto steering</button>
+                  <button type="button" data-dmode="manual" aria-pressed="false">Manual · you steer</button>
+                </div>
+                <div class="l3d-views" role="group" aria-label="Guides">
+                  <button type="button" data-dopt="line" aria-pressed="true">Racing line</button>
+                  <button type="button" data-dopt="ghost" aria-pressed="true">Ghost</button>
+                </div>
+                <div class="l3d-practice-actions">
+                  <button type="button" class="l3d-primary" id="l3dDriveStart">Start</button>
+                  <button type="button" id="l3dDriveCancel">Cancel</button>
+                </div>
+              </div>
+              <div id="l3dDriveResults" hidden></div>
+            </div>
           </div>
           <div class="l3d-corners" id="l3dCorners"></div>
           <div class="l3d-telemetry" id="l3dTelemetry"></div>
@@ -493,6 +519,7 @@
           <input type="range" id="l3dScrub" min="0" max="1000" value="0" step="1" aria-label="Lap position" />
           <span class="l3d-time" id="l3dTime">0:00.0 / 0:00.0</span>
           <button type="button" class="l3d-practice-btn" id="l3dPracticeBtn" hidden><span aria-hidden="true">🎯</span> Practice</button>
+          <button type="button" class="l3d-practice-btn" id="l3dDriveBtn" hidden><span aria-hidden="true">🏁</span> Drive</button>
         </div>
         <div class="l3d-keys" id="l3dKeys">Space play/pause · ← → ±2 s · 1/2/3 camera</div>
       </div>
