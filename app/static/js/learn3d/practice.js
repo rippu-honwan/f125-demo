@@ -244,6 +244,8 @@ export function keydown(e) {
     close();
     return true;
   }
+  // Typing elsewhere on the page. Not the scrub slider: it can keep focus, and practice owns Space/↓.
+  if (e.target.matches?.("input:not([type=range]), select, textarea")) return false;
   if (phase === "run" && BRAKE_KEYS.has(e.code)) {
     e.preventDefault();
     if (!e.repeat) brakeDown(e.code, e.timeStamp);
