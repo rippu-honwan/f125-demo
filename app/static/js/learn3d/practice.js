@@ -196,7 +196,8 @@ export function finish() {
 
 function renderResults() {
   const s = judge.score(), pct = Math.round(s.accuracy * 100), m = host.meta;
-  const key = `l3d_best_${m.year}_${m.driver}_${m.session}_${m.track}_${settings.diff}`;
+  // A best per speed; 1× keeps the key from before 0.5× had its own, so old bests stay.
+  const key = `l3d_best_${m.year}_${m.driver}_${m.session}_${m.track}_${settings.diff}${settings.rate === 1 ? "" : "_half"}`;
   const prev = parseFloat(host.store.get(key, ""));
   const isBest = !(prev >= pct);                // no previous best (NaN) counts as a new best
   if (isBest) host.store.set(key, String(pct));
@@ -206,7 +207,7 @@ function renderResults() {
   $("l3dPracticeResults").innerHTML =
     `<h3>Lap complete · ${settings.diff === "hard" ? "Hard" : "Easy"} · ${settings.rate}×</h3>` +
     `<p class="l3d-big">${pct} % · ${s.points}/${s.max} pts · max combo ${s.maxCombo}</p>` +
-    `<p>${isBest ? "New best!" : `Best: ${prev} %`} · + = late, − = early</p>` +
+    `<p>${isBest ? "New best!" : `Best at ${settings.rate}×: ${prev} %`} · + = late, − = early</p>` +
     `<table class="l3d-results"><thead><tr><th>Turn</th><th>Brake on</th><th>Brake off</th></tr></thead><tbody>` +
     judge.notes.map((n) =>
       `<tr><td>${esc(n.corner.short)}</td><td class="${n.press ? n.press.grade : ""}">${cell(n.press)}</td>` +
