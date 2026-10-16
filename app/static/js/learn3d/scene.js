@@ -70,8 +70,12 @@ function buildScene(renderer, container, points, corners, cars) {
     return g;
   };
   const road = ribbon(TRACK_HALF_WIDTH, 0.05);
-  road.computeVertexNormals();
-  scene.add(new THREE.Mesh(road, new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.9, side: THREE.DoubleSide })));
+  // Where positions step back against d the ribbon folds over itself: those quads run backwards, so
+  // they face down. Front faces only (the road faces up) drops them; forward quads already cover the
+  // spot. Normals point straight up, as computed ones would average up with down into dark seams.
+  // ponytail: slopes shade like flat road.
+  road.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(n * 6).map((_, k) => (k % 3 === 1 ? 1 : 0)), 3));
+  scene.add(new THREE.Mesh(road, new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.9 })));
 
   // Racing line for Drive: the pro's line, red where braking, green at full throttle, yellow between.
   const lineGeo = ribbon(0.35, 0.12);
