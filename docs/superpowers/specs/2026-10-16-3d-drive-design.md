@@ -24,7 +24,7 @@ In 3D Learn, the player drives the loaded lap with the keyboard (or touch button
 | Feedback | Lap time, a live gap to the pro, and a per-corner results table. |
 | Touch | Phones get on-screen GAS and BRAKE buttons and Assist only. |
 | Start | A 3-2-1-GO countdown, then a flying start from the pro's speed at d = 0. |
-| Entry point | A **Drive** button in 3D Learn next to **Practice**. Compare has neither. Drive and Practice cannot be open together. |
+| Entry point | A **Drive** button in 3D Learn next to **Practice**. Compare has neither, and Drive is offered only when the 3D scene loads. Drive and Practice cannot be open together: while one is open, the other's button is disabled. |
 
 ## 3. Model and simulation: `learn3d/drive_sim.js` (pure, node-tested)
 
@@ -47,14 +47,14 @@ Units inside the simulation are SI: m, s and m/s. `points.speed` is km/h and is 
   - `accelMax` takes samples at full throttle (≥ 0.95) with `dv/dt > 0`.
   - `brakeMax` takes samples with brake ≥ 0.5 and `dv/dt < 0`.
   - Neither gets a running maximum.
-  - `accelMax` is 0 above the pro's top speed.
+  - At or above the pro's top speed, `dv/dt` is clamped to ≤ 0, so the car never beats the pro's top speed.
 - **Coasting drag**, with no throttle and no brake: `COAST_K · v²` with `COAST_K = 0.0008` per metre.
 - **`gearAt(v)`**: the pro's most common gear in that speed bin. It is shown in the HUD only.
 - **`lapLength`**: `points.d` at the last point.
 
 ### 3.2 Car state and `step(model, car, input, dt)`
 
-Car state is `{ s, n, psi, v, t, offTrack, invalid }`:
+Car state is `{ s, n, psi, v, t, offTrack, invalid, finished, trace }`:
 
 - `s`: distance along the pro's line;
 - `n`: sideways offset from the line, positive to the left;
@@ -88,10 +88,11 @@ dpsi/dt = v·kSteer − kappa·ds/dt
 
 **Track limits.**
 - When `|n| > HALF_WIDTH = 7` m the car is on grass:
-  - an extra 8 m/s² of drag;
+  - an extra 8 m/s² of drag above 60 km/h;
   - grip halved;
   - `invalid = true` for the rest of the lap.
-- At `|n| ≥ WALL = 20` m, `n` is clamped and `psi` is set to 0. While the car touches the wall it loses an extra 15 m/s².
+- At `|n| ≥ WALL = 20` m, `n` is clamped and `psi` is set to 0. While the car touches the wall it loses an extra 15 m/s² above 60 km/h.
+- Grass and wall drag stop at 60 km/h, so they slow the car but never stall it: at low speed the pro's acceleration can be smaller than the drag.
 - When `|psi| > π/2` the car has spun. It is put back with `n = 0`, `psi = 0` and `v = 60 km/h`.
 
 **Lap end.** When `s` passes `lapLength`, the exact finish time is interpolated within the step and `finished = true`.
@@ -100,16 +101,19 @@ dpsi/dt = v·kSteer − kappa·ds/dt
 
 ### 3.3 Helpers
 
-- `pose(points, car)`: the world `{x, y, z, heading}`. It takes the point on the line at `s`, moves it `n` along the left normal, and adds `psi` to the line heading. The scene draws this pose as a car.
+- `pose(points, model, car)`: the world `{x, y, z, heading}`. It takes the point on the line at `s`, moves it `n` along the left normal, and adds `psi` to the line heading. The scene draws this pose as a car.
 - `gapAt(trace, points, s)`: your time at `s` minus `timeAtDistance(points, s)`.
 - `cornerStats(trace, points, corners)` gives one row per corner:
-  - **Brake point**: the first `s` with the brake on in `[brake_start_m − 150, apex_m]`. It is compared with `brake_start_m` and is `null` if the player didn't brake. Lift and flat corners show "—" when the pro didn't brake either.
-  - **Min speed**: the lowest `v` in `[entry_m, exit_m]`, compared with the pro's `min_speed_kmh`.
-  - **Time lost**: `gapAt(exit_m) − gapAt(entry_m − 150)`.
+  - **Brake point**: a corner's stretch is `[(brake_start_m ?? entry_m) − 150, apex_m]`.
+    - Each brake press (brake going from off to on) belongs to exactly one corner. Among the corners whose stretch holds it, a brake corner wins: the one whose `brake_start_m` is nearest the press. With no brake corner, the first lift or flat corner gets it.
+    - When a corner owns several presses, the one nearest the pro's brake point is shown, so a stray tap doesn't count against you. For a lift or flat corner it is the first press. This flatters pulsed braking, which is accepted.
+    - A late press can still go to the wrong corner: if it falls before corner A's apex but is closer to the next corner's brake point, the next corner gets it. No cached lap showed this in a bot sweep.
+  - **Min speed**: like the backend's `min_speed_kmh`, flat corners take `v` at `apex_m` and the others the lowest `v` in `[entry_m, exit_m]`.
+  - **Time lost**: `gapAt(exit_m) − gapAt(max(0, (brake_start_m ?? entry_m) − 150))`. Close corners' stretches overlap, so the rows don't add up to the lap delta.
 
 ## 4. UI: `learn3d/drive.js`
 
-`drive.js` follows the host-API pattern of `practice.js` and exports `attach(host)`, `detach()`, `isOpen()`, `frame(ts)`, `keydown(e)` and `keyup(e)`. The host provides `{points, corners, meta, store, setPlaying, setCues, drawCars(youPose, ghostState), setCamTarget}`; the plan settles the exact names.
+`drive.js` follows the host-API pattern of `practice.js` and exports `attach(host)`, `detach()`, `isOpen()`, `frame(dt)`, `view()`, `keydown(e)` and `keyup(e)`. The host provides `{points, corners, meta, store, setPlaying, setLine, blocked}`. `index.js` owns the scene and HUD and draws from `view()` (the player's pose, the lap clock, gap, speed, gear and pedals) while Drive is past its setup card.
 
 ### 4.1 Setup card
 
@@ -120,11 +124,11 @@ A `role="dialog"` card, the same as the Practice setup card, with:
 - **Ghost** on/off.
 - **Start** and **Cancel**.
 
-The choices are stored in `store`. Opening the card pauses Learn and locks its controls with the same `l3d-practicing` class.
+The choices are stored in `store`. Opening the card pauses Learn and locks its controls with the same `l3d-practicing` class, plus `l3d-driving` so the mobile HUD stays visible. It also disables the Practice button.
 
 ### 4.2 Countdown and driving
 
-- Start or Retry shows 3, 2, 1 and GO, one second each, in the centre of the stage.
+- Start or Retry shows 3, 2 and 1, one second each, in the centre of the stage, then GO for the first 0.6 s of the lap.
   - The car and the ghost wait at d = 0.
   - Inputs are tracked during the countdown but only act after GO.
   - On GO the car starts at the pro's `speed[0]`.
@@ -132,13 +136,15 @@ The choices are stored in `store`. Opening the card pauses Learn and locks its c
   - the ghost uses `stateAt(points, car.t)`;
   - the camera follows the player's car;
   - Learn playback, the scrub bar and corner seeks stay locked.
-- **HUD**: lap time, gap (`+1.84 s`, red when behind and green when ahead), speed and gear. "Off track · lap invalid" appears from the first off-track moment.
+- **HUD**: lap time, gap (`+1.84`, red when behind and green when ahead), speed and gear. "Off track · lap invalid" appears from the first off-track moment.
 - **Keys**:
   - ↑ or W: throttle;
   - ↓, S or Space: brake;
   - ← → or A D: steer, Manual only;
   - R: restart with a new countdown;
-  - Esc: leave.
+  - Esc: leave;
+  - 1/2/3 still switch the camera.
+  - While focus is in a text field elsewhere on the page, Drive ignores the keys (Esc still leaves).
 - Brake and throttle inputs use the same multi-input set as practice, so two keys held and one released keeps the pedal down. Window blur releases all inputs.
 - **Touch**: large GAS (right) and BRAKE (left) buttons, with pointer capture and the primary button only, as in practice.
 
@@ -152,12 +158,12 @@ The choices are stored in `store`. Opening the card pauses Learn and locks its c
 
 ### 4.4 Results card
 
-- **Header**: `Lap 1:33.912 · pro 1:28.197 · +5.715 s`.
+- **Header**: `Lap 1:33.912 · VER 1:28.197 · +5.72 s`.
 - **Best line**:
   - "New best!" or "Best: 1:33.100";
-  - "Invalid lap — not counted" when off track.
+  - "Invalid lap (off track) — not counted · Best: 1:33.100" when off track (the best is appended when there is one).
 - The best lap is stored under `l3d_drive_best_${year}_${driver}_${session}_${track}_${mode}`.
-- **Table**: Turn, Brake point (`12 m early` / `4 m late` / `—`), Min speed (`98 vs 104 km/h`) and Time lost (`+0.21 s`), one row per corner from `cornerStats`.
+- **Table**: Turn, Brake point (`on point` / `12 m early` / `4 m late` / `no brake` / `braked (pro didn't)` / `—`), Min speed (`98 vs 104 km/h`, or `—`) and Time lost (`+0.21 s`), one row per corner from `cornerStats`.
 - **Buttons**: Retry and Back to Learn. Focus moves to Retry, and Esc goes back to Learn and focuses the Drive button.
 
 ## 5. Testing
@@ -181,6 +187,7 @@ The choices are stored in `store`. Opening the card pauses Learn and locks its c
 **Results.**
 
 - `cornerStats` and `gapAt` on a hand-made trace.
+- Each brake press goes to one corner: a stray tap, overlapping stretches, and a flat corner whose stretch holds the next corner's brake point.
 
 ### Browser, by hand with Playwright
 

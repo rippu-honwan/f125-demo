@@ -203,11 +203,12 @@ function close(restoreFocus = true) {
 /** Keys while Drive is open. Returns true when index.js should ignore the key. */
 export function keydown(e) {
   if (phase === "off") return false;
-  if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return false;   // typing elsewhere on the page
   if (e.key === "Escape") {
     close();
     return true;
   }
+  // Typing elsewhere on the page. Not the scrub slider: it can keep focus, and Drive owns the arrows.
+  if (e.target.matches?.("input:not([type=range]), select, textarea")) return false;
   if (/^[123]$/.test(e.key)) return false;      // cameras still switch
   if (phase !== "countdown" && phase !== "run") return true;   // a card is up: Learn shortcuts stay off
   if (e.key === "r" || e.key === "R") {
