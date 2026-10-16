@@ -888,15 +888,17 @@
   .result-block { width: 100%; }
   .result-block + .result-block { margin-top: 36px; }
 
+  /* Narrow: wrap the 7 mode cards with flex so the last row stretches instead of leaving one card alone. */
   @media (max-width: 980px) {
-    .mode-grid { grid-template-columns: repeat(3, 1fr); }
+    .mode-grid { display: flex; flex-wrap: wrap; }
+    .mode-btn { flex: 1 1 calc(25% - 10px); min-width: 0; }
     .stat-cards { grid-template-columns: repeat(2, 1fr); }
   }
   @media (max-width: 620px) {
-    .mode-grid { grid-template-columns: repeat(2, 1fr); }
+    .mode-btn { flex-basis: calc(50% - 10px); }
   }
   @media (max-width: 460px) {
-    .mode-grid { grid-template-columns: 1fr; }
+    .mode-btn { flex-basis: 100%; }
     .stat-cards { grid-template-columns: 1fr; }
   }
 
