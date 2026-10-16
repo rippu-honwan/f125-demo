@@ -175,8 +175,29 @@ test("gapAt and cornerStats compare a trace with the pro", () => {
   ];
   const [t1, t2] = cornerStats(trace, pro, corners);
   assert.deepEqual([t1.brakeAt, t1.proBrakeAt, Math.round(t1.minKmh)], [100, 150, 20]);
-  assert.ok(Math.abs(t1.lost - 0.5) < 1e-9);                    // gap 0 at 50 m -> 0.5 at 300 m
-  assert.deepEqual([t2.brakeAt, t2.proBrakeAt, Math.round(t2.minKmh)], [null, null, 50]);
+  assert.ok(Math.abs(t1.lost - 0.5) < 1e-9);                    // gap 0 at 0 m -> 0.5 at 300 m
+  assert.deepEqual([t2.brakeAt, t2.proBrakeAt, Math.round(t2.minKmh)], [null, null, 46]);
+});
+
+test("cornerStats keeps each corner's brake point and time to its own stretch of track", () => {
+  const pro = { d: [0, 1000], t: [0, 10] };
+  const d = [], t = [], v = [], brake = [];
+  for (let s = 0; s <= 1000; s += 10) {
+    d.push(s);
+    t.push(s / 100 + (s > 480 ? (s - 480) / 1000 : 0));          // you lose time only after 480 m
+    v.push(50 / KMH);
+    // a stray tap at 260, then A's brake at 400 and B's at 500
+    brake.push((s >= 260 && s < 270) || (s >= 400 && s < 440) || (s >= 500 && s < 540) ? 1 : 0);
+  }
+  const corners = [
+    { short: "A", action: "brake", brake_start_m: 400, entry_m: 420, apex_m: 450, exit_m: 480, min_speed_kmh: 50 },
+    { short: "B", action: "brake", brake_start_m: 505, entry_m: 530, apex_m: 560, exit_m: 600, min_speed_kmh: 50 },
+  ];
+  const [a, b] = cornerStats({ d, t, v, brake }, pro, corners);
+  assert.equal(a.brakeAt, 400);                                   // nearest the pro's, not the stray tap
+  assert.equal(b.brakeAt, 500);                                   // not A's 400, though it's within 150 m
+  assert.ok(Math.abs(a.lost) < 1e-9);
+  assert.ok(Math.abs(b.lost - 0.12) < 1e-9);                      // from A's exit (480) to B's exit (600)
 });
 
 test("bot test: Assist following the pro's speed laps Suzuka on track, within 3 % of the pro", () => {

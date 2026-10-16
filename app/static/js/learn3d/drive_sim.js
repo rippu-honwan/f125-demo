@@ -171,26 +171,43 @@ export function gapAt(trace, points, s) {
   return timeAtDistance(trace, s) - timeAtDistance(points, s);
 }
 
+/** Trace channel `key` at lap distance s, linear between samples. */
+function traceAt(trace, key, s) {
+  const i = bisect(trace.d, s), d0 = trace.d[i], d1 = trace.d[i + 1];
+  const f = d1 > d0 ? Math.min(1, Math.max(0, (s - d0) / (d1 - d0))) : 0;
+  return trace[key][i] + (trace[key][i + 1] - trace[key][i]) * f;
+}
+
 /**
- * One row per corner: where you first braked vs the pro, your min speed vs the pro's, and the time
- * lost from 150 m before the entry to the exit.
+ * One row per corner: your brake point vs the pro's, your min speed vs the pro's, and the time lost.
+ * A row's stretch starts 150 m before the brake point (or entry) but never before the previous
+ * corner's exit, so braking for a neighbour isn't counted here and rows don't overlap.
  */
 export function cornerStats(trace, points, corners) {
+  const byEntry = [...corners].sort((a, b) => a.entry_m - b.entry_m);
   return corners.map((c) => {
-    const from = (c.brake_start_m ?? c.entry_m) - 150;
-    let brakeAt = null, minV = Infinity;
+    const prev = byEntry[byEntry.indexOf(c) - 1];
+    const start = Math.max(prev ? prev.exit_m : 0, (c.brake_start_m ?? c.entry_m) - 150);
+    const onsets = [];
+    let minV = Infinity;
     for (let j = 0; j < trace.d.length; j++) {
       const s = trace.d[j];
-      if (brakeAt == null && trace.brake[j] && s >= from && s <= c.apex_m) brakeAt = s;
+      if (trace.brake[j] && !trace.brake[j - 1] && s >= start && s <= c.apex_m) onsets.push(s);
       if (s >= c.entry_m && s <= c.exit_m) minV = Math.min(minV, trace.v[j]);
     }
+    const pro = c.brake_start_m ?? null;
+    // Several presses in the stretch: the one nearest the pro's brake point is this corner's.
+    const brakeAt = !onsets.length ? null : pro == null ? onsets[0]
+      : onsets.reduce((a, b) => (Math.abs(b - pro) < Math.abs(a - pro) ? b : a));
+    // Like the backend's min_speed_kmh: flat corners at the apex, the others at the slowest point.
+    const v = c.action === "flat" ? traceAt(trace, "v", c.apex_m) : minV;
     return {
       corner: c,
       brakeAt,
-      proBrakeAt: c.brake_start_m ?? null,
-      minKmh: Number.isFinite(minV) ? minV * KMH : null,
+      proBrakeAt: pro,
+      minKmh: Number.isFinite(v) ? v * KMH : null,
       proMinKmh: c.min_speed_kmh,
-      lost: gapAt(trace, points, c.exit_m) - gapAt(trace, points, Math.max(0, c.entry_m - 150)),
+      lost: gapAt(trace, points, c.exit_m) - gapAt(trace, points, start),
     };
   });
 }
