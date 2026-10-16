@@ -8,6 +8,7 @@ import { stateAt, timeAtDistance, nextCue, cornerSeekRange, fmtTime, youPoints, 
 import {
   esc, renderHud, renderCompareHud, createMinimap, createTelemetry, createCornerList, PRO_COLOR, YOU_COLOR,
 } from "./panels.js";
+import * as practice from "./practice.js";
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -90,8 +91,9 @@ async function start(data, seq) {
   // Distance-based seeks (telemetry click, corner replay) use the followed car's clock.
   const timeAt = (d) => timeAtDistance(S.follow === "you" && Y ? Y : P, d);
   S.minimap = createMinimap($("l3dMinimap"), P, Y ? [PRO_COLOR, YOU_COLOR] : undefined);
-  S.tele = createTelemetry($("l3dTelemetry"), P, (d) => seek(timeAt(d)), Y, data.meta.driver);
+  S.tele = createTelemetry($("l3dTelemetry"), P, (d) => practice.isOpen() || seek(timeAt(d)), Y, data.meta.driver);
   S.list = createCornerList($("l3dCorners"), data.corners, (c) => {
+    if (practice.isOpen()) return;
     const [from, to] = cornerSeekRange(c);
     seek(timeAt(from));
     S.stopAt = timeAt(to);
@@ -99,6 +101,15 @@ async function start(data, seq) {
     setPlaying(true);
   }, !!Y);
   $("l3dScrub").max = String(Math.round(end * 10));   // 0.1 s per step
+  if (Y) practice.detach();
+  else practice.attach({
+    points: P, corners: data.corners, meta: data.meta, store,
+    // Judge an input at its own event time, not the last frame's (up to a frame early otherwise).
+    getT: (ts) => (S.playing && ts && S.last
+      ? Math.min(S.end, S.t + Math.min(0.1, Math.max(0, (ts - S.last) / 1000)) * S.rate) : S.t),
+    seek, setPlaying, setRate,
+    setCues: (on) => { if (S.scene) S.scene.setCues(on); },
+  });
   setView(store.get("l3d_view", "telemetry"));
   setCam(S.cam);
   if (Y) setFollow(S.follow);
@@ -115,9 +126,11 @@ function frame(now) {
   S.last = now;
   if (S.playing) {
     S.t += dt * S.rate;
-    if (S.stopAt != null && S.t >= S.stopAt) { S.t = S.stopAt; S.stopAt = null; setPlaying(false); }
+    if (practice.isRunning() && S.t >= S.end) { S.t = S.end; setPlaying(false); practice.finish(); }
+    else if (S.stopAt != null && S.t >= S.stopAt) { S.t = S.stopAt; S.stopAt = null; setPlaying(false); }
     else if (S.t >= S.end) S.t -= S.end;                                // loop once both cars finish
   }
+  practice.frame(S.t);
   draw();
 }
 
@@ -134,7 +147,8 @@ function draw() {
     S.minimap.set(s, y);
   } else {
     if (S.scene) S.scene.update([s], S.cam);
-    renderHud($("l3dHudTop"), $("l3dHudBottom"), S.data.meta, s, nextCue(S.data.corners, s.d, P.d[P.d.length - 1]));
+    const cue = practice.hintsOn() ? nextCue(S.data.corners, s.d, P.d[P.d.length - 1]) : null;
+    renderHud($("l3dHudTop"), $("l3dHudBottom"), S.data.meta, s, cue);
     S.minimap.set(s);
   }
   S.tele.set(at.d);
@@ -193,6 +207,7 @@ function setFollow(who) {
 function unload() {
   loadSeq++;
   if (!view) return;
+  practice.detach();               // before the scene and view go away: it restores cues and controls
   cancelAnimationFrame(view.raf);
   if (view.scene) view.scene.dispose();
   $("l3dStage").classList.remove("l3d-nogl");
@@ -206,13 +221,14 @@ function unload() {
 // ---- controls (wired once; modules run after the DOM is parsed) ----
 document.querySelectorAll(".l3d-view").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
 document.querySelectorAll("[data-cam]").forEach((b) => b.addEventListener("click", () => view && setCam(b.dataset.cam)));
-document.querySelectorAll("[data-rate]").forEach((b) => b.addEventListener("click", () => view && setRate(+b.dataset.rate)));
+document.querySelectorAll("[data-rate]").forEach((b) => b.addEventListener("click", () => view && !practice.isOpen() && setRate(+b.dataset.rate)));
 document.querySelectorAll("[data-follow]").forEach((b) => b.addEventListener("click", () => view && view.data.you && setFollow(b.dataset.follow)));
-$("l3dPlay").addEventListener("click", () => view && setPlaying(!view.playing));
-$("l3dScrub").addEventListener("input", (e) => view && seek(+e.target.value / 10));
+$("l3dPlay").addEventListener("click", () => view && !practice.isOpen() && setPlaying(!view.playing));
+$("l3dScrub").addEventListener("input", (e) => view && !practice.isOpen() && seek(+e.target.value / 10));
 document.addEventListener("keydown", (e) => {
   if (!view || $("blkLearn3d").offsetParent === null) return;          // block not visible
   if (e.ctrlKey || e.metaKey || e.altKey) return;                      // leave browser shortcuts alone
+  if (practice.keydown(e)) return;                                     // practice owns Space/↓/Esc
   const tag = e.target.tagName;
   if (/^(INPUT|SELECT|TEXTAREA)$/.test(tag)) return;                   // typing / native range keys
   if (e.code === "Space") {
@@ -224,5 +240,6 @@ document.addEventListener("keydown", (e) => {
   else if (CAM_KEYS[e.key]) setCam(CAM_KEYS[e.key]);
   else if ((e.key === "f" || e.key === "F") && view.data.you) setFollow(view.follow === "you" ? "pro" : "you");
 });
+document.addEventListener("keyup", (e) => { if (view) practice.keyup(e); });
 
 window.Learn3D = { load, show, unload };
