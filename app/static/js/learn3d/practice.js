@@ -135,7 +135,8 @@ function popup(j) {
     if (Math.abs(j.dt) < 0.005) text += " · on time";
     else {
       const speed = stateAt(host.points, j.kind === "press" ? j.note.start : j.note.end).speed;
-      text += ` · ${j.dt > 0 ? "late" : "early"} ${Math.abs(j.dt).toFixed(2)} s ≈ ${Math.round(Math.abs(dtMetres(j.dt, speed)))} m`;
+      const m = Math.round(Math.abs(dtMetres(j.dt, speed)));
+      text += ` · ${j.dt > 0 ? "late" : "early"} ${Math.abs(j.dt).toFixed(2)} s ≈ ${m < 1 ? "< 1" : m} m`;
     }
   }
   const pop = $("l3dPop");
