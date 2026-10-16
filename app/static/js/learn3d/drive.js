@@ -17,6 +17,7 @@ const PEDAL_KEYS = {
 const coarse = () => window.matchMedia("(pointer: coarse)").matches;   // phones: Assist + touch pedals
 
 const $ = (id) => document.getElementById(id);
+const pedalBtns = [...document.querySelectorAll("[data-pedal]")];
 // host: {points, corners, meta, store, setPlaying, setLine, blocked}, set by attach().
 let host = null, model = null;
 let phase = "off";                              // off | setup | countdown | run | results
@@ -25,7 +26,10 @@ let settings = { mode: "assist", line: true, ghost: true };
 // Inputs held now, per control: key codes and "ptr<id>" for touch. A control is on while any is held.
 const held = { throttle: new Set(), brake: new Set(), left: new Set(), right: new Set() };
 
-const fmtLap = (s) => `${Math.floor(s / 60)}:${(s % 60).toFixed(3).padStart(6, "0")}`;
+const fmtLap = (s) => {
+  const ms = Math.round(s * 1000);                              // round first: never "1:60.000"
+  return `${Math.floor(ms / 60000)}:${((ms % 60000) / 1000).toFixed(3).padStart(6, "0")}`;
+};
 
 function markPressed(b, on) {
   b.classList.toggle("active", on);
@@ -77,6 +81,7 @@ function open() {
   $("l3dKeys").textContent = KEYS_DRIVE;
   $("blkLearn3d").classList.add("l3d-practicing", "l3d-driving");
   $("l3dDriveBtn").hidden = true;
+  $("l3dPracticeBtn").disabled = true;   // one mode at a time, also for keyboard users
   showPanel("setup");
   phase = "setup";
   $("l3dDriveStart").focus();
@@ -125,13 +130,13 @@ export function frame(dt) {
     if (car.t > GO_SHOWN_S) $("l3dCountdown").hidden = true;
     if (car.finished) finish();
   }
-  for (const b of document.querySelectorAll("[data-pedal]")) b.classList.toggle("active", held[b.dataset.pedal].size > 0);
+  for (const b of pedalBtns) b.classList.toggle("active", held[b.dataset.pedal].size > 0);
 }
 
 /** What index.js draws while driving, or null when Learn draws as usual (Drive off or on its setup card). */
 export function view() {
   if (phase === "off" || phase === "setup") return null;
-  const i = input();
+  const i = phase === "results" ? { throttle: 0, brake: 0 } : input();   // a finger may still be down after the line
   return {
     you: pose(host.points, model, car), ghost: settings.ghost, t: car.t, d: car.s,
     gap: car.trace.d.length > 1 ? gapAt(car.trace, host.points, car.s) : 0,
@@ -162,7 +167,7 @@ function renderResults() {
   const prev = parseFloat(host.store.get(key, ""));
   const isBest = !car.invalid && !(prev <= car.t);          // no previous best (NaN) counts as a new best
   if (isBest) host.store.set(key, car.t.toFixed(3));
-  const best = car.invalid ? "Invalid lap (off track) — not counted"
+  const best = car.invalid ? `Invalid lap (off track) — not counted${prev > 0 ? ` · Best: ${fmtLap(prev)}` : ""}`
     : isBest ? "New best!" : `Best: ${fmtLap(prev)}`;
   const signed = (x) => `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(2)} s`;
   $("l3dDriveResults").innerHTML =
@@ -171,7 +176,7 @@ function renderResults() {
     `<table class="l3d-results"><thead><tr><th>Turn</th><th>Brake point</th><th>Min speed</th><th>Time lost</th></tr></thead><tbody>` +
     cornerStats(car.trace, pts, host.corners).map((r) =>
       `<tr><td>${esc(r.corner.short)}</td><td>${brakeText(r)}</td>` +
-      `<td>${r.minKmh == null ? "—" : `${Math.round(r.minKmh)} vs ${Math.round(r.proMinKmh)}`}</td>` +
+      `<td>${r.minKmh == null ? "—" : `${Math.round(r.minKmh)} vs ${Math.round(r.proMinKmh)} km/h`}</td>` +
       `<td class="${r.lost > 0.005 ? "l3d-gap-slow" : r.lost < -0.005 ? "l3d-gap-fast" : ""}">${signed(r.lost)}</td></tr>`).join("") +
     `</tbody></table>` +
     `<div class="l3d-practice-actions"><button type="button" class="l3d-primary" data-drive="retry">Retry</button>` +
@@ -186,6 +191,7 @@ function close(restoreFocus = true) {
   $("l3dCountdown").hidden = true;
   $("l3dPedals").hidden = true;
   $("blkLearn3d").classList.remove("l3d-practicing", "l3d-driving");
+  $("l3dPracticeBtn").disabled = false;
   if (keysBefore) $("l3dKeys").textContent = keysBefore;
   if (host) {
     host.setLine(false);
@@ -197,6 +203,7 @@ function close(restoreFocus = true) {
 /** Keys while Drive is open. Returns true when index.js should ignore the key. */
 export function keydown(e) {
   if (phase === "off") return false;
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return false;   // typing elsewhere on the page
   if (e.key === "Escape") {
     close();
     return true;
@@ -240,7 +247,7 @@ $("l3dDriveResults").addEventListener("click", (e) => {
   if (act === "retry") begin();
   else if (act === "back") close();
 });
-for (const b of document.querySelectorAll("[data-pedal]")) {
+for (const b of pedalBtns) {
   const set = held[b.dataset.pedal];
   b.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;                 // primary button / touch / pen only

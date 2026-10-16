@@ -56,6 +56,7 @@ function open() {
   $("l3dKeys").textContent = KEYS_PRACTICE;
   $("blkLearn3d").classList.add("l3d-practicing");
   $("l3dPracticeBtn").hidden = true;
+  $("l3dDriveBtn").disabled = true;    // one mode at a time, also for keyboard users
   showPanel("setup");
   phase = "setup";
   $("l3dPracticeStart").focus();
@@ -225,6 +226,7 @@ function close(restoreFocus = true) {
   $("l3dBrake").hidden = true;
   $("l3dBrake").classList.remove("active");
   $("blkLearn3d").classList.remove("l3d-practicing", "l3d-hard");
+  $("l3dDriveBtn").disabled = false;
   if (keysBefore) $("l3dKeys").textContent = keysBefore;
   if (host) {
     host.setCues(true);

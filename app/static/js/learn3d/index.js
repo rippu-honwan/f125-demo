@@ -119,11 +119,12 @@ async function start(data, seq) {
       setCues: (on) => { if (S.scene) S.scene.setCues(on); },
       blocked: drive.isOpen,
     });
-    drive.attach({
+    if (S.scene) drive.attach({
       points: P, corners: data.corners, meta: data.meta, store, setPlaying,
       setLine: (on) => { if (S.scene) S.scene.setLine(on); },
       blocked: practice.isOpen,
     });
+    else drive.detach();                                               // no WebGL: nothing to drive in
   }
   setView(store.get("l3d_view", "telemetry"));
   setCam(S.cam);
