@@ -59,6 +59,7 @@ Judging works in lap time (the playback clock), not wall-clock time.
 - **Note lane:** a horizontal strip over the bottom of the 3D stage. The hit line sits at 15 % from the left, and the lane shows the next 3 s of lap time.
   - Each note is a bar from `start` to `end`. It turns green or yellow when pressed and grey when missed.
   - The lane is hidden in Hard.
+  - Hard also hides the HUD's "BRAKE in N m" cue and the telemetry/corner panels, whose brake zones would give the answer away.
 - **Input:**
   - Hold **Space** or **↓** to brake.
   - **Esc** quits practice.
