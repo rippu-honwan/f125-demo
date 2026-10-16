@@ -10,12 +10,13 @@ const HIT_X = 15;                              // hit line, % of the lane width 
 const GRADE_LABEL = { perfect: "PERFECT", good: "GOOD", miss: "MISS" };
 const BRAKE_KEYS = new Set(["Space", "ArrowDown"]);
 const KEYS_PRACTICE = "Hold Space or ↓ to brake · Esc quits practice";
+const COUNTDOWN_S = 3;                         // 3-2-1 before the lap starts (real seconds, not lap time)
 
 const $ = (id) => document.getElementById(id);
 // host: {points, corners, meta, store, getT, seek, setPlaying, setRate, setCues, blocked}, set by attach().
 let host = null;
-let phase = "off";                              // off | setup | run | results
-let judge = null, bars = [], keysBefore = "", lastScore = "";
+let phase = "off";                              // off | setup | countdown | run | results
+let judge = null, bars = [], keysBefore = "", lastScore = "", goAt = 0;
 const inputs = new Set();                      // brake inputs held now (key codes, "ptr<id>"); brake is on while any is
 let settings = { diff: "easy", rate: 1 };
 
@@ -41,8 +42,8 @@ export function detach() {
 export const isRunning = () => phase === "run";
 /** Practice is open (setup, run or results): the Learn controls stay locked. */
 export const isOpen = () => phase !== "off";
-/** False only while a Hard lap runs: index.js hides the HUD's "brake in N m" cue then. */
-export const hintsOn = () => phase !== "run" || settings.diff === "easy";
+/** False only while a Hard lap runs or counts down: index.js hides the HUD's "brake in N m" cue then. */
+export const hintsOn = () => (phase !== "run" && phase !== "countdown") || settings.diff === "easy";
 
 function open() {
   if (!host || phase !== "off" || host.blocked()) return;
@@ -96,14 +97,29 @@ function begin() {
   clearPop();
   showPanel(null);
   if (document.activeElement) document.activeElement.blur();   // Space must not click a focused button
-  phase = "run";
   host.seek(0);
   host.setRate(settings.rate);
-  host.setPlaying(true);
+  host.setPlaying(false);
+  goAt = performance.now() + COUNTDOWN_S * 1000;
+  $("l3dCountdown").textContent = String(COUNTDOWN_S);
+  $("l3dCountdown").hidden = false;
+  phase = "countdown";                          // frame() starts the lap when it runs out
 }
 
-/** Every animation frame while practising: time-out misses, the lane and the score. */
+/** Every animation frame while practising: the countdown, time-out misses, the lane and the score. */
 export function frame(t) {
+  if (phase === "countdown") {
+    const left = (goAt - performance.now()) / 1000;
+    if (left > 0) {
+      const text = String(Math.ceil(left));
+      if ($("l3dCountdown").textContent !== text) $("l3dCountdown").textContent = text;
+      drawLane(t);                              // the first notes are already on their way in
+      return;
+    }
+    $("l3dCountdown").hidden = true;
+    phase = "run";
+    host.setPlaying(true);
+  }
   if (phase !== "run") return;
   for (const j of judge.tick(t)) popup(j);
   drawLane(t);
@@ -222,6 +238,7 @@ function close(restoreFocus = true) {
   inputs.clear();
   clearPop();
   showPanel(null);
+  $("l3dCountdown").hidden = true;
   $("l3dLane").hidden = true;
   $("l3dScore").hidden = true;
   $("l3dBrake").hidden = true;
@@ -247,8 +264,8 @@ export function keydown(e) {
   }
   // Typing elsewhere on the page. Not the scrub slider: it can keep focus, and practice owns Space/↓.
   if (e.target.matches?.("input:not([type=range]), select, textarea")) return false;
-  if (phase === "run" && BRAKE_KEYS.has(e.code)) {
-    e.preventDefault();
+  if ((phase === "run" || phase === "countdown") && BRAKE_KEYS.has(e.code)) {
+    e.preventDefault();                         // no page scroll; brakeDown ignores the countdown
     if (!e.repeat) brakeDown(e.code, e.timeStamp);
   }
   return true;                                  // Learn shortcuts are off while practice is open
