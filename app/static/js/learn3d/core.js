@@ -19,7 +19,10 @@ export function bisect(arr, v) {
 
 const LERP_KEYS = ["d", "x", "y", "z", "speed", "throttle", "brake", "steer"];
 
-/** Car state at time t (s): interpolated channels, nearest gear, heading of the path in the XY plane. */
+/**
+ * Car state at time t (s): interpolated channels, nearest gear, heading of the path in the XY plane
+ * (from `points.heading` when set, see lineHeadings; else from the two neighbouring points).
+ */
 export function stateAt(points, t) {
   const i = bisect(points.t, t);
   const t0 = points.t[i], t1 = points.t[i + 1];
@@ -27,8 +30,29 @@ export function stateAt(points, t) {
   const s = { t, i };
   for (const k of LERP_KEYS) s[k] = points[k][i] + (points[k][i + 1] - points[k][i]) * f;
   s.gear = f < 0.5 ? points.gear[i] : points.gear[i + 1];
-  s.heading = Math.atan2(points.y[i + 1] - points.y[i], points.x[i + 1] - points.x[i]);
+  const h = points.heading;
+  s.heading = h ? h[i] + (h[i + 1] - h[i]) * f
+    : Math.atan2(points.y[i + 1] - points.y[i], points.x[i + 1] - points.x[i]);
   return s;
+}
+
+/**
+ * Heading (rad, XY plane, unwrapped) of the line at every point: the direction of the chord from
+ * `span` m back to `span` m ahead, wrapping round the lap (the last point sits on or near the first).
+ * Not neighbour to neighbour: FastF1 positions stall and even step back against d (Suzuka's first and
+ * last metres, Jeddah at 4.2 km), which turns a neighbour heading round by up to 180°.
+ */
+export function lineHeadings(points, span = 15) {
+  const { d, x, y } = points, np = d.length;
+  const w = Math.max(1, Math.round(span / ((d[np - 1] - d[0]) / (np - 1))));
+  const loop = np - 1;
+  const at = (j) => ((j % loop) + loop) % loop;
+  const h = new Array(np);
+  for (let i = 0; i < np; i++) {
+    h[i] = Math.atan2(y[at(i + w)] - y[at(i - w)], x[at(i + w)] - x[at(i - w)]);
+    if (i) h[i] += 2 * Math.PI * Math.round((h[i - 1] - h[i]) / (2 * Math.PI));
+  }
+  return h;
 }
 
 /** Lap time (s) at lap distance d (m). */

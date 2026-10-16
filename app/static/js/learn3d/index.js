@@ -4,7 +4,7 @@
 //   window.Learn3D.unload()                       -> stop and free WebGL
 // load() resolves once the viewer is up (or a "no data" message is shown) and
 // rejects only on network errors, which main.js reports in its error banner.
-import { stateAt, timeAtDistance, nextCue, cornerSeekRange, fmtTime, youPoints, gapAt } from "./core.js";
+import { stateAt, timeAtDistance, nextCue, cornerSeekRange, fmtTime, youPoints, gapAt, lineHeadings } from "./core.js";
 import {
   esc, renderHud, renderCompareHud, renderDriveHud, createMinimap, createTelemetry, createCornerList, PRO_COLOR, YOU_COLOR,
 } from "./panels.js";
@@ -66,6 +66,8 @@ const KEYS_COMPARE = KEYS_LEARN + " · F switch car";
 
 async function start(data, seq) {
   const P = data.points, Y = data.you || null;   // Y: your lap (youPoints) in 3D Compare
+  P.heading = lineHeadings(P);                   // stateAt and the scene read it: smooth through stalled points
+  if (Y) Y.heading = P.heading;                  // your lap runs on the pro's line
   $("l3dMsg").hidden = true;
   $("l3dMain").hidden = false;
   $("l3dControls").hidden = false;

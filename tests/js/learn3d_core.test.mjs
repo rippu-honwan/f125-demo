@@ -1,8 +1,9 @@
 // Run: node --test tests/js/learn3d_core.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
-  bisect, stateAt, timeAtDistance, cuePoint, nextCue, cornerSeekRange, fmtTime, youPoints, gapAt,
+  bisect, stateAt, timeAtDistance, cuePoint, nextCue, cornerSeekRange, fmtTime, youPoints, gapAt, lineHeadings,
 } from "../../app/static/js/learn3d/core.js";
 
 const P = {
@@ -52,6 +53,25 @@ test("stateAt interpolates every channel and follows the path direction", () => 
   assert.equal(s.brake, 0.25);
   assert.equal(s.heading, Math.atan2(8, 4));
   assert.equal(stateAt(Q, 1.5).heading, Math.atan2(8, 0));   // second segment points straight +y
+});
+
+// Suzuka's first points stand still and its last ones step back ~0.2 m: neighbour headings flip there.
+const SUZUKA = JSON.parse(readFileSync(new URL("./fixtures/suzuka_pro.json", import.meta.url))).points;
+
+test("lineHeadings turn smoothly round the whole lap, through stalled and backward points", () => {
+  const h = lineHeadings(SUZUKA);
+  assert.equal(h.length, SUZUKA.d.length);
+  for (let i = 1; i < h.length; i++) assert.ok(Math.abs(h[i] - h[i - 1]) < 0.2, `jump at d=${SUZUKA.d[i]}`);
+  const straight = Math.atan2(SUZUKA.y[15] - SUZUKA.y[5], SUZUKA.x[15] - SUZUKA.x[5]);
+  assert.ok(Math.abs(h[0] - straight) < 0.05, `start ${h[0]} vs ${straight}`);
+});
+
+test("stateAt takes the heading from points.heading when it is there", () => {
+  const pts = { ...SUZUKA, steer: SUZUKA.speed.map(() => 0), heading: lineHeadings(SUZUKA) };
+  const straight = Math.atan2(SUZUKA.y[15] - SUZUKA.y[5], SUZUKA.x[15] - SUZUKA.x[5]);
+  assert.ok(Math.abs(stateAt(pts, 0).heading - straight) < 0.05);
+  const end = stateAt(pts, SUZUKA.t[SUZUKA.t.length - 1] - 0.01).heading;
+  assert.ok(Math.abs(Math.cos(end - straight) - 1) < 0.01, `end ${end}`);   // same direction, maybe ±2π
 });
 
 test("timeAtDistance inverts distance to time", () => {
