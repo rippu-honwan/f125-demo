@@ -16,7 +16,8 @@ const $ = (id) => document.getElementById(id);
 // host: {points, corners, meta, store, getT, seek, setPlaying, setRate, setCues, blocked}, set by attach().
 let host = null;
 let phase = "off";                              // off | setup | countdown | run | results
-let judge = null, bars = [], keysBefore = "", lastScore = "", goAt = 0;
+let judge = null, bars = [], keysBefore = "", lastScore = "";
+let countdown = 0, lastNow = 0;                 // seconds left before the lap, and the frame clock
 const inputs = new Set();                      // brake inputs held now (key codes, "ptr<id>"); brake is on while any is
 let settings = { diff: "easy", rate: 1 };
 
@@ -100,7 +101,8 @@ function begin() {
   host.seek(0);
   host.setRate(settings.rate);
   host.setPlaying(false);
-  goAt = performance.now() + COUNTDOWN_S * 1000;
+  countdown = COUNTDOWN_S;
+  lastNow = performance.now();
   $("l3dCountdown").textContent = String(COUNTDOWN_S);
   $("l3dCountdown").hidden = false;
   phase = "countdown";                          // frame() starts the lap when it runs out
@@ -109,9 +111,12 @@ function begin() {
 /** Every animation frame while practising: the countdown, time-out misses, the lane and the score. */
 export function frame(t) {
   if (phase === "countdown") {
-    const left = (goAt - performance.now()) / 1000;
-    if (left > 0) {
-      const text = String(Math.ceil(left));
+    // Frame steps, capped like the Learn clock: a hidden tab pauses the countdown instead of skipping it.
+    const now = performance.now();
+    countdown -= Math.min(0.1, (now - lastNow) / 1000);
+    lastNow = now;
+    if (countdown > 0) {
+      const text = String(Math.ceil(countdown));
       if ($("l3dCountdown").textContent !== text) $("l3dCountdown").textContent = text;
       drawLane(t);                              // the first notes are already on their way in
       return;
@@ -265,7 +270,9 @@ export function keydown(e) {
   // Typing elsewhere on the page. Not the scrub slider: it can keep focus, and practice owns Space/↓.
   if (e.target.matches?.("input:not([type=range]), select, textarea")) return false;
   if ((phase === "run" || phase === "countdown") && BRAKE_KEYS.has(e.code)) {
-    e.preventDefault();                         // no page scroll; brakeDown ignores the countdown
+    // No page scroll. brakeDown ignores the countdown, so a key held over GO doesn't count until
+    // pressed again (unlike Drive's throttle): a press at t = 0 would only judge as early.
+    e.preventDefault();
     if (!e.repeat) brakeDown(e.code, e.timeStamp);
   }
   return true;                                  // Learn shortcuts are off while practice is open
