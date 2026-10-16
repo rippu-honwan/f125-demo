@@ -170,6 +170,9 @@ function draw() {
   let at = s;                      // the followed car: drives the cursor and corner highlight
   if (Y) {
     const y = stateAt(Y, S.t);
+    // Crossed the line, waiting for the other car. 0.05 s slack: the scrub bar works in 0.1 s steps.
+    y.done = S.t >= Y.t[Y.t.length - 1] - 0.05;
+    s.done = S.t >= P.t[P.t.length - 1] - 0.05;
     const youFirst = S.follow === "you";
     at = youFirst ? y : s;
     if (S.scene) S.scene.update([s, y], S.cam, youFirst ? 1 : 0);
