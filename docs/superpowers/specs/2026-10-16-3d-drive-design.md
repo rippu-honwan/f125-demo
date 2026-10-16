@@ -32,14 +32,22 @@ Units inside the simulation are SI: m, s and m/s. `points.speed` is km/h and is 
 
 ### 3.1 `buildModel(points)` (once per lap)
 
-- **Curvature `kappa[i]`** at every point. Compute the heading `atan2(dy, dx)`, unwrap it, smooth it with a ±15 m moving average, then take d(heading)/ds. Positive means a left turn.
+- **Curvature `kappa[i]`** at every point.
+  - The heading at i is the direction of the chord from the point 15 m back to the point 15 m ahead. Indices wrap, because the lap is a closed loop.
+  - The curvature is the change in that heading over the same ±15 m, unwrapped. Positive means a left turn.
+  - Chords are used rather than neighbouring points because FastF1 positions stall and jitter by about a metre against `d`: Jeddah has 14 m of `d` where the position stands still or reverses. Neighbour headings there gave impossible 15 m radii at 200 km/h.
 - **`aLatMax(v)`**, the lateral grip available at speed v:
   1. Take the pro's `v² · |kappa|` in 10 km/h speed bins.
-  2. Keep the 95th percentile of each bin.
-  3. Fill empty bins from their neighbours.
+  2. Keep the 95th percentile of each bin. A bin with fewer than 10 samples counts as empty.
+  3. Fill empty bins from the nearest filled bin.
   4. Apply a running maximum over speed, because downforce means grip never falls as speed rises.
-  5. Multiply by `GRIP_MARGIN = 1.03`.
-- **`accelMax(v)`** and **`brakeMax(v)`**: build these the same way from the pro's `dv/dt = (v[i+1]² − v[i]²) / (2·Δd)`. Use the 95th percentile of the positive values for `accelMax` and of the negative values for `brakeMax`. Neither gets a running maximum.
+  5. Cap at 6.5 g, which no F1 car exceeds; the cap guards against sparse top-speed bins.
+  6. Multiply by `GRIP_MARGIN = 1.0`.
+- **`accelMax(v)`** and **`brakeMax(v)`**: build these the same way from the pro's `dv/dt = (v[i+1]² − v[i]²) / (2·Δd)`.
+  - `accelMax` takes samples at full throttle (≥ 0.95) with `dv/dt > 0`.
+  - `brakeMax` takes samples with brake ≥ 0.5 and `dv/dt < 0`.
+  - Neither gets a running maximum.
+  - `accelMax` is 0 above the pro's top speed.
 - **Coasting drag**, with no throttle and no brake: `COAST_K · v²` with `COAST_K = 0.0008` per metre.
 - **`gearAt(v)`**: the pro's most common gear in that speed bin. It is shown in the HUD only.
 - **`lapLength`**: `points.d` at the last point.
@@ -83,7 +91,7 @@ dpsi/dt = v·kSteer − kappa·ds/dt
   - an extra 8 m/s² of drag;
   - grip halved;
   - `invalid = true` for the rest of the lap.
-- At `|n| ≥ WALL = 20` m, `n` is clamped, `psi` is set to 0 and `v` is halved.
+- At `|n| ≥ WALL = 20` m, `n` is clamped and `psi` is set to 0. While the car touches the wall it loses an extra 15 m/s².
 - When `|psi| > π/2` the car has spun. It is put back with `n = 0`, `psi = 0` and `v = 60 km/h`.
 
 **Lap end.** When `s` passes `lapLength`, the exact finish time is interpolated within the step and `finished = true`.
@@ -159,14 +167,14 @@ The choices are stored in `store`. Opening the card pauses Learn and locks its c
 **Synthetic tracks** (a straight followed by a constant-radius arc):
 
 - full throttle on the straight never beats `accelMax`, and braking never beats `brakeMax`;
-- in Assist, entering the arc slower than its limit stays within ±1 m of the line;
+- in Assist at the pro's speed, the car stays within ±3 m of the line (the synthetic arcs start with a step in curvature);
 - entering it well above the limit ends off track;
 - in Manual, holding steer at 0 into the arc runs off track;
 - a spin resets the car.
 
 **Pro-lap bot test.**
 
-- The fixture is `tests/js/fixtures/suzuka_pro_5m.json`: the Suzuka reference lap resampled to 5 m, with the `/pro_lap` columns only, about 100 KB.
+- The fixture is `tests/js/fixtures/suzuka_pro.json`: the Suzuka reference lap at its native 2 m spacing, with the columns the simulation reads, rounded, about 140 KB.
 - A bot in Assist mode tracks the pro's speed, using throttle below it and brake more than 5 km/h above it.
 - It must finish the lap without going off track, within 3 % of the pro's lap time.
 
@@ -187,4 +195,8 @@ The choices are stored in `store`. Opening the card pauses Learn and locks its c
 ## 6. Risks
 
 - **Noisy positions.** FastF1 x/y is noisy, so `kappa` can spike and inflate `aLatMax`. The ±15 m smoothing and the 95th-percentile bins are the guards, and the bot test is the check. If it fails, widen the smoothing before adding any per-track tuning.
-- **Grip margin.** A 3 % margin may make the pro too easy or too hard to beat. `GRIP_MARGIN` is the single knob for that.
+- **Grip margin.** The prototype was checked on all 24 cached laps.
+  - With the 95th percentile and `GRIP_MARGIN = 1.0`, a bot tracking the pro's speed in Assist stays on track on every lap, 0.1 % to 1.4 % quicker than the pro.
+  - The same bot at 1.1× the pro's speed runs off at Monza, Silverstone, Hungaroring and Suzuka.
+  - With the 90th percentile, the bot leaves the track at 5 laps.
+  - `GRIP_MARGIN` stays the single knob.
