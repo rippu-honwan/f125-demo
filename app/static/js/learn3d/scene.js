@@ -83,11 +83,13 @@ function buildScene(renderer, container, points, corners, cars) {
     m.position.copy(pos[i]).y += 0.1;
     m.rotation.y = Math.atan2(-(b.z - a.z), b.x - a.x);
     scene.add(m);
+    return m;
   };
   stripe(points.d[0], 0xffffff, 1.5);                         // start / finish
+  const cues = [];                                            // brake/lift stripes; hidden in Hard practice
   for (const c of corners) {
-    if (c.action === "brake") stripe(cuePoint(c), 0xff2e2e, 2);
-    else if (c.action === "lift") stripe(cuePoint(c), 0xff9900, 1.2);
+    if (c.action === "brake") cues.push(stripe(cuePoint(c), 0xff2e2e, 2));
+    else if (c.action === "lift") cues.push(stripe(cuePoint(c), 0xff9900, 1.2));
     const apex = new THREE.Mesh(new THREE.SphereGeometry(1.2, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffd400 }));
     apex.position.copy(pos[bisect(points.d, c.apex_m)]).y += 1.2;
     scene.add(apex);
@@ -155,7 +157,12 @@ function buildScene(renderer, container, points, corners, cars) {
     renderer.domElement.remove();
   }
 
-  return { update, dispose };
+  /** Show or hide the brake/lift stripes (the start/finish line stays). */
+  function setCues(on) {
+    for (const m of cues) m.visible = on;
+  }
+
+  return { update, dispose, setCues };
 }
 
 /** A generic open-wheel silhouette from primitives — original, no real livery or branding. Nose = +x. */
