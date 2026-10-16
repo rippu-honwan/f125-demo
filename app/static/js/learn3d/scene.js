@@ -1,7 +1,7 @@
 // Three.js scene for the 3D Learn mode: track ribbon, car, corner markers, cameras.
 // Imported dynamically by index.js, so a CDN/WebGL failure only disables the canvas.
 import * as THREE from "three";
-import { bisect, cuePoint } from "./core.js";
+import { bisect, cuePoint, lineHeadings } from "./core.js";
 
 // ponytail: fixed 14 m track; real widths, kerbs and run-off aren't in the data.
 const TRACK_HALF_WIDTH = 7;
@@ -46,13 +46,16 @@ function buildScene(renderer, container, points, corners, cars) {
   const toThree = (x, y, z, out = new THREE.Vector3()) => out.set(x - cx, z - zMin, -(y - cy));
   const pos = Array.from({ length: n }, (_, i) => toThree(points.x[i], points.y[i], points.z[i]));
   const up = new THREE.Vector3(0, 1, 0);
+  // Smoothed line headings, not neighbour differences: those flip where positions stall or step back,
+  // which twisted the road into dark slivers (Suzuka's start/finish, Jeddah at 4.2 km).
+  const heading = points.heading || lineHeadings(points);
 
   // A strip along the line, offset sideways by ±half; the last quad closes the loop.
   const ribbon = (half, lift) => {
     const verts = new Float32Array(n * 6);
     const side = new THREE.Vector3();
     for (let i = 0; i < n; i++) {
-      side.subVectors(pos[Math.min(n - 1, i + 1)], pos[Math.max(0, i - 1)]).cross(up).normalize().multiplyScalar(half);
+      side.set(Math.sin(heading[i]), 0, Math.cos(heading[i])).multiplyScalar(half);   // right of travel
       const p = pos[i];
       verts.set([p.x + side.x, p.y + lift, p.z + side.z, p.x - side.x, p.y + lift, p.z - side.z], i * 6);
     }
@@ -67,8 +70,12 @@ function buildScene(renderer, container, points, corners, cars) {
     return g;
   };
   const road = ribbon(TRACK_HALF_WIDTH, 0.05);
-  road.computeVertexNormals();
-  scene.add(new THREE.Mesh(road, new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.9, side: THREE.DoubleSide })));
+  // Where positions step back against d the ribbon folds over itself: those quads run backwards, so
+  // they face down. Front faces only (the road faces up) drops them; forward quads already cover the
+  // spot. Normals point straight up, as computed ones would average up with down into dark seams.
+  // ponytail: slopes shade like flat road.
+  road.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(n * 6).map((_, k) => (k % 3 === 1 ? 1 : 0)), 3));
+  scene.add(new THREE.Mesh(road, new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.9 })));
 
   // Racing line for Drive: the pro's line, red where braking, green at full throttle, yellow between.
   const lineGeo = ribbon(0.35, 0.12);
@@ -94,11 +101,10 @@ function buildScene(renderer, container, points, corners, cars) {
   // A thin box lying across the road at lap distance d.
   const stripe = (d, color, depth) => {
     const i = bisect(points.d, d);
-    const a = pos[Math.max(0, i - 1)], b = pos[Math.min(n - 1, i + 1)];
     const m = new THREE.Mesh(new THREE.BoxGeometry(depth, 0.08, TRACK_HALF_WIDTH * 2),
       new THREE.MeshBasicMaterial({ color }));
     m.position.copy(pos[i]).y += 0.1;
-    m.rotation.y = Math.atan2(-(b.z - a.z), b.x - a.x);
+    m.rotation.y = heading[i];
     scene.add(m);
     return m;
   };
