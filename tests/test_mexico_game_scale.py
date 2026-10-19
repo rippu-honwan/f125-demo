@@ -10,6 +10,7 @@ from src.track import auto_detect_track
 ROOT = Path(__file__).resolve().parent.parent
 GAME_LENGTH = 4525          # trackLength in the game's Mexico CSVs; the real circuit is 4304 m
 # T1..T17 apex on the real circuit (the file before it moved to the game's scale): what the 3D pro lap uses.
+# Rerunning scripts/rebuild_track_corners.py --write can move these by a metre; update them then.
 REAL_APEX = [1201, 1280, 1339, 2032, 2108, 2244, 2586, 2692, 2780, 2966, 3070, 3635, 3814, 3880, 3927, 3991, 4122]
 
 
@@ -33,6 +34,9 @@ def test_3d_gets_the_real_circuit_positions_back():
     assert apex == REAL_APEX                                  # exactly: 3D Mexico is as before
 
 
-def test_tracks_without_real_length_are_unchanged():
-    suzuka = _track("suzuka")
-    assert _real_corners(suzuka) == suzuka["corners"]
+def test_only_mexico_differs_from_the_real_circuit():
+    for p in (ROOT / "tracks").glob("*.json"):
+        data = json.loads(p.read_text(encoding="utf-8"))
+        if p.stem != "mexico_city":
+            assert "real_length_m" not in data, p.stem
+            assert _real_corners(data) is data["corners"], p.stem
