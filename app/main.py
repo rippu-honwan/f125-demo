@@ -1177,6 +1177,7 @@ PRO_LAP_SESSIONS = {"Q", "R", "S", "SQ", "SS", "FP1", "FP2", "FP3"}
 PRO_LAP_FIRST_YEAR = 2018     # FastF1 has car telemetry from 2018 on
 PRO_LAP_STEP_M = 2.0          # sample spacing sent to the browser
 LINE_FIT_MAX_M = 4.0          # 3D Compare drops your line when it sits further than this (median) from the pro's
+LINE_FIT_MAX_SCALE = 0.1      # ...or when the fit had to resize it by more than this: both frames are metres
 BRAKE_SEARCH_LEAD_M = 250.0   # earliest lift point considered before a corner's entry
 APEX_MARGIN_M = 30.0          # a lift this close to an apex belongs to the next corner
 LIFT_THROTTLE = 0.9           # throttle below this (without braking) counts as a lift
@@ -1370,7 +1371,12 @@ def _fit_line(game_xy, pro_xy, rounds: int = 30):
     scaled and shifted against FastF1's). The first fit pairs points at the same fraction of
     the lap; each ICP round refits against the nearest point on the pro's line, so distance
     drift between the two laps doesn't skew the shape. Returns (your path in the pro's
-    frame, median distance in metres from it to the pro's line).
+    frame, median distance in metres from it to the pro's line). The distance is inf when the
+    fit resized your path by more than LINE_FIT_MAX_SCALE: ICP can shrink another track's
+    lap onto a short stretch of this one and still land close to it.
+
+    Not ``game_world_x_aligned`` from ``src.alignment``: that transform is only gated at
+    150 m, while line differences are a few metres.
     """
     from scipy.spatial import cKDTree
 
@@ -1393,6 +1399,9 @@ def _fit_line(game_xy, pro_xy, rounds: int = 30):
         _, idx = tree.query(fit(game_xy))
         fit = similarity(game_xy, dense[idx])
     out = fit(game_xy)
+    scale = np.linalg.norm(out - out.mean(0)) / np.linalg.norm(game_xy - game_xy.mean(0))
+    if abs(scale - 1) > LINE_FIT_MAX_SCALE:
+        return out, float("inf")
     return out, float(np.median(tree.query(out)[0]))
 
 

@@ -26,6 +26,7 @@ def _aligned(game_anch=(0.0, 1000.0), real_anch=(0.0, 1000.0), speed=180.0):
 
 
 GRID = np.arange(0.0, 1000.0 + 1e-9, 2.0)
+REF_LAPS = Path(__file__).resolve().parents[1] / "data" / "reference_laps"
 
 
 def _loop(n, bump=0.0):
@@ -61,6 +62,19 @@ class TestFitLine:
         pro, _ = _loop(1000)
         noise = np.random.default_rng(0).uniform(-500, 500, (2000, 2))
         assert _fit_line(noise, pro)[1] > LINE_FIT_MAX_M
+
+    def test_shrunk_fit_fails_the_gate(self):
+        # Right shape, half the size: matching it would need a 2x scale, which no real lap needs.
+        pro, _ = _loop(1000)
+        assert _fit_line(_to_game_frame(_loop(2000)[0]) * 0.5, pro)[1] > LINE_FIT_MAX_M
+
+    def test_other_track_fails_the_gate(self):
+        # Monaco fitted onto Suzuka: ICP shrinks it onto a short stretch (scale ~0.04, median ~3 m).
+        def line(name):
+            df = pd.read_pickle(REF_LAPS / name)[0]
+            return df[["world_position_X", "world_position_Y"]].to_numpy(dtype=float) / 10
+        game = line("2025_lec_q_monaco.pkl") * [1, -1]
+        assert _fit_line(game, line("2025_ver_q_suzuka.pkl"))[1] > LINE_FIT_MAX_M
 
 
 class TestBuildYouLap:
@@ -133,6 +147,7 @@ class TestBuildYouLap:
 
 client = TestClient(app)
 SAMPLE = Path(__file__).resolve().parents[1] / "data" / "suzuka_sample.csv"
+
 
 class TestCompare3DEndpoint:
     # Uses the cached data/reference_laps/2025_ver_q_suzuka.pkl, so no network is needed.
