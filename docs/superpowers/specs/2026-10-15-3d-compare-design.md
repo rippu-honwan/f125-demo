@@ -8,7 +8,7 @@ Upload a game lap (Sim Racing Telemetry CSV), pick the pro (driver / year / sess
 
 ### Non-goals
 
-- Your own racing line. Both cars drive the pro's line, because the game→real shape alignment can be off by up to 150 m, while real line differences are a few metres.
+- Your own racing line. Both cars drive the pro's line, because the game→real shape alignment can be off by up to 150 m, while real line differences are a few metres. *Superseded by `2026-10-16-3d-compare-line-design.md`: an ICP fit brings the game path to within ~2 m of the pro's line, so your car now drives your own line.*
 - More than two cars.
 - Coaching text. The Coaching mode already does this.
 - Changes to `src/`. Web changes stay in `app/`; `src/` is only imported.
