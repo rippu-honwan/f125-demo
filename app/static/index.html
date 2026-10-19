@@ -452,10 +452,11 @@
             <div class="l3d-hud l3d-hud-tl" id="l3dHudTop" aria-hidden="true"></div>
             <div class="l3d-hud l3d-hud-bl" id="l3dHudBottom" aria-hidden="true"></div>
             <svg class="l3d-minimap" id="l3dMinimap" aria-hidden="true"></svg>
-            <div class="l3d-cams" role="group" aria-label="Camera">
+            <div class="l3d-cams" role="group" aria-label="Camera and line">
               <button type="button" data-cam="tcam" class="active" aria-pressed="true">T-cam</button>
               <button type="button" data-cam="chase" aria-pressed="false">Chase</button>
               <button type="button" data-cam="top" aria-pressed="false">Top</button>
+              <button type="button" id="l3dLineBtn" aria-pressed="false" hidden>Line</button>
             </div>
             <div class="l3d-lane" id="l3dLane" hidden aria-hidden="true"><i class="l3d-hitline"></i></div>
             <div class="l3d-pop" id="l3dPop" role="status" aria-live="polite"></div>
@@ -522,6 +523,7 @@
           <button type="button" class="l3d-practice-btn" id="l3dDriveBtn" hidden><span aria-hidden="true">🏁</span> Drive</button>
         </div>
         <div class="l3d-keys" id="l3dKeys">Space play/pause · ← → ±2 s · 1/2/3 camera</div>
+        <div class="l3d-note" id="l3dLineNote" hidden></div>
       </div>
 
       <!-- Corner cards -->

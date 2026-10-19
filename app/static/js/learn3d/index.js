@@ -63,27 +63,34 @@ function showMessage(body, status, onPick) {
 
 const KEYS_LEARN = "Space play/pause · ← → ±2 s · 1/2/3 camera";
 const KEYS_COMPARE = KEYS_LEARN + " · F switch car";
+const NOTE_OWN_LINE = "Your line is matched to the track shape (about ±1 m). The pro line is FastF1's smoothed position data, not the exact line.";
+const NOTE_PRO_LINE = "Your line isn't available for this lap; your car follows the pro's line.";
 
 async function start(data, seq) {
   const P = data.points, Y = data.you || null;   // Y: your lap (youPoints) in 3D Compare
   P.heading = lineHeadings(P);                   // stateAt and the scene read it: smooth through stalled points
-  if (Y) Y.heading = P.heading;                  // your lap runs on the pro's line
+  const ownLine = !!Y && Y.x !== P.x;            // the server sent your own line (youPoints swapped x/y in)
+  if (Y && !ownLine) Y.heading = P.heading;      // your lap runs on the pro's line
   $("l3dMsg").hidden = true;
   $("l3dMain").hidden = false;
   $("l3dControls").hidden = false;
   $("l3dFollow").hidden = !Y;
   $("l3dTitle").textContent = Y ? "3D Compare" : "3D Pro Lap";
   $("l3dKeys").textContent = Y ? KEYS_COMPARE : KEYS_LEARN;
+  $("l3dLineNote").hidden = !Y;
+  $("l3dLineNote").textContent = ownLine ? NOTE_OWN_LINE : NOTE_PRO_LINE;
 
   $("l3dStage").classList.remove("l3d-nogl");
   let scene = null;
   try {
     const { createScene } = await import("./scene.js");
     if (seq !== loadSeq) return;
-    const cars = Y
-      ? [{ color: hex(PRO_COLOR), lane: -1.6 }, { color: hex(YOU_COLOR), lane: 1.6 }]
-      : [{ color: LEARN_CAR_COLOR, lane: 0 }, { color: hex(YOU_COLOR), lane: 0 }];   // car 1 = you, in Drive only
-    scene = createScene($("l3dStage"), P, data.corners, cars);
+    // Your own line: both cars on their real positions, the pro a see-through ghost where they overlap.
+    // Otherwise both share the pro's line, side by side.
+    const cars = !Y ? [{ color: LEARN_CAR_COLOR, lane: 0 }, { color: hex(YOU_COLOR), lane: 0 }]   // car 1 = you, in Drive only
+      : ownLine ? [{ color: hex(PRO_COLOR), lane: 0 }, { color: hex(YOU_COLOR), lane: 0 }]
+      : [{ color: hex(PRO_COLOR), lane: -1.6 }, { color: hex(YOU_COLOR), lane: 1.6 }];
+    scene = createScene($("l3dStage"), P, data.corners, cars, ownLine ? Y : null);
   } catch (err) {
     console.warn("3D view unavailable:", err);
     if (seq === loadSeq) $("l3dStage").classList.add("l3d-nogl");
@@ -92,7 +99,7 @@ async function start(data, seq) {
 
   const end = Math.max(P.t[P.t.length - 1], Y ? Y.t[Y.t.length - 1] : 0);   // both cars finish
   const S = view = {
-    data, scene, t: 0, end, playing: false, rate: 1, stopAt: null, raf: 0, last: 0,
+    data, scene, ghostPro: ownLine, t: 0, end, playing: false, rate: 1, stopAt: null, raf: 0, last: 0,
     cam: store.get("l3d_cam", "tcam"), follow: Y && store.get("l3d_follow", "you") !== "pro" ? "you" : "pro",
   };
   // Distance-based seeks (telemetry click, corner replay) use the followed car's clock.
@@ -108,6 +115,8 @@ async function start(data, seq) {
     setPlaying(true);
   }, !!Y);
   $("l3dScrub").max = String(Math.round(end * 10));   // 0.1 s per step
+  $("l3dLineBtn").hidden = !ownLine || !scene;
+  markPressed($("l3dLineBtn"), false);
   if (Y) {
     practice.detach();
     drive.detach();
@@ -156,7 +165,7 @@ function frame(now) {
 function draw() {
   const S = view, P = S.data.points, Y = S.data.you;
   const dv = drive.view();
-  if (S.scene) S.scene.setGhost(0, !!dv);
+  if (S.scene) S.scene.setGhost(0, !!dv || S.ghostPro);
   if (dv) {                        // Drive: the pro is the ghost, the camera follows you
     const g = stateAt(P, dv.t);
     if (S.scene) S.scene.update([dv.ghost ? g : null, dv.you], S.cam, 1);
@@ -250,11 +259,19 @@ function unload() {
   $("l3dFollow").hidden = true;
   $("l3dTitle").textContent = "3D Pro Lap";
   $("l3dKeys").textContent = KEYS_LEARN;
+  $("l3dLineNote").hidden = true;
+  $("l3dLineBtn").hidden = true;
 }
 
 // ---- controls (wired once; modules run after the DOM is parsed) ----
 document.querySelectorAll(".l3d-view").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
 document.querySelectorAll("[data-cam]").forEach((b) => b.addEventListener("click", () => view && setCam(b.dataset.cam)));
+$("l3dLineBtn").addEventListener("click", () => {
+  if (!view || !view.scene) return;
+  const on = $("l3dLineBtn").getAttribute("aria-pressed") !== "true";
+  markPressed($("l3dLineBtn"), on);
+  view.scene.setLine(on);
+});
 document.querySelectorAll("[data-rate]").forEach((b) => b.addEventListener("click", () => view && !locked() && setRate(+b.dataset.rate)));
 document.querySelectorAll("[data-follow]").forEach((b) => b.addEventListener("click", () => view && view.data.you && setFollow(b.dataset.follow)));
 $("l3dPlay").addEventListener("click", () => view && !locked() && setPlaying(!view.playing));
