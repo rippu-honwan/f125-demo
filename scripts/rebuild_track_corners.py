@@ -69,7 +69,8 @@ def rebuild(track: str, data: dict, df: pd.DataFrame) -> tuple:
     """(new corners, report lines)."""
     off = official_corners(track, df)
     old = sorted(data["corners"], key=lambda c: float(c["apex_m"]))
-    # FastF1 laps run ~0.5% short of the game's; store distances on the file's own length_m scale.
+    # FastF1 laps run short of the game's (~0.5 %; Mexico ~5 %, the game's model is bigger);
+    # store distances on the file's own length_m scale.
     scale = float(data["length_m"]) / float(df["lap_distance"].iloc[-1])
     apex = [round(r[1] * scale) for r in off]
     gaps = [int(g) for g in np.diff(apex)]

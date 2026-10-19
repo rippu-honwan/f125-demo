@@ -1334,6 +1334,21 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
     return out
 
 
+def _real_corners(track_info: dict) -> list:
+    """The file's corners on the real circuit, for the FastF1 pro lap.
+
+    tracks/*.json distances follow the game's lap. Where the game's model is a different
+    size from the real circuit (Mexico: 4525 m vs 4304 m), the file gives ``real_length_m``
+    and the corners are scaled back to it, in whole metres like every other track file;
+    elsewhere they are returned as they are.
+    """
+    corners = track_info.get("corners", [])
+    if "real_length_m" not in track_info:
+        return corners
+    k = float(track_info["real_length_m"]) / float(track_info["length_m"])
+    return [{**c, **{f: round(c[f] * k) for f in ("entry_m", "apex_m", "exit_m")}} for c in corners]
+
+
 def _build_pro_lap(df, meta: dict, track_info: dict, step: float = PRO_LAP_STEP_M) -> dict:
     """A FastF1 reference lap -> compact column arrays (metres, seconds) for the 3D viewer."""
     d_full = df["lap_distance"].to_numpy(dtype=float)
@@ -1375,7 +1390,7 @@ def _build_pro_lap(df, meta: dict, track_info: dict, step: float = PRO_LAP_STEP_
             "t": rnd(t, 3), "speed": rnd(speed, 1), "throttle": rnd(throttle, 3),
             "brake": rnd(brake, 3), "gear": gear.tolist(), "steer": rnd(steer, 3),
         },
-        "corners": _corner_actions(track_info.get("corners", []), d, t, speed, throttle, brake, gear),
+        "corners": _corner_actions(_real_corners(track_info), d, t, speed, throttle, brake, gear),
     }
 
 
