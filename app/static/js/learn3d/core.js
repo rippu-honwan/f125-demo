@@ -3,7 +3,7 @@
 //
 // `points` is the column-array object from GET /pro_lap:
 //   { d, t, x, y, z, speed, throttle, brake, gear, steer }  (all same length)
-// In 3D Compare, `youPoints()` builds the same shape for your lap.
+// In 3D Compare, `youPoints()` builds the same shape for your lap (your own line when the server sends one).
 
 /** Index i of the interval arr[i]..arr[i+1] containing v (arr ascending), clamped to [0, n-2]. */
 export function bisect(arr, v) {
@@ -91,9 +91,19 @@ export function fmtTime(s) {
   return `${m}:${((tenths % 600) / 10).toFixed(1).padStart(4, "0")}`;
 }
 
-/** Your lap as a `points` object: the pro's line (d, x, y, z, steer) with your timing and inputs. */
+/**
+ * Your lap as a `points` object: your timing and inputs on the pro's distance grid. With `you.x/y`
+ * (your line, fitted to the track by the server) the car drives your line, with the pro's road height;
+ * without them it drives the pro's line.
+ */
 export function youPoints(pro, you) {
-  return { ...pro, t: you.t, speed: you.speed, throttle: you.throttle, brake: you.brake, gear: you.gear };
+  const out = { ...pro, t: you.t, speed: you.speed, throttle: you.throttle, brake: you.brake, gear: you.gear };
+  if (you.x && you.y) {
+    out.x = you.x;
+    out.y = you.y;
+    out.heading = lineHeadings(out);
+  }
+  return out;
 }
 
 /** Live gap (s) at lap distance d: your time minus the pro's. Positive = you're behind. */
