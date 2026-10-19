@@ -163,7 +163,8 @@ function brakeText(r) {
 
 function renderResults() {
   const m = host.meta, pts = host.points, proT = pts.t[pts.t.length - 1], delta = car.t - proT;
-  const key = `l3d_drive_best_${m.year}_${m.driver}_${m.session}_${m.track}_${car.mode}`;
+  // v2: grip by place (2026-10-19); times from the speed-bin model aren't comparable, so they stay unread.
+  const key = `l3d_drive_best_${m.year}_${m.driver}_${m.session}_${m.track}_${car.mode}_v2`;
   const prev = parseFloat(host.store.get(key, ""));
   const isBest = !car.invalid && !(prev <= car.t);          // no previous best (NaN) counts as a new best
   if (isBest) host.store.set(key, car.t.toFixed(3));
