@@ -459,7 +459,8 @@
               <button type="button" id="l3dLineBtn" aria-pressed="false" hidden>Line</button>
             </div>
             <div class="l3d-lane" id="l3dLane" hidden aria-hidden="true"><i class="l3d-hitline"></i></div>
-            <div class="l3d-pop" id="l3dPop" role="status" aria-live="polite"></div>
+            <!-- Not live: a verdict per brake press would pile up in a screen reader; the results card sums it up. -->
+            <div class="l3d-pop" id="l3dPop" aria-hidden="true"></div>
             <div class="l3d-score" id="l3dScore" hidden></div>
             <button type="button" class="l3d-brake" id="l3dBrake" hidden>BRAKE</button>
             <div class="l3d-practice" id="l3dPractice" role="dialog" aria-modal="true" aria-label="Brake practice" hidden>

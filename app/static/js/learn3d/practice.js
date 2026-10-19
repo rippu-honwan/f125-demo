@@ -11,13 +11,14 @@ const GRADE_LABEL = { perfect: "PERFECT", good: "GOOD", miss: "MISS" };
 const BRAKE_KEYS = new Set(["Space", "ArrowDown"]);
 const KEYS_PRACTICE = "Hold Space or ↓ to brake · Esc quits practice";
 const COUNTDOWN_S = 3;                         // 3-2-1 before the lap starts (real seconds, not lap time)
+const GO_SHOWN_S = 0.6;                         // "GO" stays up this long into the lap, as in Drive
 
 const $ = (id) => document.getElementById(id);
 // host: {points, corners, meta, store, getT, seek, setPlaying, setRate, setCues, blocked}, set by attach().
 let host = null;
 let phase = "off";                              // off | setup | countdown | run | results
 let judge = null, bars = [], keysBefore = "", lastScore = "";
-let countdown = 0, lastNow = 0;                 // seconds left before the lap, and the frame clock
+let countdown = 0, lastNow = 0;                 // seconds left before the lap (then of "GO"), and the frame clock
 const inputs = new Set();                      // brake inputs held now (key codes, "ptr<id>"); brake is on while any is
 let settings = { diff: "easy", rate: 1 };
 
@@ -110,20 +111,22 @@ function begin() {
 
 /** Every animation frame while practising: the countdown, time-out misses, the lane and the score. */
 export function frame(t) {
-  if (phase === "countdown") {
+  if (phase === "countdown" || (phase === "run" && countdown > -GO_SHOWN_S)) {
     // Frame steps, capped like the Learn clock: a hidden tab pauses the countdown instead of skipping it.
     const now = performance.now();
     countdown -= Math.min(0.1, (now - lastNow) / 1000);
     lastNow = now;
-    if (countdown > 0) {
-      const text = String(Math.ceil(countdown));
-      if ($("l3dCountdown").textContent !== text) $("l3dCountdown").textContent = text;
-      drawLane(t);                              // the first notes are already on their way in
-      return;
+    const text = countdown > 0 ? String(Math.ceil(countdown)) : "GO";
+    if ($("l3dCountdown").textContent !== text) $("l3dCountdown").textContent = text;
+    if (countdown <= -GO_SHOWN_S) $("l3dCountdown").hidden = true;
+    if (phase === "countdown") {
+      if (countdown > 0) {
+        drawLane(t);                            // the first notes are already on their way in
+        return;
+      }
+      phase = "run";
+      host.setPlaying(true);
     }
-    $("l3dCountdown").hidden = true;
-    phase = "run";
-    host.setPlaying(true);
   }
   if (phase !== "run") return;
   for (const j of judge.tick(t)) popup(j);

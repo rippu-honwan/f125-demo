@@ -40,7 +40,10 @@ async function load(url, onPickAvailable, signal) {
 async function show(payload) {
   unload();
   const seq = ++loadSeq;
-  if (!payload || !payload.pro || !payload.pro.points || !payload.you) throw new Error("Malformed 3D compare response");
+  const n = payload?.pro?.points?.d?.length;
+  // Your channels must sit on the pro's grid: stateAt/gapAt index both laps with the same i.
+  if (!n || !payload.you || ["t", "speed", "throttle", "brake", "gear"].some((k) =>
+    !Array.isArray(payload.you[k]) || payload.you[k].length !== n)) throw new Error("Malformed 3D compare response");
   await start({ ...payload.pro, you: youPoints(payload.pro.points, payload.you) }, seq);
 }
 
