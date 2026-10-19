@@ -13,11 +13,12 @@ const CAMS = {
 /**
  * Builds the scene into `container`. Throws if WebGL is unavailable or the data is unusable.
  * `cars`: one {color, lane} per car; lane = sideways offset (m) so cars at the same spot don't overlap.
+ * `youLine`: your lap's points (3D Compare with your own line) for a second line ribbon, else null.
  */
-export function createScene(container, points, corners, cars) {
+export function createScene(container, points, corners, cars, youLine = null) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   try {
-    return buildScene(renderer, container, points, corners, cars);
+    return buildScene(renderer, container, points, corners, cars, youLine);
   } catch (err) {
     renderer.dispose();
     renderer.forceContextLoss();
@@ -27,7 +28,7 @@ export function createScene(container, points, corners, cars) {
 }
 
 /** Everything after the renderer exists; split out so a failure can release the GL context. */
-function buildScene(renderer, container, points, corners, cars) {
+function buildScene(renderer, container, points, corners, cars, youLine) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
   const scene = new THREE.Scene();
@@ -44,24 +45,26 @@ function buildScene(renderer, container, points, corners, cars) {
   const cy = (Math.min(...points.y) + Math.max(...points.y)) / 2;
   const zMin = Math.min(...points.z);
   const toThree = (x, y, z, out = new THREE.Vector3()) => out.set(x - cx, z - zMin, -(y - cy));
-  const pos = Array.from({ length: n }, (_, i) => toThree(points.x[i], points.y[i], points.z[i]));
+  const path = (p) => Array.from({ length: p.x.length }, (_, i) => toThree(p.x[i], p.y[i], p.z[i]));
+  const pos = path(points);
   const up = new THREE.Vector3(0, 1, 0);
   // Smoothed line headings, not neighbour differences: those flip where positions stall or step back,
   // which twisted the road into dark slivers (Suzuka's start/finish, Jeddah at 4.2 km).
   const heading = points.heading || lineHeadings(points);
 
-  // A strip along the line, offset sideways by ±half; the last quad closes the loop.
-  const ribbon = (half, lift) => {
-    const verts = new Float32Array(n * 6);
+  // A strip along a path (three.js points + headings), offset sideways by ±half; the last quad closes the loop.
+  const ribbon = (pts, hd, half, lift) => {
+    const m = pts.length;
+    const verts = new Float32Array(m * 6);
     const side = new THREE.Vector3();
-    for (let i = 0; i < n; i++) {
-      side.set(Math.sin(heading[i]), 0, Math.cos(heading[i])).multiplyScalar(half);   // right of travel
-      const p = pos[i];
+    for (let i = 0; i < m; i++) {
+      side.set(Math.sin(hd[i]), 0, Math.cos(hd[i])).multiplyScalar(half);   // right of travel
+      const p = pts[i];
       verts.set([p.x + side.x, p.y + lift, p.z + side.z, p.x - side.x, p.y + lift, p.z - side.z], i * 6);
     }
     const index = [];
-    for (let i = 0; i < n; i++) {
-      const a = 2 * i, b = a + 1, c = (2 * (i + 1)) % (2 * n), d = c + 1;
+    for (let i = 0; i < m; i++) {
+      const a = 2 * i, b = a + 1, c = (2 * (i + 1)) % (2 * m), d = c + 1;
       index.push(a, c, b, b, c, d);
     }
     const g = new THREE.BufferGeometry();
@@ -69,7 +72,7 @@ function buildScene(renderer, container, points, corners, cars) {
     g.setIndex(index);
     return g;
   };
-  const road = ribbon(TRACK_HALF_WIDTH, 0.05);
+  const road = ribbon(pos, heading, TRACK_HALF_WIDTH, 0.05);
   // Where positions step back against d the ribbon folds over itself: those quads run backwards, so
   // they face down. Front faces only (the road faces up) drops them; forward quads already cover the
   // spot. Normals point straight up, as computed ones would average up with down into dark seams.
@@ -78,7 +81,7 @@ function buildScene(renderer, container, points, corners, cars) {
   scene.add(new THREE.Mesh(road, new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.9 })));
 
   // Racing line for Drive: the pro's line, red where braking, green at full throttle, yellow between.
-  const lineGeo = ribbon(0.35, 0.12);
+  const lineGeo = ribbon(pos, heading, 0.35, 0.12);
   const cols = new Float32Array(n * 6), col = new THREE.Color();
   for (let i = 0; i < n; i++) {
     col.set(points.brake[i] >= 0.5 ? 0xff2e2e : points.throttle[i] >= 0.95 ? 0x3ddc84 : 0xffd400);
@@ -90,6 +93,15 @@ function buildScene(renderer, container, points, corners, cars) {
   }));
   line.visible = false;
   scene.add(line);
+
+  // 3D Compare: your line in your car's colour, shown and hidden with the pro's.
+  let youRibbon = null;
+  if (youLine) {
+    youRibbon = new THREE.Mesh(ribbon(path(youLine), youLine.heading || lineHeadings(youLine), 0.35, 0.13),
+      new THREE.MeshBasicMaterial({ color: cars[1].color, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3 }));
+    youRibbon.visible = false;
+    scene.add(youRibbon);
+  }
 
   // ponytail: flat ground at the lowest point; hilly tracks show the road raised above it.
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000),
@@ -202,9 +214,10 @@ function buildScene(renderer, container, points, corners, cars) {
     });
   }
 
-  /** Show or hide the racing line. */
+  /** Show or hide the racing line(s): the pro's, and yours in 3D Compare. */
   function setLine(on) {
     line.visible = on;
+    if (youRibbon) youRibbon.visible = on;
   }
 
   return { update, dispose, setCues, setGhost, setLine };
