@@ -1,91 +1,77 @@
-# Drive: grip by location, with a friction circle
+# Drive: lateral grip by location
 
-Follow-up to `2026-10-16-3d-drive-design.md`. The Drive car's grip comes from the pro's lap. The current model is too loose on most tracks and too strict in places, and this spec replaces it.
+Follow-up to `2026-10-16-3d-drive-design.md`. The Drive car's lateral grip comes from the pro's lap. Today it is a per-speed-bin table, which is too loose on most tracks and has holes. This spec makes it a per-location envelope instead.
 
-## 1. Problem (measured with bots on the 28 cached 2025 Q laps)
+## 1. Problem (measured on the 28 cached 2025 Q laps)
 
-Today's lateral limit is a table per 10 km/h speed bin: the 95th percentile of the pro's v²|κ| in that bin, made non-decreasing with speed. Any lateral demand up to that value is free. Neither braking nor accelerating costs grip while you corner.
+Today's lateral limit `aLat(v)` is a table per 10 km/h bin: the 95th percentile of the pro's v²|κ| in that bin, made non-decreasing with speed.
 
-The bot behind these numbers runs Assist, targets k × the pro's speed, and brakes bang-bang.
+- **A corner's allowance comes from the wrong place.** It is set by whichever corner in the same speed bin the pro took hardest, not by this corner.
+- **Holes.** VER's Spielberg lap needs 25 m/s² at 88 km/h at 1381 m, but the 80–90 km/h bin allows 15. That bin is dominated by low-g corner exits, so a bot following the pro's own speed goes off there.
+- **Too loose.** The model-optimal lap is a quasi-steady-state lap-time simulation on the line, with this model's limits. It is a median 12.4 % faster than the pro (range 7.7–21.5 %).
 
-- **Too loose.** 11 of the 28 laps stay on track at k = 1.10, and Monaco stays on at k = 1.15. The model rewards over-speeding, so its fastest valid lap is at k = 1.06 on 15 laps. At Monaco, k = 1.10 laps 8 % faster than the pro.
-- **Too strict in places.** VER's Spielberg lap goes off at k = 1.00, at 1381 m. The pro needs 25 m/s² there at 88 km/h, but the 80–90 km/h bin allows 15. That bin is dominated by low-g corner exits.
-- **Why the bins fail.** A corner's allowance is set by whichever corner in the same speed bin the pro took hardest. It is not set by this corner.
-- **Not the cause: road width.** A narrower road barely helps. With a half-width of 4.5 m instead of 7, Monaco's break point moves from k = 1.10 to 1.08. A slow corner taken 10 % too fast only drifts 2–3 m wider. What makes over-speeding pay is the free acceleration at full lateral load.
+## 2. Decision
 
-## 2. Goal
+Lateral grip comes from the pro at this place on the track: `grip[i]` = the max of the pro's v²|κ| within ±15 m, times `GRIP_MARGIN = 1.02`.
 
-Each place on the track allows about what the pro used there, no more. Cornering harder leaves less grip for braking and accelerating.
+**Measured with this model:**
+- the model-optimal lap is a median 6.0 % faster than the pro (range 3.6–10.4 %), against 12.4 % today;
+- a look-ahead bot following the pro's speed stays on track on all 28 laps;
+- the simple bot (brakes only once 5 km/h over the pro's speed, like the existing Suzuka test) stays on track on 27 of 28 laps, Spielberg included.
+  - The miss is NOR Shanghai T14 (4.7 km). The pro brakes there at about 34 m/s², harder than the lap-wide `brake(v)` table allows, so braking at the pro's point is too late.
+  - Today's looser lateral limit hid this. Margins from 1.00 to 1.05 all keep it; 1.00 adds misses at Jeddah and Lusail.
+  - This is the per-location braking follow-up below.
+
+**What is left.** About 5 % of slack remains. It comes from braking and acceleration: `brake(v)` and `accel(v)` are lap-wide percentiles, so you can brake a little later or accelerate a little earlier than the pro almost anywhere. Over-speeding into a corner still pays, because there is no friction circle.
+
+**Prototyped and not taken.** A per-location friction circle (total grip shared between steering and braking/throttle):
+- it stops over-speeding from paying (27 of 28 laps);
+- but its optimal lap is still about 6 % faster than the pro;
+- and the bot at the pro's own speed goes off on 3 of 28 laps.
+
+It needs more work. It is a possible follow-up, together with per-location braking, which would also fix Shanghai T14.
 
 ### Non-goals
 
-- Per-track road widths: there is no width data, and they barely help (§1).
-- Tyre, temperature or weight modelling.
-- UI changes, apart from the best-lap storage key (§5).
+- Friction circle and per-location braking/acceleration (see above).
+- Per-track road widths: there is no data, and the prototype showed little effect (Monaco's break point moved from 1.10× to 1.08× at a 4.5 m half-width).
+- UI changes, apart from the best-lap key (§4).
 
 ## 3. Model (`app/static/js/learn3d/drive_sim.js`)
 
-### Grip envelope G(s)
+### `buildModel`
 
-At each point of the pro's line, compute:
-- **ay:** v²|κ|, with κ from the existing ±15 m chord;
-- **ax:** the longitudinal acceleration over the same chord, (v[i+w]² − v[i−w]²) / (2 · chord length);
-- **total:** hypot(ax, ay).
+- Compute `lat[i] = v[i]² · |kappa[i]|`.
+- `grip[i]` is the max of `lat` over ±`GRIP_WIN_M` (15 m) around i, wrapping round the lap. It is capped at `A_LAT_CAP` (6.5 g), multiplied by `GRIP_MARGIN` (1.02), and floored at `GRIP_FLOOR` (8 m/s²).
+  - The floor lets the car steer on straights and kinks, where the pro's lateral is near zero.
+  - 8 m/s² is below every measured corner apex, so it doesn't loosen corners.
+- The model returns `grip` (one value per point of `d`) in place of `aLat`. `aLat`, `binTable`'s use for it, and the "never drops with speed" pass are removed. `accel`, `brake`, `gear` and `vTop` are unchanged.
 
-`G[i]` is the maximum total over ±`GRIP_WIN_M` (15 m) around i, wrapping round the lap. It is multiplied by `GRIP_MARGIN`, capped at 6.5 g, and floored at `GRIP_FLOOR` (8 m/s²). The floor keeps steering possible on straights.
+### `step`
 
-`buildModel` returns `grip` (the per-point G) in place of `aLat`. The speed-bin `aLat` table is deleted. `accel`, `brake`, `gear` and `vTop` are unchanged.
+`kMax = along(m, m.grip, car.s) · (off ? 0.5 : 1) / max(v, 5)²`. Nothing else changes.
 
-### Step
+### Constants
 
-1. **Steering first.** Use `kMax = G(s) · (off ? 0.5 : 1) / max(v, 5)²` (grass halves it, as today). Assist pure pursuit and Manual are unchanged, and `kSteer` is clamped to ±`kMax`.
-2. **Longitudinal second.**
-   - Lateral use is `ay = v² |kSteer|`, and what is left is `room = sqrt(max(0, G² − ay²))`.
-   - Throttle gives `min(accel(v), room)`. Brake gives `−min(brake(v), room)`.
-   - Coasting drag, grass and wall drag, and the `vTop` cap are unchanged. Drag isn't grip.
-3. **Then the kinematics,** as today.
+`GRIP_MARGIN = 1.02` stays the single knob. Its comment says what 1.0 would mean: the pro's own max lateral g at this place. The extra 2 % is slack for a driver who brakes a little late, and keeps Jeddah and Lusail on track for the simple bot.
 
-All the constants (`GRIP_MARGIN`, `GRIP_WIN_M`, `GRIP_FLOOR`) are exported or top-level. `GRIP_MARGIN` is the one tuning knob, set by §4.
+## 4. Best laps
 
-## 4. Calibration and acceptance
+Lap times under the new model aren't comparable with the old ones. The Drive best-lap key gains a `_v2` suffix: `l3d_drive_best_${year}_${driver}_${session}_${track}_${mode}_v2`. Old entries stay in localStorage, unread.
 
-There are two tools, written as test helpers and reused for tuning.
+## 5. Tests (`tests/js/learn3d_drive.test.mjs`)
 
-- **Model-optimal lap (`optimalLap(m)`).** This is a quasi-steady-state lap-time simulation on the line.
-  - The corner speed limit is `sqrt(G/|κ|)`, capped at `vTop`.
-  - A forward pass applies `min(accel(v), room)` and a backward pass applies `min(brake(v), room)`. Both use room from the lateral use at the limit speed.
-  - It returns the lap time.
-  - This is the fastest lap the model allows. It replaces "k × the pro" bots as the measure of slack.
-- **Look-ahead bot.** Assist targets the optimal-lap speed profile computed with k × the pro's speed as an extra cap.
-  - At k = 1.00 it must stay on track.
-
-**Acceptance on all 28 cached laps.** The audit dumps of `/pro_lap` live in the scratchpad; the plan copies the ones it needs into `tests/js/fixtures`.
-1. The optimal lap is between −2 % and +1 % of the pro's time on every lap. Today's bins are expected to allow about −5 % to −10 %. The plan measures both.
-2. The look-ahead bot at k = 1.00 stays on track on every lap, including VER Spielberg.
-3. The look-ahead bot at k = 1.05 goes off, or laps slower than at k = 1.00, on at least 24 of the 28 laps.
-
-`GRIP_MARGIN` is the smallest value in [1.00, 1.10] (0.01 steps) that meets 2. Then 1 and 3 are checked.
-
-**Fallback.** If no margin meets 1–3 together, the friction circle is dropped: steering uses G(s) built from ay only, and longitudinal is unchanged. That variant was measured in prototype: it fixes Spielberg and moves the median break point from k = 1.10 to 1.08. The plan stops and reports before shipping the fallback.
-
-## 5. Best laps
-
-Drive stores best laps under `l3d_drive_best_${year}_${driver}_${session}_${track}_${mode}`. Times under the new model aren't comparable with the old ones, so the key gains a `_v2` suffix. Old entries stay in localStorage but are no longer read.
-
-## 6. Tests (`tests/js/learn3d_drive.test.mjs`)
-
-- **Stadium fixture:**
-  - `buildModel` gives `grip` ≈ the arc's lateral g on the arcs, and ≥ `GRIP_FLOOR` on the straights;
-  - the existing Assist / too-fast tests still hold;
-  - new: at full lateral use, throttle gives no acceleration;
-  - new: braking at full lateral use gives no extra deceleration.
+- **Stadium:**
+  - `grip` on the arcs ≈ V_ARC²/R (±1.5);
+  - `grip` mid-straight equals `GRIP_FLOOR`;
+  - the existing Assist and too-fast-runs-wide tests still pass.
 - **Suzuka fixture:**
-  - `optimalLap` is within −2 % / +1 % of the pro;
-  - the existing bot test still passes.
-- **Speed-bin regression:** a synthetic lap where one tight corner sits in an otherwise gentle speed band. The pro's own speed through it must not run off.
-- **Existing tests:** `cornerStats`, `gapAt`, `pose` and the gear tests are unchanged.
+  - the existing bot test still passes (within 3 % of the pro, on track);
+  - new: the model-optimal lap is at most 7 % faster than the pro. It is measured at about 4 %; today's model is 9.8 % on this lap. This guards against the model loosening again.
+- **Spielberg regression.** New fixture `tests/js/fixtures/spielberg_ver_pro.json`: VER's 2025 Q lap points, from `/pro_lap`. The simple bot following the pro's speed stays on track. With today's model it goes off at 1381 m.
+- **Test helper.** `optimalProfile(m, v0, cap)`, the quasi-steady-state forward/backward pass, lives in the test file. Nothing in the app needs it.
 
-## 7. Risks
+## 6. Risks
 
-- **Noisy positions.** FastF1 positions jitter, and envelope maxima pick up spikes, which makes the limit a little loose locally. The 15 m chord smoothing already damps this. The acceptance numbers are the check.
-- **Harder to drive.** Manual players will find it harder. That is the intent, but Assist must still finish the pro's pace (acceptance 2).
+- **Envelope picks up noise.** The envelope max can pick up curvature spikes, which locally loosens the limit. The ±15 m chord smoothing damps this, and the optimal-lap test bounds it.
+- **Harder than before** on tracks where the bins were generous (Monaco, Baku). That is the intent. Assist at the pro's pace finishes everywhere with a look-ahead bot (28/28), and with the simple bot everywhere except Shanghai T14 (§2).
