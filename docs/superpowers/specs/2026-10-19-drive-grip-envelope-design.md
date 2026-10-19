@@ -8,14 +8,14 @@ Today's lateral limit `aLat(v)` is a table per 10 km/h bin: the 95th percentile 
 
 - **A corner's allowance comes from the wrong place.** It is set by whichever corner in the same speed bin the pro took hardest, not by this corner.
 - **Holes.** VER's Spielberg lap needs 25 m/s² at 88 km/h at 1381 m, but the 80–90 km/h bin allows 15. That bin is dominated by low-g corner exits, so a bot following the pro's own speed goes off there.
-- **Too loose.** The model-optimal lap is a quasi-steady-state lap-time simulation on the line, with this model's limits. It is a median 12.4 % faster than the pro (range 7.7–21.5 %).
+- **Too loose.** The model-optimal lap is a quasi-steady-state lap-time simulation on the line, with this model's limits. It is a median 10.6 % faster than the pro (range 6.3–20.2 %; Monaco about 20 %).
 
 ## 2. Decision
 
 Lateral grip comes from the pro at this place on the track: `grip[i]` = the max of the pro's v²|κ| within ±15 m, times `GRIP_MARGIN = 1.02`.
 
 **Measured with this model:**
-- the model-optimal lap is a median 6.0 % faster than the pro (range 3.6–10.4 %), against 12.4 % today;
+- the model-optimal lap is a median 6.0 % faster than the pro (range 3.6–10.4 %), against 10.6 % today;
 - a look-ahead bot following the pro's speed stays on track on all 28 laps;
 - the simple bot (brakes only once 5 km/h over the pro's speed, like the existing Suzuka test) stays on track on 27 of 28 laps, Spielberg included.
   - The miss is NOR Shanghai T14 (4.7 km). The pro brakes there at about 34 m/s², harder than the lap-wide `brake(v)` table allows, so braking at the pro's point is too late.
@@ -67,9 +67,9 @@ Lap times under the new model aren't comparable with the old ones. The Drive bes
   - the existing Assist and too-fast-runs-wide tests still pass.
 - **Suzuka fixture:**
   - the existing bot test still passes (within 3 % of the pro, on track);
-  - new: the model-optimal lap is at most 7 % faster than the pro. It is measured at about 4 %; today's model is 9.8 % on this lap. This guards against the model loosening again.
+  - new: the model-optimal lap is at most 6 % faster than the pro. It is measured at 4.4 %; today's model is about 8 % on this lap. This guards against the model loosening again.
 - **Spielberg regression.** New fixture `tests/js/fixtures/spielberg_ver_pro.json`: VER's 2025 Q lap points, from `/pro_lap`. The simple bot following the pro's speed stays on track. With today's model it goes off at 1381 m.
-- **Test helper.** `optimalProfile(m, v0, cap)`, the quasi-steady-state forward/backward pass, lives in the test file. Nothing in the app needs it.
+- **Test helper.** `optimalLapTime(m)`, the quasi-steady-state forward/backward pass on the line, lives in the test file. Nothing in the app needs it.
 
 ## 6. Risks
 

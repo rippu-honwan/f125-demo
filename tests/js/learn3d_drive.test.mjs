@@ -60,6 +60,9 @@ test("buildModel reads curvature, lateral grip, acceleration and braking from th
   const g = M.grip[P.d.findIndex((d) => d >= ARC_MID)];
   assert.ok(Math.abs(g - (V_ARC ** 2 / R) * GRIP_MARGIN) < 1.5, `grip ${g}`);   // what the pro pulled here
   assert.equal(M.grip[P.d.findIndex((d) => d >= 300)], GRIP_FLOOR);            // straight: just enough to steer
+  const e = P.d.findIndex((d) => d >= STRAIGHT - 15);                           // 15 m before the arc: the window
+  assert.ok((P.speed[e] / KMH) ** 2 * Math.abs(M.kappa[e]) < 0.3 * V_ARC ** 2 / R);   // reaches the arc's grip,
+  assert.ok(M.grip[e] > 0.6 * V_ARC ** 2 / R, `grip ${M.grip[e]}`);                   // not just this point's
   assert.ok(Math.abs(lookup(M.accel, 40) - ACC) < 0.6);
   assert.ok(Math.abs(lookup(M.brake, 50) - BRK) < 1.2);
   assert.equal(gearAt(M, V_ARC), 3);
@@ -237,7 +240,7 @@ function optimalLapTime(m) {
 test("grip by place: the fastest lap the model allows on Suzuka stays within 7 % of the pro", () => {
   const S = JSON.parse(readFileSync(new URL("./fixtures/suzuka_pro.json", import.meta.url))).points;
   const pro = S.t[S.t.length - 1], best = optimalLapTime(buildModel(S));
-  assert.ok(best / pro > 0.93, `optimal ${best.toFixed(2)} s vs pro ${pro} s`);   // speed bins allowed ~10 % here
+  assert.ok(best / pro > 0.94, `optimal ${best.toFixed(2)} s vs pro ${pro} s`);   // 4.4 %; speed bins allowed ~8 % here
 });
 
 test("grip by place: VER's Spielberg lap at its own speed stays on track (no speed-bin hole)", () => {
