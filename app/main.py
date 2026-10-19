@@ -1396,13 +1396,15 @@ def _fit_line(game_xy, pro_xy, rounds: int = 30):
     return out, float(np.median(tree.query(out)[0]))
 
 
-def _build_you_lap(aligned, d_grid, lap_time: float) -> dict:
+def _build_you_lap(aligned, d_grid, lap_time: float, pro_xy=None) -> dict:
     """Your game lap resampled onto the pro lap's distance grid, for the 3D compare view.
 
     ``aligned`` has one row per game metre; the pipeline's alignment anchors
     (``aligned.attrs``) map each game metre to real lap distance, the axis ``d_grid``
     (from ``_build_pro_lap``) uses. Time comes from integrating game speed, pinned to
-    ``lap_time`` like the pro lap.
+    ``lap_time`` like the pro lap. With ``pro_xy`` (the pro's x/y on ``d_grid``), your game
+    path is fitted onto it (``_fit_line``) and returned as ``x``/``y``, unless it sits more
+    than LINE_FIT_MAX_M from the pro's line, or the game positions are missing.
     """
     game_d = aligned["lap_distance"].to_numpy(dtype=float)
     game_anch = np.asarray(aligned.attrs["game_anch_d"], dtype=float)
@@ -1423,13 +1425,24 @@ def _build_you_lap(aligned, d_grid, lap_time: float) -> dict:
     def rnd(values, digits):
         return [round(float(x), digits) for x in values]
 
-    return {
+    you = {
         "t": rnd(col(t), 3),
         "speed": rnd(col(aligned["game_speed_kmh"]), 1),
         "throttle": rnd(col(aligned["game_throttle"]), 3),
         "brake": rnd(col(aligned["game_brake"]), 3),
         "gear": [int(g) for g in np.rint(col(aligned["game_gear"]))],
     }
+    if pro_xy is not None and {"game_world_x", "game_world_y"} <= set(aligned.columns):
+        game_xy = aligned[["game_world_x", "game_world_y"]].to_numpy(dtype=float)
+        if np.isfinite(game_xy).all():
+            try:
+                xy, median = _fit_line(game_xy, pro_xy)
+            except (ValueError, np.linalg.LinAlgError):
+                traceback.print_exc()
+            else:
+                if median <= LINE_FIT_MAX_M:
+                    you["x"], you["y"] = rnd(col(xy[:, 0]), 2), rnd(col(xy[:, 1]), 2)
+    return you
 
 
 def _validate_lap_params(driver: str, session: str, year: int) -> None:
@@ -1458,7 +1471,8 @@ def _compare_3d_payload(payload: dict, aligned, report, driver: str, year: int,
         # ponytail: run_pipeline doesn't return its real lap; this second load hits the pkl cache.
         df, meta = load_real_telemetry(driver, int(year), session, track)
         pro = _pro_lap_payload(df, meta, driver, year, session, track)
-        you = _build_you_lap(aligned, pro["points"]["d"], float(report.game_time))
+        you = _build_you_lap(aligned, pro["points"]["d"], float(report.game_time),
+                             pro_xy=np.c_[pro["points"]["x"], pro["points"]["y"]])
     except Exception:
         traceback.print_exc()
         raise HTTPException(status_code=422, detail="No 3D data for this lap")

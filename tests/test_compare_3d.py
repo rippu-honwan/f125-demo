@@ -110,10 +110,29 @@ class TestBuildYouLap:
         assert np.all(np.diff(t) > 0)
         assert t[-1] == pytest.approx(20.0, abs=0.01)
 
+    def test_adds_your_line_when_the_game_path_fits(self):
+        aligned = _aligned()
+        pro, _ = _loop(GRID.size)
+        game, _ = _loop(len(aligned))
+        aligned["game_world_x"], aligned["game_world_y"] = _to_game_frame(game).T
+        you = _build_you_lap(aligned, GRID, 20.0, pro_xy=pro)
+        assert len(you["x"]) == len(you["y"]) == GRID.size
+        assert np.median(np.hypot(np.array(you["x"]) - pro[:, 0], np.array(you["y"]) - pro[:, 1])) < 3.0
+
+    def test_no_line_when_the_game_path_does_not_fit(self):
+        aligned = _aligned()
+        pro, _ = _loop(GRID.size)
+        aligned["game_world_x"], aligned["game_world_y"] = np.random.default_rng(0).uniform(-500, 500, (2, len(aligned)))
+        you = _build_you_lap(aligned, GRID, 20.0, pro_xy=pro)
+        assert "x" not in you and "y" not in you
+
+    def test_no_line_without_game_positions(self):
+        pro, _ = _loop(GRID.size)
+        assert "x" not in _build_you_lap(_aligned(), GRID, 20.0, pro_xy=pro)
+
 
 client = TestClient(app)
 SAMPLE = Path(__file__).resolve().parents[1] / "data" / "suzuka_sample.csv"
-
 
 class TestCompare3DEndpoint:
     # Uses the cached data/reference_laps/2025_ver_q_suzuka.pkl, so no network is needed.
@@ -132,7 +151,15 @@ class TestCompare3DEndpoint:
         assert set(payload["pro"]) >= {"meta", "points", "corners"}
         meta = payload["pro"]["meta"]
         assert (meta["driver"], meta["year"], meta["session"], meta["track"]) == ("VER", 2025, "Q", "suzuka")
-        assert set(payload["you"]) == {"t", "speed", "throttle", "brake", "gear"}
+        assert set(payload["you"]) == {"t", "speed", "throttle", "brake", "gear", "x", "y"}
+
+    def test_your_line_stays_on_the_track(self, payload):
+        p = payload["pro"]["points"]
+        pro = np.c_[p["x"], p["y"]]
+        you = np.c_[payload["you"]["x"], payload["you"]["y"]]
+        dist = cKDTree(pro).query(you)[0]
+        assert np.median(dist) < 4.0       # measured 2.0 m on this lap
+        assert dist.max() < 15.0           # never far off the road
 
     def test_you_shares_the_pro_grid(self, payload):
         n = len(payload["pro"]["points"]["d"])
