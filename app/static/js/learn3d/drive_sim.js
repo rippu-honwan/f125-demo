@@ -15,6 +15,7 @@ export const WALL = 20;                        // invisible wall: max |n| (m)
 export const GRIP_MARGIN = 1.02;
 export const GRIP_FLOOR = 8;                   // m/s²: steering still works on straights, below every corner apex
 const GRIP_WIN_M = 15;                         // grip at a point = the pro's max lateral g within ± this (m)
+const BRAKE_WIN_M = 30;                        // braking at a point may be as hard as the pro's hardest within ± this (m), each over the heading chord
 const COAST_K = 0.0008;                        // lift-off drag: COAST_K · v² (m/s²)
 const BIN = 10 / KMH;                          // speed bin width for the limit tables (m/s)
 const PCT = 0.95;                              // percentile taken per bin
@@ -65,15 +66,31 @@ export function buildModel(points) {
   const hAt = (j) => heading[at(j)] + turn * Math.floor(j / loop);
   const kappa = heading.map((_, i) => (hAt(i + w) - hAt(i - w)) / (2 * w * ds));
 
+  /** Max of a non-negative arr over ± halfM metres around each point, wrapping round the lap. */
+  const windowMax = (arr, halfM) => {
+    const g = Math.max(1, Math.round(halfM / ds));
+    return arr.map((_, i) => {
+      let x = 0;
+      for (let j = i - g; j <= i + g; j++) x = Math.max(x, arr[at(j)]);
+      return x;
+    });
+  };
+
   // Lateral grip by place, not by speed: a corner allows what the pro pulled in it. Speed bins mixed corners,
   // so one corner's limit came from another (too loose), or from corner exits (VER Spielberg: too strict).
   const lat = v.map((vi, i) => Math.min(A_LAT_CAP, vi * vi * Math.abs(kappa[i])));
-  const gw = Math.max(1, Math.round(GRIP_WIN_M / ds));
-  const grip = lat.map((_, i) => {
-    let g = 0;
-    for (let j = i - gw; j <= i + gw; j++) g = Math.max(g, lat[at(j)]);
-    return Math.max(GRIP_FLOOR, g * GRIP_MARGIN);
+  const grip = windowMax(lat, GRIP_WIN_M).map((g) => Math.max(GRIP_FLOOR, g * GRIP_MARGIN));
+
+  // Braking by place, on top of the lap-wide table: where the pro braked harder than the table allows
+  // (NOR Shanghai T14, ~34 m/s²), braking at the pro's point still makes the corner. Measured over the
+  // heading chord, because sample-to-sample deceleration is too noisy to take a max of.
+  // ponytail: one peak covers the whole zone, so its slow tail allows more than the pro needed there
+  // (+0.3 % optimal-lap slack over 28 laps); scale it by speed if that ever matters.
+  const dec = v.map((_, i) => {
+    const a = Math.max(0, i - w), b = Math.min(np - 1, i + w);
+    return points.brake[i] >= 0.5 ? Math.max(0, (v[a] ** 2 - v[b] ** 2) / (2 * (d[b] - d[a]))) : 0;
   });
+  const brakeHere = windowMax(dec, BRAKE_WIN_M);
 
   const nb = Math.ceil(Math.max(...v) / BIN) + 2;
   const acc = [], brk = [];
@@ -91,7 +108,7 @@ export function buildModel(points) {
   const gear = fillNearest(counts.map((c) => (c.size ? [...c].sort((a, b) => b[1] - a[1])[0][0] : null)));
   return {
     d, heading, kappa, lapLength: d[np - 1], v0: v[0], vTop,
-    grip, accel, brake: binTable(brk, nb, PCT), gear,
+    grip, accel, brake: binTable(brk, nb, PCT), brakeHere, gear,
   };
 }
 
@@ -120,7 +137,7 @@ export function step(m, car, input, dt = DT) {
   if (car.finished) return;
   const off = Math.abs(car.n) > HALF_WIDTH;
   const v0 = car.v;
-  let a = input.brake ? -lookup(m.brake, v0) : input.throttle ? lookup(m.accel, v0) : -COAST_K * v0 * v0;
+  let a = input.brake ? -Math.max(lookup(m.brake, v0), along(m, m.brakeHere, car.s)) : input.throttle ? lookup(m.accel, v0) : -COAST_K * v0 * v0;
   if (v0 >= m.vTop) a = Math.min(a, 0);                 // no faster than the pro's top speed
   // Grass and wall slow you to about 60 km/h but never stop you: below that, accel can be less than the drag.
   if (v0 > SPIN_RESET_V) a -= (off ? GRASS_DRAG : 0) + (Math.abs(car.n) >= WALL ? WALL_SCRUB : 0);

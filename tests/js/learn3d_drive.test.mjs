@@ -228,7 +228,10 @@ function optimalLapTime(m) {
   const v = m.d.map((_, i) => Math.min(m.vTop, Math.sqrt(m.grip[i] / Math.max(Math.abs(m.kappa[i]), 1e-9))));
   v[0] = Math.min(v[0], m.v0);
   for (let i = 0; i < n - 1; i++) v[i + 1] = Math.min(v[i + 1], Math.sqrt(v[i] ** 2 + 2 * lookup(m.accel, v[i]) * ds));
-  for (let i = n - 2; i >= 0; i--) v[i] = Math.min(v[i], Math.sqrt(v[i + 1] ** 2 + 2 * lookup(m.brake, v[i + 1]) * ds));
+  for (let i = n - 2; i >= 0; i--) {
+    const brk = Math.max(lookup(m.brake, v[i + 1]), m.brakeHere[i + 1]);   // as in step()
+    v[i] = Math.min(v[i], Math.sqrt(v[i + 1] ** 2 + 2 * brk * ds));
+  }
   let t = 0;
   for (let i = 0; i < n - 1; i++) t += ds / ((v[i] + v[i + 1]) / 2);
   return t;
@@ -240,6 +243,12 @@ test("grip by place: the fastest lap the model allows on Suzuka stays within 7 %
   assert.ok(best / pro > 0.94, `optimal ${best.toFixed(2)} s vs pro ${pro} s`);   // 4.4 %; speed bins allowed ~8 % here
 });
 
+test("brake by place: the fastest lap the model allows on Spielberg stays within 8 % of the pro", () => {
+  const S = JSON.parse(readFileSync(new URL("./fixtures/spielberg_ver_pro.json", import.meta.url))).points;
+  const pro = S.t[S.t.length - 1], best = optimalLapTime(buildModel(S));
+  assert.ok(best / pro > 0.92, `optimal ${best.toFixed(2)} s vs pro ${pro} s`);   // 6.7 %, the most brakeHere adds of 28 laps (6.1 % without)
+});
+
 test("grip by place: VER's Spielberg lap at its own speed stays on track (no speed-bin hole)", () => {
   const S = JSON.parse(readFileSync(new URL("./fixtures/spielberg_ver_pro.json", import.meta.url))).points;
   const m = buildModel(S);
@@ -247,4 +256,23 @@ test("grip by place: VER's Spielberg lap at its own speed stays on track (no spe
   drive(m, car, proSpeed(S), { maxT: 200 });
   assert.ok(car.finished);
   assert.equal(car.invalid, false);              // the 80-90 km/h bin allowed 15 m/s² where the pro pulls 25
+});
+
+test("brake by place: NOR's Shanghai lap at its own speed stays on track (T14 brakes harder than the table)", () => {
+  const S = JSON.parse(readFileSync(new URL("./fixtures/shanghai_nor_pro.json", import.meta.url))).points;
+  const m = buildModel(S);
+  const car = createCar(m, "assist");
+  drive(m, car, proSpeed(S), { maxT: 200 });
+  assert.ok(car.finished);
+  assert.equal(car.invalid, false);              // the lap-wide table alone went off at 4701 m
+});
+
+test("brake by place: braking is never weaker than the lap-wide table", () => {
+  const S = JSON.parse(readFileSync(new URL("./fixtures/suzuka_pro.json", import.meta.url))).points;
+  const m = buildModel(S);
+  for (let i = 0; i < S.d.length - 1; i += 5) {
+    const v = S.speed[i] / KMH, car = { ...createCar(m, "assist"), s: S.d[i], v };
+    step(m, car, { throttle: 0, brake: 1 });
+    assert.ok(v - car.v >= lookup(m.brake, v) * DT - 1e-9, `at ${S.d[i]} m: ${v - car.v}`);
+  }
 });
