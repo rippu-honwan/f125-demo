@@ -102,6 +102,7 @@ export function youPoints(pro, you) {
     out.x = you.x;
     out.y = you.y;
     out.heading = lineHeadings(out);
+    out.ownLine = true;
   }
   return out;
 }

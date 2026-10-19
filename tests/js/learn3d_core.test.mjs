@@ -136,7 +136,11 @@ test("youPoints drives your own line when you send x/y", () => {
   assert.deepEqual(Y2.d, pro.d);
   assert.equal(Y2.heading.length, n);
   assert.ok(Math.abs(stateAt(Y2, 25.5).heading - Math.PI / 4) < 1e-6);
-  assert.equal(Y.heading, undefined);                // without x/y nothing changes
+  assert.equal(Y2.ownLine, true);
+  const Y3 = youPoints(pro, { ...you, x: undefined, y: undefined });   // without x/y nothing changes
+  assert.equal(Y3.x, pro.x);
+  assert.equal(Y3.heading, undefined);
+  assert.equal(Y3.ownLine, undefined);
 });
 
 test("gapAt is your time minus the pro's at the same distance", () => {

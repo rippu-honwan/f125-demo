@@ -1439,6 +1439,7 @@
 .l3d-minimap { position: absolute; z-index: 1; right: 10px; top: 10px; width: 96px; height: 96px; background: rgba(0, 0, 0, 0.4); border-radius: 8px; }
 .l3d-cams { position: absolute; z-index: 1; right: 10px; bottom: 10px; display: flex; gap: 4px; background: rgba(0, 0, 0, 0.55); border-radius: 9px; padding: 3px; }
 .l3d-cams button { color: #fff; }
+.l3d-cams #l3dLineBtn { margin-left: 6px; }   /* a toggle, not a fourth camera */
 .l3d-corners { max-height: 440px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
 .l3d-crow {
   display: grid; grid-template-columns: 44px 1fr 48px; gap: 6px; text-align: left; padding: 7px 8px;

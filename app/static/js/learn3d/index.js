@@ -69,7 +69,7 @@ const NOTE_PRO_LINE = "Your line isn't available for this lap; your car follows 
 async function start(data, seq) {
   const P = data.points, Y = data.you || null;   // Y: your lap (youPoints) in 3D Compare
   P.heading = lineHeadings(P);                   // stateAt and the scene read it: smooth through stalled points
-  const ownLine = !!Y && Y.x !== P.x;            // the server sent your own line (youPoints swapped x/y in)
+  const ownLine = !!Y && !!Y.ownLine;           // the server sent your own line (youPoints swapped x/y in)
   if (Y && !ownLine) Y.heading = P.heading;      // your lap runs on the pro's line
   $("l3dMsg").hidden = true;
   $("l3dMain").hidden = false;
@@ -77,7 +77,6 @@ async function start(data, seq) {
   $("l3dFollow").hidden = !Y;
   $("l3dTitle").textContent = Y ? "3D Compare" : "3D Pro Lap";
   $("l3dKeys").textContent = Y ? KEYS_COMPARE : KEYS_LEARN;
-  $("l3dLineNote").hidden = !Y;
   $("l3dLineNote").textContent = ownLine ? NOTE_OWN_LINE : NOTE_PRO_LINE;
 
   $("l3dStage").classList.remove("l3d-nogl");
@@ -85,7 +84,7 @@ async function start(data, seq) {
   try {
     const { createScene } = await import("./scene.js");
     if (seq !== loadSeq) return;
-    // Your own line: both cars on their real positions, the pro a see-through ghost where they overlap.
+    // Your own line: both cars on their real positions, the pro drawn see-through so the two can overlap.
     // Otherwise both share the pro's line, side by side.
     const cars = !Y ? [{ color: LEARN_CAR_COLOR, lane: 0 }, { color: hex(YOU_COLOR), lane: 0 }]   // car 1 = you, in Drive only
       : ownLine ? [{ color: hex(PRO_COLOR), lane: 0 }, { color: hex(YOU_COLOR), lane: 0 }]
@@ -116,6 +115,7 @@ async function start(data, seq) {
   }, !!Y);
   $("l3dScrub").max = String(Math.round(end * 10));   // 0.1 s per step
   $("l3dLineBtn").hidden = !ownLine || !scene;
+  $("l3dLineNote").hidden = !Y || !scene;         // no 3D view, no line to explain
   markPressed($("l3dLineBtn"), false);
   if (Y) {
     practice.detach();
