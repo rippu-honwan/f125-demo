@@ -36,6 +36,9 @@ Units inside the simulation are SI: m, s and m/s. `points.speed` is km/h and is 
   - The heading at i is the direction of the chord from the point 15 m back to the point 15 m ahead. Indices wrap, because the lap is a closed loop.
   - The curvature is the change in that heading over the same ±15 m, unwrapped. Positive means a left turn.
   - Chords are used rather than neighbouring points because FastF1 positions stall and jitter by about a metre against `d`: Jeddah has 14 m of `d` where the position stands still or reverses. Neighbour headings there gave impossible 15 m radii at 200 km/h.
+
+> Superseded on 2026-10-19 by `2026-10-19-drive-grip-envelope-design.md`: lateral grip is now per place on the track (`grip[i]`), not per speed bin.
+
 - **`aLatMax(v)`**, the lateral grip available at speed v:
   1. Take the pro's `v² · |kappa|` in 10 km/h speed bins.
   2. Keep the 95th percentile of each bin. A bin with fewer than 10 samples counts as empty.

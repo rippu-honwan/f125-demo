@@ -10,13 +10,16 @@ export const KMH = 3.6;
 export const DT = 1 / 120;                     // fixed physics step (s)
 export const HALF_WIDTH = 7;                   // matches scene.js TRACK_HALF_WIDTH
 export const WALL = 20;                        // invisible wall: max |n| (m)
-// ponytail: the one grip knob. 1.0 = the pro's 95th-percentile lateral G per speed; the bot test holds at 1.0.
-export const GRIP_MARGIN = 1.0;
+// ponytail: the one grip knob. 1.0 = the most lateral g the pro pulled at this place on the track;
+// 2 % on top is slack for braking a touch late (without it Jeddah and Lusail go off at the pro's pace).
+export const GRIP_MARGIN = 1.02;
+export const GRIP_FLOOR = 8;                   // m/s²: steering still works on straights, below every corner apex
+const GRIP_WIN_M = 15;                         // grip at a point = the pro's max lateral g within ± this (m)
 const COAST_K = 0.0008;                        // lift-off drag: COAST_K · v² (m/s²)
 const BIN = 10 / KMH;                          // speed bin width for the limit tables (m/s)
 const PCT = 0.95;                              // percentile taken per bin
 const MIN_SAMPLES = 10;                        // fewer samples than this = empty bin
-const A_LAT_CAP = 6.5 * 9.81;                  // no F1 car pulls more; caps noise in sparse bins
+const A_LAT_CAP = 6.5 * 9.81;                  // no F1 car pulls more; caps curvature spikes
 const SMOOTH_M = 15;                           // chord half-span for heading and curvature (m)
 const GRASS_DRAG = 8, WALL_SCRUB = 15;         // extra decel (m/s²)
 const SPIN_RESET_V = 60 / KMH;
@@ -62,9 +65,17 @@ export function buildModel(points) {
   const hAt = (j) => heading[at(j)] + turn * Math.floor(j / loop);
   const kappa = heading.map((_, i) => (hAt(i + w) - hAt(i - w)) / (2 * w * ds));
 
+  // Lateral grip by place, not by speed: a corner allows what the pro pulled in it. Speed bins mixed corners,
+  // so one corner's limit came from another (too loose), or from corner exits (VER Spielberg: too strict).
+  const lat = v.map((vi, i) => Math.min(A_LAT_CAP, vi * vi * Math.abs(kappa[i])));
+  const gw = Math.max(1, Math.round(GRIP_WIN_M / ds));
+  const grip = lat.map((_, i) => {
+    let g = 0;
+    for (let j = i - gw; j <= i + gw; j++) g = Math.max(g, lat[at(j)]);
+    return Math.max(GRIP_FLOOR, g * GRIP_MARGIN);
+  });
+
   const nb = Math.ceil(Math.max(...v) / BIN) + 2;
-  const aLat = binTable(v.map((vi, i) => [vi, vi * vi * Math.abs(kappa[i])]), nb, PCT);
-  for (let i = 1; i < nb; i++) aLat[i] = Math.max(aLat[i], aLat[i - 1]);   // downforce: grip never drops with speed
   const acc = [], brk = [];
   for (let i = 0; i < np - 1; i++) {
     const a = (v[i + 1] ** 2 - v[i] ** 2) / (2 * (d[i + 1] - d[i]));
@@ -80,7 +91,7 @@ export function buildModel(points) {
   const gear = fillNearest(counts.map((c) => (c.size ? [...c].sort((a, b) => b[1] - a[1])[0][0] : null)));
   return {
     d, heading, kappa, lapLength: d[np - 1], v0: v[0], vTop,
-    aLat: aLat.map((a) => Math.min(A_LAT_CAP, a) * GRIP_MARGIN), accel, brake: binTable(brk, nb, PCT), gear,
+    grip, accel, brake: binTable(brk, nb, PCT), gear,
   };
 }
 
@@ -116,7 +127,7 @@ export function step(m, car, input, dt = DT) {
   car.v = Math.max(0, v0 + a * dt);
 
   const k = along(m, m.kappa, car.s);
-  const kMax = lookup(m.aLat, car.v) * (off ? 0.5 : 1) / Math.max(car.v, 5) ** 2;
+  const kMax = along(m, m.grip, car.s) * (off ? 0.5 : 1) / Math.max(car.v, 5) ** 2;
   let steer;
   if (car.mode === "assist") {                                // pure pursuit on the line, L m ahead
     const L = Math.max(10, 0.5 * car.v);
