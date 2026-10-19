@@ -5,8 +5,9 @@ import numpy as np
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
+from scipy.spatial import cKDTree
 
-from app.main import _build_you_lap, app
+from app.main import LINE_FIT_MAX_M, _build_you_lap, _fit_line, app
 
 
 def _aligned(game_anch=(0.0, 1000.0), real_anch=(0.0, 1000.0), speed=180.0):
@@ -25,6 +26,55 @@ def _aligned(game_anch=(0.0, 1000.0), real_anch=(0.0, 1000.0), speed=180.0):
 
 
 GRID = np.arange(0.0, 1000.0 + 1e-9, 2.0)
+REF_LAPS = Path(__file__).resolve().parents[1] / "data" / "reference_laps"
+
+
+def _loop(n, bump=0.0):
+    """A closed, non-symmetric ~2.3 km loop of n points. `bump` m sideways over one stretch (a different line)."""
+    t = np.linspace(0, 2 * np.pi, n, endpoint=False)
+    xy = np.c_[400 * np.cos(t) + 100 * np.cos(2 * t), 250 * np.sin(t)]
+    tang = np.gradient(xy, axis=0)
+    tang /= np.linalg.norm(tang, axis=1)[:, None]
+    normal = np.c_[-tang[:, 1], tang[:, 0]]
+    w = np.where((t > 1.0) & (t < 1.6), np.sin((t - 1.0) / 0.6 * np.pi) ** 2, 0.0)
+    return xy + bump * w[:, None] * normal, w
+
+
+def _to_game_frame(xy):
+    """Mirror, rotate 30°, scale 1.05 and shift: a different frame, like the game's."""
+    a = np.radians(30)
+    rot = np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]])
+    return (1.05 * xy * [1, -1]) @ rot.T + [1000, -500]
+
+
+class TestFitLine:
+    def test_recovers_a_line_change_through_another_frame(self):
+        pro, _ = _loop(1000)
+        you, w = _loop(2400, bump=3.0)
+        out, median = _fit_line(_to_game_frame(you), pro)
+        dense, _ = _loop(20000)
+        dist = cKDTree(dense).query(out)[0]
+        assert median < 0.5
+        assert dist[w > 0.95].max() == pytest.approx(3.0, abs=0.5)   # the 3 m wider stretch survives; the fit absorbs a little
+        assert np.median(dist[w == 0]) < 0.3                          # the rest lies on the pro's line
+
+    def test_unrelated_path_fails_the_gate(self):
+        pro, _ = _loop(1000)
+        noise = np.random.default_rng(0).uniform(-500, 500, (2000, 2))
+        assert _fit_line(noise, pro)[1] > LINE_FIT_MAX_M
+
+    def test_shrunk_fit_fails_the_gate(self):
+        # Right shape, half the size: matching it would need a 2x scale, which no real lap needs.
+        pro, _ = _loop(1000)
+        assert _fit_line(_to_game_frame(_loop(2000)[0]) * 0.5, pro)[1] > LINE_FIT_MAX_M
+
+    def test_other_track_fails_the_gate(self):
+        # Monaco fitted onto Suzuka: ICP shrinks it onto a short stretch (scale ~0.04, median ~3 m).
+        def line(name):
+            df = pd.read_pickle(REF_LAPS / name)[0]
+            return df[["world_position_X", "world_position_Y"]].to_numpy(dtype=float) / 10
+        game = line("2025_lec_q_monaco.pkl") * [1, -1]
+        assert _fit_line(game, line("2025_ver_q_suzuka.pkl"))[1] > LINE_FIT_MAX_M
 
 
 class TestBuildYouLap:
@@ -74,6 +124,26 @@ class TestBuildYouLap:
         assert np.all(np.diff(t) > 0)
         assert t[-1] == pytest.approx(20.0, abs=0.01)
 
+    def test_adds_your_line_when_the_game_path_fits(self):
+        aligned = _aligned()
+        pro, _ = _loop(GRID.size)
+        game, _ = _loop(len(aligned))
+        aligned["game_world_x"], aligned["game_world_y"] = _to_game_frame(game).T
+        you = _build_you_lap(aligned, GRID, 20.0, pro_xy=pro)
+        assert len(you["x"]) == len(you["y"]) == GRID.size
+        assert np.median(np.hypot(np.array(you["x"]) - pro[:, 0], np.array(you["y"]) - pro[:, 1])) < 3.0
+
+    def test_no_line_when_the_game_path_does_not_fit(self):
+        aligned = _aligned()
+        pro, _ = _loop(GRID.size)
+        aligned["game_world_x"], aligned["game_world_y"] = np.random.default_rng(0).uniform(-500, 500, (2, len(aligned)))
+        you = _build_you_lap(aligned, GRID, 20.0, pro_xy=pro)
+        assert "x" not in you and "y" not in you
+
+    def test_no_line_without_game_positions(self):
+        pro, _ = _loop(GRID.size)
+        assert "x" not in _build_you_lap(_aligned(), GRID, 20.0, pro_xy=pro)
+
 
 client = TestClient(app)
 SAMPLE = Path(__file__).resolve().parents[1] / "data" / "suzuka_sample.csv"
@@ -96,7 +166,15 @@ class TestCompare3DEndpoint:
         assert set(payload["pro"]) >= {"meta", "points", "corners"}
         meta = payload["pro"]["meta"]
         assert (meta["driver"], meta["year"], meta["session"], meta["track"]) == ("VER", 2025, "Q", "suzuka")
-        assert set(payload["you"]) == {"t", "speed", "throttle", "brake", "gear"}
+        assert set(payload["you"]) == {"t", "speed", "throttle", "brake", "gear", "x", "y"}
+
+    def test_your_line_stays_on_the_track(self, payload):
+        p = payload["pro"]["points"]
+        pro = np.c_[p["x"], p["y"]]
+        you = np.c_[payload["you"]["x"], payload["you"]["y"]]
+        dist = cKDTree(pro).query(you)[0]
+        assert np.median(dist) < 4.0       # measured 2.0 m on this lap
+        assert dist.max() < 15.0           # never far off the road
 
     def test_you_shares_the_pro_grid(self, payload):
         n = len(payload["pro"]["points"]["d"])

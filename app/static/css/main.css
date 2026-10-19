@@ -1439,6 +1439,7 @@
 .l3d-minimap { position: absolute; z-index: 1; right: 10px; top: 10px; width: 96px; height: 96px; background: rgba(0, 0, 0, 0.4); border-radius: 8px; }
 .l3d-cams { position: absolute; z-index: 1; right: 10px; bottom: 10px; display: flex; gap: 4px; background: rgba(0, 0, 0, 0.55); border-radius: 9px; padding: 3px; }
 .l3d-cams button { color: #fff; }
+.l3d-cams #l3dLineBtn { margin-left: 6px; }   /* a toggle, not a fourth camera */
 .l3d-corners { max-height: 440px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
 .l3d-crow {
   display: grid; grid-template-columns: 44px 1fr 48px; gap: 6px; text-align: left; padding: 7px 8px;
@@ -1458,6 +1459,7 @@
 .l3d-controls input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
 .l3d-time { font: 600 0.85rem var(--font-body); color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .l3d-keys { margin-top: 6px; font-size: 0.72rem; color: var(--text-dim); }
+.l3d-note { margin-top: 4px; font-size: 0.72rem; color: var(--text-dim); }
 .l3d-msg { padding: 16px; color: var(--text-dim); }
 .l3d-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .l3d-chip { background: var(--surface-2); border: 1px solid var(--border-strong); color: var(--text); border-radius: 999px; padding: 4px 10px; cursor: pointer; font: 0.8rem var(--font-body); }

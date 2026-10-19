@@ -1176,6 +1176,8 @@ def _run_comparison(csv_path: str, mode: str, driver: str, year: int,
 PRO_LAP_SESSIONS = {"Q", "R", "S", "SQ", "SS", "FP1", "FP2", "FP3"}
 PRO_LAP_FIRST_YEAR = 2018     # FastF1 has car telemetry from 2018 on
 PRO_LAP_STEP_M = 2.0          # sample spacing sent to the browser
+LINE_FIT_MAX_M = 4.0          # 3D Compare drops your line when it sits further than this (median) from the pro's
+LINE_FIT_MAX_SCALE = 0.1      # ...or when the fit had to resize it by more than this: both frames are metres
 BRAKE_SEARCH_LEAD_M = 250.0   # earliest lift point considered before a corner's entry
 APEX_MARGIN_M = 30.0          # a lift this close to an apex belongs to the next corner
 LIFT_THROTTLE = 0.9           # throttle below this (without braking) counts as a lift
@@ -1377,13 +1379,56 @@ def _build_pro_lap(df, meta: dict, track_info: dict, step: float = PRO_LAP_STEP_
     }
 
 
-def _build_you_lap(aligned, d_grid, lap_time: float) -> dict:
+def _fit_line(game_xy, pro_xy, rounds: int = 30):
+    """Map your game path onto the pro lap's frame: a similarity fit, then ICP onto the pro's line.
+
+    Both are (n, 2) arrays in lap order, in any frame (the game's can be mirrored, rotated,
+    scaled and shifted against FastF1's). The first fit pairs points at the same fraction of
+    the lap; each ICP round refits against the nearest point on the pro's line, so distance
+    drift between the two laps doesn't skew the shape. Returns (your path in the pro's
+    frame, median distance in metres from it to the pro's line). The distance is inf when the
+    fit resized your path by more than LINE_FIT_MAX_SCALE: ICP can shrink another track's
+    lap onto a short stretch of this one and still land close to it.
+
+    Not ``game_world_x_aligned`` from ``src.alignment``: that transform is only gated at
+    150 m, while line differences are a few metres.
+    """
+    from scipy.spatial import cKDTree
+
+    def similarity(a, b):        # least-squares rotation (mirror allowed), uniform scale and shift: a -> b
+        ma, mb = a.mean(0), b.mean(0)
+        u, s, vt = np.linalg.svd((a - ma).T @ (b - mb))
+        r = vt.T @ u.T
+        k = s.sum() / ((a - ma) ** 2).sum()
+        return lambda p: k * (p - ma) @ r.T + mb
+
+    def at_fraction(xy, n):
+        i = np.linspace(0, len(xy) - 1, n)
+        return np.c_[np.interp(i, np.arange(len(xy)), xy[:, 0]), np.interp(i, np.arange(len(xy)), xy[:, 1])]
+
+    game_xy, pro_xy = np.asarray(game_xy, dtype=float), np.asarray(pro_xy, dtype=float)
+    dense = at_fraction(pro_xy, 4 * len(pro_xy))   # nearest-vertex error well under a metre
+    tree = cKDTree(dense)
+    fit = similarity(at_fraction(game_xy, 2000), at_fraction(pro_xy, 2000))
+    for _ in range(rounds):
+        _, idx = tree.query(fit(game_xy))
+        fit = similarity(game_xy, dense[idx])
+    out = fit(game_xy)
+    scale = np.linalg.norm(out - out.mean(0)) / np.linalg.norm(game_xy - game_xy.mean(0))
+    if abs(scale - 1) > LINE_FIT_MAX_SCALE:
+        return out, float("inf")
+    return out, float(np.median(tree.query(out)[0]))
+
+
+def _build_you_lap(aligned, d_grid, lap_time: float, pro_xy=None) -> dict:
     """Your game lap resampled onto the pro lap's distance grid, for the 3D compare view.
 
     ``aligned`` has one row per game metre; the pipeline's alignment anchors
     (``aligned.attrs``) map each game metre to real lap distance, the axis ``d_grid``
     (from ``_build_pro_lap``) uses. Time comes from integrating game speed, pinned to
-    ``lap_time`` like the pro lap.
+    ``lap_time`` like the pro lap. With ``pro_xy`` (the pro's x/y on ``d_grid``), your game
+    path is fitted onto it (``_fit_line``) and returned as ``x``/``y``, unless it sits more
+    than LINE_FIT_MAX_M from the pro's line, or the game positions are missing.
     """
     game_d = aligned["lap_distance"].to_numpy(dtype=float)
     game_anch = np.asarray(aligned.attrs["game_anch_d"], dtype=float)
@@ -1404,13 +1449,24 @@ def _build_you_lap(aligned, d_grid, lap_time: float) -> dict:
     def rnd(values, digits):
         return [round(float(x), digits) for x in values]
 
-    return {
+    you = {
         "t": rnd(col(t), 3),
         "speed": rnd(col(aligned["game_speed_kmh"]), 1),
         "throttle": rnd(col(aligned["game_throttle"]), 3),
         "brake": rnd(col(aligned["game_brake"]), 3),
         "gear": [int(g) for g in np.rint(col(aligned["game_gear"]))],
     }
+    if pro_xy is not None and {"game_world_x", "game_world_y"} <= set(aligned.columns):
+        game_xy = aligned[["game_world_x", "game_world_y"]].to_numpy(dtype=float)
+        if np.isfinite(game_xy).all():
+            try:
+                xy, median = _fit_line(game_xy, pro_xy)
+            except (ValueError, np.linalg.LinAlgError):
+                traceback.print_exc()
+            else:
+                if median <= LINE_FIT_MAX_M:
+                    you["x"], you["y"] = rnd(col(xy[:, 0]), 2), rnd(col(xy[:, 1]), 2)
+    return you
 
 
 def _validate_lap_params(driver: str, session: str, year: int) -> None:
@@ -1439,7 +1495,8 @@ def _compare_3d_payload(payload: dict, aligned, report, driver: str, year: int,
         # ponytail: run_pipeline doesn't return its real lap; this second load hits the pkl cache.
         df, meta = load_real_telemetry(driver, int(year), session, track)
         pro = _pro_lap_payload(df, meta, driver, year, session, track)
-        you = _build_you_lap(aligned, pro["points"]["d"], float(report.game_time))
+        you = _build_you_lap(aligned, pro["points"]["d"], float(report.game_time),
+                             pro_xy=np.c_[pro["points"]["x"], pro["points"]["y"]])
     except Exception:
         traceback.print_exc()
         raise HTTPException(status_code=422, detail="No 3D data for this lap")

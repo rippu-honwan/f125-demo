@@ -117,6 +117,32 @@ test("youPoints keeps the pro's line and swaps in your timing and inputs", () =>
   assert.equal(s.gear, 2);
 });
 
+test("youPoints drives your own line when you send x/y", () => {
+  // 51 points / 100 m: lineHeadings treats the path as a closed lap, so only check away from the ends.
+  const n = 51, idx = Array.from({ length: n }, (_, i) => i);
+  const pro = {
+    d: idx.map((i) => 2 * i), t: idx, x: idx.map((i) => 2 * i), y: idx.map(() => 0), z: idx.map(() => 1),
+    speed: idx.map(() => 100), throttle: idx.map(() => 1), brake: idx.map(() => 0), steer: idx.map(() => 0),
+    gear: idx.map(() => 5),
+  };
+  const you = {
+    t: idx, speed: pro.speed, throttle: pro.throttle, brake: pro.brake, gear: pro.gear,
+    x: idx.map((i) => i * Math.SQRT2), y: idx.map((i) => i * Math.SQRT2),   // 2 m steps, 45° off the pro's line
+  };
+  const Y2 = youPoints(pro, you);
+  assert.deepEqual(Y2.x, you.x);
+  assert.deepEqual(Y2.y, you.y);
+  assert.deepEqual(Y2.z, pro.z);                      // road height stays the pro's
+  assert.deepEqual(Y2.d, pro.d);
+  assert.equal(Y2.heading.length, n);
+  assert.ok(Math.abs(stateAt(Y2, 25.5).heading - Math.PI / 4) < 1e-6);
+  assert.equal(Y2.ownLine, true);
+  const Y3 = youPoints(pro, { ...you, x: undefined, y: undefined });   // without x/y nothing changes
+  assert.equal(Y3.x, pro.x);
+  assert.equal(Y3.heading, undefined);
+  assert.equal(Y3.ownLine, undefined);
+});
+
 test("gapAt is your time minus the pro's at the same distance", () => {
   assert.equal(gapAt(P, Y, 0), 0);
   assert.equal(gapAt(P, Y, 15), 1.5);   // you 3.0 s, pro 1.5 s
