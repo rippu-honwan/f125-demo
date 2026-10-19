@@ -49,11 +49,12 @@ One new constant: `BRAKE_WIN_M = 30`. There is no margin.
 ## 4. Tests (`tests/js/learn3d_drive.test.mjs`)
 
 - **Shanghai regression.** New fixture `tests/js/fixtures/shanghai_nor_pro.json`: NOR's 2025 Q lap points from `/pro_lap`, in the same format as the Spielberg fixture. The simple bot following the pro's speed finishes and stays on track. With today's model it goes off at 4701 m.
+- **Optimal-lap bound on Spielberg.** VER's Spielberg lap is where `brakeHere` loosens the model most (optimal lap 6.1 % → 6.7 % faster than the pro). A new test keeps it at most 8 % faster.
 - **Never stricter.** On the Suzuka fixture, one braking step from the pro's speed at every point slows the car by at least `lookup(m.brake, v) · DT`. This guards the "larger of" rule.
 - **Optimal-lap helper.** `optimalLapTime(m)` in the test file brakes with the same larger-of limit. The Suzuka bound (at most 6 % faster than the pro) still holds.
 - The other existing tests pass unchanged.
 
 ## 5. Risks
 
-- **Envelope picks up noise.** A spike in the pro's speed trace could raise the limit locally. The 15 m chord damps this, and the optimal-lap test bounds the effect on Suzuka.
+- **Envelope picks up noise.** A spike in the pro's speed trace could raise the limit locally. The ±15 m chord damps this; the largest single-sample glitch in the 28 laps (3.7 km/h) moves it by at most about 3 m/s². The optimal-lap tests bound the effect on Suzuka and Spielberg.
 - **Slightly looser.** The median optimal-lap slack rises from 6.1 % to 6.5 %. That is the price of keeping the table as a floor.

@@ -15,7 +15,7 @@ export const WALL = 20;                        // invisible wall: max |n| (m)
 export const GRIP_MARGIN = 1.02;
 export const GRIP_FLOOR = 8;                   // m/s²: steering still works on straights, below every corner apex
 const GRIP_WIN_M = 15;                         // grip at a point = the pro's max lateral g within ± this (m)
-const BRAKE_WIN_M = 30;                        // braking at a point may be as hard as the pro's hardest within ± this (m)
+const BRAKE_WIN_M = 30;                        // braking at a point may be as hard as the pro's hardest within ± this (m), each over the heading chord
 const COAST_K = 0.0008;                        // lift-off drag: COAST_K · v² (m/s²)
 const BIN = 10 / KMH;                          // speed bin width for the limit tables (m/s)
 const PCT = 0.95;                              // percentile taken per bin
@@ -66,7 +66,7 @@ export function buildModel(points) {
   const hAt = (j) => heading[at(j)] + turn * Math.floor(j / loop);
   const kappa = heading.map((_, i) => (hAt(i + w) - hAt(i - w)) / (2 * w * ds));
 
-  /** Max of arr over ± halfM metres around each point, wrapping round the lap. */
+  /** Max of a non-negative arr over ± halfM metres around each point, wrapping round the lap. */
   const windowMax = (arr, halfM) => {
     const g = Math.max(1, Math.round(halfM / ds));
     return arr.map((_, i) => {
@@ -84,6 +84,8 @@ export function buildModel(points) {
   // Braking by place, on top of the lap-wide table: where the pro braked harder than the table allows
   // (NOR Shanghai T14, ~34 m/s²), braking at the pro's point still makes the corner. Measured over the
   // heading chord, because sample-to-sample deceleration is too noisy to take a max of.
+  // ponytail: one peak covers the whole zone, so its slow tail allows more than the pro needed there
+  // (+0.3 % optimal-lap slack over 28 laps); scale it by speed if that ever matters.
   const dec = v.map((_, i) => {
     const a = Math.max(0, i - w), b = Math.min(np - 1, i + w);
     return points.brake[i] >= 0.5 ? Math.max(0, (v[a] ** 2 - v[b] ** 2) / (2 * (d[b] - d[a]))) : 0;

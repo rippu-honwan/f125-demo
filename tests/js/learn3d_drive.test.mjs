@@ -243,6 +243,12 @@ test("grip by place: the fastest lap the model allows on Suzuka stays within 7 %
   assert.ok(best / pro > 0.94, `optimal ${best.toFixed(2)} s vs pro ${pro} s`);   // 4.4 %; speed bins allowed ~8 % here
 });
 
+test("brake by place: the fastest lap the model allows on Spielberg stays within 8 % of the pro", () => {
+  const S = JSON.parse(readFileSync(new URL("./fixtures/spielberg_ver_pro.json", import.meta.url))).points;
+  const pro = S.t[S.t.length - 1], best = optimalLapTime(buildModel(S));
+  assert.ok(best / pro > 0.92, `optimal ${best.toFixed(2)} s vs pro ${pro} s`);   // 6.7 %, the most brakeHere adds of 28 laps (6.1 % without)
+});
+
 test("grip by place: VER's Spielberg lap at its own speed stays on track (no speed-bin hole)", () => {
   const S = JSON.parse(readFileSync(new URL("./fixtures/spielberg_ver_pro.json", import.meta.url))).points;
   const m = buildModel(S);
