@@ -1176,6 +1176,7 @@ def _run_comparison(csv_path: str, mode: str, driver: str, year: int,
 PRO_LAP_SESSIONS = {"Q", "R", "S", "SQ", "SS", "FP1", "FP2", "FP3"}
 PRO_LAP_FIRST_YEAR = 2018     # FastF1 has car telemetry from 2018 on
 PRO_LAP_STEP_M = 2.0          # sample spacing sent to the browser
+LINE_FIT_MAX_M = 4.0          # 3D Compare drops your line when it sits further than this (median) from the pro's
 BRAKE_SEARCH_LEAD_M = 250.0   # earliest lift point considered before a corner's entry
 APEX_MARGIN_M = 30.0          # a lift this close to an apex belongs to the next corner
 LIFT_THROTTLE = 0.9           # throttle below this (without braking) counts as a lift
@@ -1360,6 +1361,39 @@ def _build_pro_lap(df, meta: dict, track_info: dict, step: float = PRO_LAP_STEP_
         },
         "corners": _corner_actions(track_info.get("corners", []), d, t, speed, throttle, brake, gear),
     }
+
+
+def _fit_line(game_xy, pro_xy, rounds: int = 30):
+    """Map your game path onto the pro lap's frame: a similarity fit, then ICP onto the pro's line.
+
+    Both are (n, 2) arrays in lap order, in any frame (the game's can be mirrored, rotated,
+    scaled and shifted against FastF1's). The first fit pairs points at the same fraction of
+    the lap; each ICP round refits against the nearest point on the pro's line, so distance
+    drift between the two laps doesn't skew the shape. Returns (your path in the pro's
+    frame, median distance in metres from it to the pro's line).
+    """
+    from scipy.spatial import cKDTree
+
+    def similarity(a, b):        # least-squares rotation (mirror allowed), uniform scale and shift: a -> b
+        ma, mb = a.mean(0), b.mean(0)
+        u, s, vt = np.linalg.svd((a - ma).T @ (b - mb))
+        r = vt.T @ u.T
+        k = s.sum() / ((a - ma) ** 2).sum()
+        return lambda p: k * (p - ma) @ r.T + mb
+
+    def at_fraction(xy, n):
+        i = np.linspace(0, len(xy) - 1, n)
+        return np.c_[np.interp(i, np.arange(len(xy)), xy[:, 0]), np.interp(i, np.arange(len(xy)), xy[:, 1])]
+
+    game_xy, pro_xy = np.asarray(game_xy, dtype=float), np.asarray(pro_xy, dtype=float)
+    dense = at_fraction(pro_xy, 4 * len(pro_xy))   # nearest-vertex error well under a metre
+    tree = cKDTree(dense)
+    fit = similarity(at_fraction(game_xy, 2000), at_fraction(pro_xy, 2000))
+    for _ in range(rounds):
+        _, idx = tree.query(fit(game_xy))
+        fit = similarity(game_xy, dense[idx])
+    out = fit(game_xy)
+    return out, float(np.median(tree.query(out)[0]))
 
 
 def _build_you_lap(aligned, d_grid, lap_time: float) -> dict:

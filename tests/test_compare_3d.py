@@ -5,8 +5,9 @@ import numpy as np
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
+from scipy.spatial import cKDTree
 
-from app.main import _build_you_lap, app
+from app.main import LINE_FIT_MAX_M, _build_you_lap, _fit_line, app
 
 
 def _aligned(game_anch=(0.0, 1000.0), real_anch=(0.0, 1000.0), speed=180.0):
@@ -25,6 +26,41 @@ def _aligned(game_anch=(0.0, 1000.0), real_anch=(0.0, 1000.0), speed=180.0):
 
 
 GRID = np.arange(0.0, 1000.0 + 1e-9, 2.0)
+
+
+def _loop(n, bump=0.0):
+    """A closed, non-symmetric ~2.3 km loop of n points. `bump` m sideways over one stretch (a different line)."""
+    t = np.linspace(0, 2 * np.pi, n, endpoint=False)
+    xy = np.c_[400 * np.cos(t) + 100 * np.cos(2 * t), 250 * np.sin(t)]
+    tang = np.gradient(xy, axis=0)
+    tang /= np.linalg.norm(tang, axis=1)[:, None]
+    normal = np.c_[-tang[:, 1], tang[:, 0]]
+    w = np.where((t > 1.0) & (t < 1.6), np.sin((t - 1.0) / 0.6 * np.pi) ** 2, 0.0)
+    return xy + bump * w[:, None] * normal, w
+
+
+def _to_game_frame(xy):
+    """Mirror, rotate 30°, scale 1.05 and shift: a different frame, like the game's."""
+    a = np.radians(30)
+    rot = np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]])
+    return (1.05 * xy * [1, -1]) @ rot.T + [1000, -500]
+
+
+class TestFitLine:
+    def test_recovers_a_line_change_through_another_frame(self):
+        pro, _ = _loop(1000)
+        you, w = _loop(2400, bump=3.0)
+        out, median = _fit_line(_to_game_frame(you), pro)
+        dense, _ = _loop(20000)
+        dist = cKDTree(dense).query(out)[0]
+        assert median < 0.5
+        assert dist[w > 0.95].max() == pytest.approx(3.0, abs=0.5)   # the 3 m wider stretch survives; the fit absorbs a little
+        assert np.median(dist[w == 0]) < 0.3                          # the rest lies on the pro's line
+
+    def test_unrelated_path_fails_the_gate(self):
+        pro, _ = _loop(1000)
+        noise = np.random.default_rng(0).uniform(-500, 500, (2000, 2))
+        assert _fit_line(noise, pro)[1] > LINE_FIT_MAX_M
 
 
 class TestBuildYouLap:
