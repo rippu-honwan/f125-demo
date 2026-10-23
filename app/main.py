@@ -1344,7 +1344,8 @@ def _real_corners(track_info: dict) -> list:
 
     tracks/*.json distances follow the game's lap. ``game_offset_m``: the game's lap distance
     runs this far ahead of FastF1's at the same place (FastF1's lap starts after the game's
-    line; scripts/measure_game_offset.py). ``real_length_m``: the game's model is a different
+    line), measured against the track's first cached pro lap, so another driver's lap may sit a
+    few metres off (scripts/measure_game_offset.py). ``real_length_m``: the game's model is a different
     size from the real circuit (Mexico: 4525 m vs 4304 m). Both are taken back off, in whole
     metres like every other track file; files with neither are returned as they are.
     """
