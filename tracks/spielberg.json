@@ -3,17 +3,18 @@
   "country": "Austria",
   "short": "spielberg",
   "length_m": 4318,
+  "game_offset_m": 35,
   "corners": [
-    {"id": 1, "name": "Turn 1", "short": "T1", "type": "medium_speed", "direction": "right", "entry_m": 346, "apex_m": 426, "exit_m": 506},
-    {"id": 2, "name": "Turn 2", "short": "T2", "type": "high_speed", "direction": "left", "entry_m": 994, "apex_m": 1074, "exit_m": 1154},
-    {"id": 3, "name": "Turn 3", "short": "T3", "type": "low_speed", "direction": "right", "entry_m": 1288, "apex_m": 1368, "exit_m": 1448},
-    {"id": 4, "name": "Turn 4", "short": "T4", "type": "low_speed", "direction": "right", "entry_m": 2106, "apex_m": 2186, "exit_m": 2266},
-    {"id": 5, "name": "Turn 5", "short": "T5", "type": "medium_speed", "direction": "right", "entry_m": 2302, "apex_m": 2382, "exit_m": 2462},
-    {"id": 6, "name": "Turn 6", "short": "T6", "type": "medium_speed", "direction": "left", "entry_m": 2629, "apex_m": 2709, "exit_m": 2789},
-    {"id": 7, "name": "Turn 7", "short": "T7", "type": "high_speed", "direction": "left", "entry_m": 2954, "apex_m": 3034, "exit_m": 3114},
-    {"id": 8, "name": "Turn 8", "short": "T8", "type": "high_speed", "direction": "right", "entry_m": 3155, "apex_m": 3235, "exit_m": 3315},
-    {"id": 9, "name": "Turn 9", "short": "T9", "type": "high_speed", "direction": "right", "entry_m": 3684, "apex_m": 3764, "exit_m": 3844},
-    {"id": 10, "name": "Turn 10", "short": "T10", "type": "medium_speed", "direction": "right", "entry_m": 3881, "apex_m": 3961, "exit_m": 4041}
+    {"id": 1, "name": "Turn 1", "short": "T1", "type": "medium_speed", "direction": "right", "entry_m": 381, "apex_m": 461, "exit_m": 541},
+    {"id": 2, "name": "Turn 2", "short": "T2", "type": "high_speed", "direction": "left", "entry_m": 1029, "apex_m": 1109, "exit_m": 1189},
+    {"id": 3, "name": "Turn 3", "short": "T3", "type": "low_speed", "direction": "right", "entry_m": 1323, "apex_m": 1403, "exit_m": 1483},
+    {"id": 4, "name": "Turn 4", "short": "T4", "type": "low_speed", "direction": "right", "entry_m": 2141, "apex_m": 2221, "exit_m": 2301},
+    {"id": 5, "name": "Turn 5", "short": "T5", "type": "medium_speed", "direction": "right", "entry_m": 2337, "apex_m": 2417, "exit_m": 2497},
+    {"id": 6, "name": "Turn 6", "short": "T6", "type": "medium_speed", "direction": "left", "entry_m": 2664, "apex_m": 2744, "exit_m": 2824},
+    {"id": 7, "name": "Turn 7", "short": "T7", "type": "high_speed", "direction": "left", "entry_m": 2989, "apex_m": 3069, "exit_m": 3149},
+    {"id": 8, "name": "Turn 8", "short": "T8", "type": "high_speed", "direction": "right", "entry_m": 3190, "apex_m": 3270, "exit_m": 3350},
+    {"id": 9, "name": "Turn 9", "short": "T9", "type": "high_speed", "direction": "right", "entry_m": 3719, "apex_m": 3799, "exit_m": 3879},
+    {"id": 10, "name": "Turn 10", "short": "T10", "type": "medium_speed", "direction": "right", "entry_m": 3916, "apex_m": 3996, "exit_m": 4076}
   ],
   "compound_zones": [],
   "sectors": [

@@ -1334,19 +1334,26 @@ def _corner_actions(corners, d, t, speed, throttle, brake, gear) -> list:
     return out
 
 
-def _real_corners(track_info: dict) -> list:
-    """The file's corners on the real circuit, for the FastF1 pro lap.
+def _is_position(key: str, value) -> bool:
+    """A corner field that is a lap distance (``apex_m``, ``brake_start_m``, ...), not a spread (``*_iqr_m``)."""
+    return key.endswith("_m") and not key.endswith("_iqr_m") and isinstance(value, (int, float)) and not isinstance(value, bool)
 
-    tracks/*.json distances follow the game's lap. Where the game's model is a different
-    size from the real circuit (Mexico: 4525 m vs 4304 m), the file gives ``real_length_m``
-    and the corners are scaled back to it, in whole metres like every other track file;
-    elsewhere they are returned as they are.
+
+def _real_corners(track_info: dict) -> list:
+    """The file's corners on the FastF1 pro lap's distance, for the 3D views.
+
+    tracks/*.json distances follow the game's lap. ``game_offset_m``: the game's lap distance
+    runs this far ahead of FastF1's at the same place (FastF1's lap starts after the game's
+    line; scripts/measure_game_offset.py). ``real_length_m``: the game's model is a different
+    size from the real circuit (Mexico: 4525 m vs 4304 m). Both are taken back off, in whole
+    metres like every other track file; files with neither are returned as they are.
     """
     corners = track_info.get("corners", [])
-    if "real_length_m" not in track_info:
+    if "real_length_m" not in track_info and "game_offset_m" not in track_info:
         return corners
-    k = float(track_info["real_length_m"]) / float(track_info["length_m"])
-    return [{**c, **{f: round(c[f] * k) for f in ("entry_m", "apex_m", "exit_m")}} for c in corners]
+    off = float(track_info.get("game_offset_m", 0))
+    k = float(track_info.get("real_length_m", track_info["length_m"])) / float(track_info["length_m"])
+    return [{f: round((v - off) * k) if _is_position(f, v) else v for f, v in c.items()} for c in corners]
 
 
 def _build_pro_lap(df, meta: dict, track_info: dict, step: float = PRO_LAP_STEP_M) -> dict:

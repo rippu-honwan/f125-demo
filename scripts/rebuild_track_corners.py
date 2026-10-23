@@ -5,7 +5,8 @@ For each track this takes the official corner markers (FastF1 circuit info),
 projects them onto the cached pro lap in data/reference_laps/, and rewrites
 the "corners" array:
 
-  * apex_m  = official corner distance along the lap, scaled to the file's length_m
+  * apex_m  = official corner distance along the lap, scaled to the file's length_m, plus its
+              game_offset_m (scripts/measure_game_offset.py), so it sits on the game's lap
   * entry_m = apex - min(80 m, half the gap to the previous corner); exit_m likewise
   * direction and speed class (type) come from the pro lap; the hand values
     disagreed with the real geometry on about half the corners
@@ -69,10 +70,10 @@ def rebuild(track: str, data: dict, df: pd.DataFrame) -> tuple:
     """(new corners, report lines)."""
     off = official_corners(track, df)
     old = sorted(data["corners"], key=lambda c: float(c["apex_m"]))
-    # FastF1 laps run short of the game's (~0.5 %; Mexico ~5 %, the game's model is bigger);
-    # store distances on the file's own length_m scale.
+    # FastF1 laps run short of the game's (~0.5 %; Mexico ~5 %, the game's model is bigger) and start
+    # after its line: store distances on the game's lap, the file's length_m scale plus game_offset_m.
     scale = float(data["length_m"]) / float(df["lap_distance"].iloc[-1])
-    apex = [round(r[1] * scale) for r in off]
+    apex = [round(r[1] * scale) + data.get("game_offset_m", 0) for r in off]
     gaps = [int(g) for g in np.diff(apex)]
     before = [HALF_SPAN_M] + [min(HALF_SPAN_M, g // 2) for g in gaps]
     after = [min(HALF_SPAN_M, g // 2) for g in gaps] + [min(HALF_SPAN_M, int(data["length_m"] - apex[-1]))]

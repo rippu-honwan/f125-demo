@@ -26,7 +26,7 @@ def test_sectors_and_corners_cover_the_game_lap():
     mex = _track("mexico_city")
     assert mex["length_m"] == GAME_LENGTH
     assert mex["sectors"][-1]["end_m"] == GAME_LENGTH        # S3 used to stop 221 m short of the line
-    assert mex["corners"][-1]["apex_m"] == pytest.approx(REAL_APEX[-1] * GAME_LENGTH / 4304, abs=1)
+    assert mex["corners"][-1]["apex_m"] == pytest.approx(REAL_APEX[-1] * GAME_LENGTH / 4304 + mex["game_offset_m"], abs=1)
 
 
 def test_3d_gets_the_real_circuit_positions_back():
@@ -34,9 +34,10 @@ def test_3d_gets_the_real_circuit_positions_back():
     assert apex == REAL_APEX                                  # exactly: 3D Mexico is as before
 
 
-def test_only_mexico_differs_from_the_real_circuit():
+def test_only_mexico_differs_in_size_from_the_real_circuit():
     for p in (ROOT / "tracks").glob("*.json"):
         data = json.loads(p.read_text(encoding="utf-8"))
         if p.stem != "mexico_city":
             assert "real_length_m" not in data, p.stem
-            assert _real_corners(data) is data["corners"], p.stem
+            if "game_offset_m" not in data:
+                assert _real_corners(data) is data["corners"], p.stem
