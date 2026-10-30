@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   bisect, stateAt, timeAtDistance, cuePoint, nextCue, cornerSeekRange, fmtTime, youPoints, gapAt, lineHeadings,
-  lineBand, lineOffsets,
+  lineBand, lineOffsets, pedalHex, brakeLevels,
 } from "../../app/static/js/learn3d/core.js";
 
 const P = {
@@ -227,4 +227,32 @@ test("lineOffsets reads the same place on the track whatever index your points s
 test("lineOffsets gives null where none of your points reach a corner", () => {
   const pro = circleLap(100);
   assert.deepEqual(lineOffsets(pro, { x: [], y: [] }, [CORNER]), [{ entry: null, apex: null, exit: null }]);
+});
+
+test("pedalHex runs red (full brake) -> yellow (neither) -> green (full throttle), clamped", () => {
+  assert.equal(pedalHex(-1), 0xff2e2e);
+  assert.equal(pedalHex(-0.5), 0xff8117);
+  assert.equal(pedalHex(0), 0xffd400);
+  assert.equal(pedalHex(0.5), 0x9ed842);
+  assert.equal(pedalHex(1), 0x3ddc84);
+  assert.equal(pedalHex(-3), 0xff2e2e);
+  assert.equal(pedalHex(3), 0x3ddc84);
+});
+
+test("brakeLevels: the pro's braking, as deceleration against the lap's hardest (FastF1 brake is on/off)", () => {
+  // 300 km/h, then braking at 40 m/s² down to 40 m/s, back to 300 km/h, then braking at 20 m/s² to 60 m/s.
+  const v0 = 300 / 3.6, d = [], speed = [], brake = [];
+  let v = v0;
+  for (let s = 0; s <= 3000; s += 2) {
+    const a = s >= 1000 && s < 1600 && v > 40 ? 40 : s >= 2000 && v > 60 ? 20 : 0;
+    if (s === 1600) v = v0;                                     // back up to speed between the two zones
+    d.push(s); speed.push(v * 3.6); brake.push(a > 0 ? 1 : 0);
+    if (a) v = Math.sqrt(Math.max(0, v * v - 2 * a * 2));
+  }
+  const level = brakeLevels({ d, speed, brake });
+  const mid = (lo, hi) => level[d.findIndex((s) => s >= (lo + hi) / 2)];
+  assert.ok(Math.abs(mid(1000, 1066) - 1) < 0.05, `hard zone ${mid(1000, 1066)}`);
+  assert.ok(Math.abs(mid(2000, 2083) - 0.5) < 0.05, `light zone ${mid(2000, 2083)}`);
+  assert.equal(level[d.indexOf(500)], 0);                      // not braking
+  assert.deepEqual(brakeLevels({ d: [0, 2, 4], speed: [100, 100, 100], brake: [0, 0, 0] }), [0, 0, 0]);
 });

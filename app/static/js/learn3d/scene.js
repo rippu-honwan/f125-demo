@@ -1,11 +1,12 @@
 // Three.js scene for the 3D Learn mode: track ribbon, car, corner markers, cameras.
 // Imported dynamically by index.js, so a CDN/WebGL failure only disables the canvas.
 import * as THREE from "three";
-import { bisect, cuePoint, lineHeadings } from "./core.js";
+import { bisect, brakeLevels, cuePoint, lineHeadings, pedalHex } from "./core.js";
 
 // ponytail: fixed 14 m track; real widths, kerbs and run-off aren't in the data.
 const TRACK_HALF_WIDTH = 7;
 const YOU_ROAD_HALF_WIDTH = 2.5;   // under your line in 3D Compare: the car (1.9 m wide) plus a margin
+const LINE_EDGE_HALF_WIDTH = 0.6;  // 3D Compare: a line's car-colour edge, 0.25 m either side of the 0.7 m line
 const CAMS = {
   tcam: { back: 0.6, height: 1.7, ahead: 40, look: 1.0 },   // above the airbox
   chase: { back: 9, height: 3.2, ahead: 8, look: 0.5 },
@@ -41,7 +42,6 @@ function buildScene(renderer, container, points, corners, cars, youLine) {
   scene.add(sun);
 
   // world (x, y, elev) -> three (x, elev, -y), centred so floats stay small
-  const n = points.x.length;
   const cx = (Math.min(...points.x) + Math.max(...points.x)) / 2;
   const cy = (Math.min(...points.y) + Math.max(...points.y)) / 2;
   const zMin = Math.min(...points.z);
@@ -85,31 +85,37 @@ function buildScene(renderer, container, points, corners, cars, youLine) {
   };
   addRoad(pos, heading, TRACK_HALF_WIDTH);
 
-  // Racing line for Drive: the pro's line, red where braking, green at full throttle, yellow between.
-  const lineGeo = ribbon(pos, heading, 0.35, 0.12);
-  const cols = new Float32Array(n * 6), col = new THREE.Color();
-  for (let i = 0; i < n; i++) {
-    col.set(points.brake[i] >= 0.5 ? 0xff2e2e : points.throttle[i] >= 0.95 ? 0x3ddc84 : 0xffd400);
-    cols.set([col.r, col.g, col.b, col.r, col.g, col.b], i * 6);
-  }
-  lineGeo.setAttribute("color", new THREE.BufferAttribute(cols, 3));
-  const line = new THREE.Mesh(lineGeo, new THREE.MeshBasicMaterial({
-    vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2,
-  }));
-  line.visible = false;
-  scene.add(line);
-
-  // 3D Compare: your line in your car's colour, shown and hidden with the pro's.
-  let youRibbon = null;
+  // Racing lines, coloured by the pedals: red (brake) -> yellow (neither) -> green (throttle), shaded by
+  // how hard. FastF1 logs the pro's brake on / off only, so his shade comes from deceleration (brakeLevels).
+  const lines = [];
+  const lineMesh = (geo, material) => lines.push(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+    side: THREE.DoubleSide, polygonOffset: true, ...material })));
+  const pedalLine = (pts, hd, p, brake, lift, offset) => {
+    const g = ribbon(pts, hd, 0.35, lift);
+    const cols = new Float32Array(pts.length * 6), col = new THREE.Color();
+    for (let i = 0; i < pts.length; i++) {
+      col.set(pedalHex(p.throttle[i] - brake[i]));
+      cols.set([col.r, col.g, col.b, col.r, col.g, col.b], i * 6);
+    }
+    g.setAttribute("color", new THREE.BufferAttribute(cols, 3));
+    lineMesh(g, { vertexColors: true, polygonOffsetFactor: offset });
+  };
+  // 3D Compare: both lines are pedal-coloured, so each is edged in its car's colour (a wider strip beneath).
+  const edge = (pts, hd, color, lift, offset) => lineMesh(ribbon(pts, hd, LINE_EDGE_HALF_WIDTH, lift),
+    { color, polygonOffsetFactor: offset });
+  if (youLine) edge(pos, heading, cars[0].color, 0.11, -1);
+  pedalLine(pos, heading, points, brakeLevels(points), 0.12, -2);
   if (youLine) {
     const youPos = path(youLine), youHeading = youLine.heading || lineHeadings(youLine);
     // Road under your car too: the 14 m strip is centred on the pro's line, which hugs the apexes, so a
     // line wider than his left it on the grass. Same material and height, so the overlap doesn't show.
     addRoad(youPos, youHeading, YOU_ROAD_HALF_WIDTH);
-    youRibbon = new THREE.Mesh(ribbon(youPos, youHeading, 0.35, 0.13),
-      new THREE.MeshBasicMaterial({ color: cars[1].color, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3 }));
-    youRibbon.visible = false;
-    scene.add(youRibbon);
+    edge(youPos, youHeading, cars[1].color, 0.125, -3);
+    pedalLine(youPos, youHeading, youLine, youLine.brake, 0.13, -4);   // the game logs how hard you braked
+  }
+  for (const m of lines) {
+    m.visible = false;
+    scene.add(m);
   }
 
   // ponytail: flat ground at the lowest point; hilly tracks show the road raised above it.
@@ -225,8 +231,7 @@ function buildScene(renderer, container, points, corners, cars, youLine) {
 
   /** Show or hide the racing line(s): the pro's, and yours in 3D Compare. */
   function setLine(on) {
-    line.visible = on;
-    if (youRibbon) youRibbon.visible = on;
+    for (const m of lines) m.visible = on;
   }
 
   return { update, dispose, setCues, setGhost, setLine };

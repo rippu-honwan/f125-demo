@@ -187,3 +187,41 @@ export function lineOffsets(pro, you, corners) {
     return { entry: read(c.entry_m), apex: read(c.apex_m), exit: read(c.exit_m) };
   });
 }
+
+// Racing line colours: one scale from full brake (red) through neither pedal (yellow) to full throttle (green).
+const PEDAL_STOPS = [[0xff, 0x2e, 0x2e], [0xff, 0xd4, 0x00], [0x3d, 0xdc, 0x84]];
+const BRAKE_FULL_Q = 0.95;   // the lap's braking deceleration at this quantile counts as full brake
+
+/** throttle − brake (−1 … 1) -> a colour (0xRRGGBB) on the red–yellow–green scale, clamped. */
+export function pedalHex(v) {
+  const f = Math.min(1, Math.max(-1, v)) + 1, k = Math.min(1, Math.floor(f)), t = f - k;   // between stops k, k+1
+  const a = PEDAL_STOPS[k], b = PEDAL_STOPS[k + 1];
+  return a.reduce((hex, c, j) => (hex << 8) | Math.round(c + (b[j] - c) * t), 0);
+}
+
+/**
+ * Deceleration (m/s², ≥ 0) where the brake is on (≥ 0.5), over the chord ± halfM m: sample to sample
+ * it's too noisy. The chord stops at the lap's ends rather than wrapping.
+ */
+export function chordDecel(points, halfM = 15) {
+  const { d, speed, brake } = points, np = d.length;
+  const w = Math.max(1, Math.round(halfM / ((d[np - 1] - d[0]) / (np - 1))));
+  const v = speed.map((s) => s / 3.6);
+  return v.map((_, i) => {
+    const a = Math.max(0, i - w), b = Math.min(np - 1, i + w);
+    return brake[i] >= 0.5 ? Math.max(0, (v[a] ** 2 - v[b] ** 2) / (2 * (d[b] - d[a]))) : 0;
+  });
+}
+
+/**
+ * The pro's brake as 0 … 1 for colouring his line. FastF1 logs the brake on / off only, so how hard
+ * comes from deceleration, against the lap's hardest braking (its 95th percentile: the max would
+ * be one noisy chord).
+ */
+export function brakeLevels(points) {
+  const dec = chordDecel(points);
+  const on = dec.filter((a) => a > 0).sort((p, q) => p - q);
+  if (!on.length) return dec;                                 // never braked: all 0
+  const full = on[Math.floor(BRAKE_FULL_Q * (on.length - 1))];
+  return dec.map((a) => Math.min(1, a / full));
+}

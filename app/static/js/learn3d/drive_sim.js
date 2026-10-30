@@ -4,7 +4,7 @@
 // The car lives in track coordinates: s = distance along the pro's line (m), n = sideways
 // offset (m, + = left), psi = heading relative to the line (rad, + = left). SI units inside;
 // `points.speed` (km/h) is converted on the way in.
-import { bisect, timeAtDistance } from "./core.js";
+import { bisect, chordDecel, timeAtDistance } from "./core.js";
 
 export const KMH = 3.6;
 export const DT = 1 / 120;                     // fixed physics step (s)
@@ -86,11 +86,7 @@ export function buildModel(points) {
   // heading chord, because sample-to-sample deceleration is too noisy to take a max of.
   // ponytail: one peak covers the whole zone, so its slow tail allows more than the pro needed there
   // (+0.3 % optimal-lap slack over 28 laps); scale it by speed if that ever matters.
-  const dec = v.map((_, i) => {
-    const a = Math.max(0, i - w), b = Math.min(np - 1, i + w);
-    return points.brake[i] >= 0.5 ? Math.max(0, (v[a] ** 2 - v[b] ** 2) / (2 * (d[b] - d[a]))) : 0;
-  });
-  const brakeHere = windowMax(dec, BRAKE_WIN_M);
+  const brakeHere = windowMax(chordDecel(points, SMOOTH_M), BRAKE_WIN_M);
 
   const nb = Math.ceil(Math.max(...v) / BIN) + 2;
   const acc = [], brk = [];

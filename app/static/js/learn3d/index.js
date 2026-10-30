@@ -66,7 +66,7 @@ function showMessage(body, status, onPick) {
 
 const KEYS_LEARN = "Space play/pause · ← → ±2 s · 1/2/3 camera";
 const KEYS_COMPARE = KEYS_LEARN + " · F switch car";
-const NOTE_OWN_LINE = "Your line is matched to the track shape. Wide / tight compare it with the pro's line, to about ±2 m; an offset between the game's track and the real one shows up as well. The pro line is FastF1's smoothed position data, not the exact line.";
+const NOTE_OWN_LINE = "Your line is matched to the track shape. Wide / tight compare it with the pro's line, to about ±2 m; an offset between the game's track and the real one shows up as well. The pro line is FastF1's smoothed position data, not the exact line. Line colours run red (brake) to yellow to green (throttle); FastF1 logs the pro's brake on / off only, so his shade is estimated from deceleration.";
 const NOTE_PRO_LINE = "Your line isn't available for this lap; your car follows the pro's line.";
 
 async function start(data, seq) {
