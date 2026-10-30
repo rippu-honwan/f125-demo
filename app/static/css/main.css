@@ -1449,6 +1449,7 @@
 .l3d-crow.active { background: var(--minor-soft); color: #ffd27a; }
 .l3d-chead { background: none; color: var(--text-dim); cursor: default; font-size: 0.72rem; }
 .l3d-chead:hover { background: none; }
+.l3d-crow.l3d-line-big > span:nth-child(2) { font-weight: 600; }   /* 3D Compare Line: a 4 m+ difference */
 .l3d-telemetry { display: flex; flex-direction: column; gap: 6px; }
 .l3d-trace { display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 8px; }
 .l3d-trace-label { color: var(--text-dim); font-size: 0.75rem; }
