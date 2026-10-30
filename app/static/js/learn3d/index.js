@@ -4,7 +4,7 @@
 //   window.Learn3D.unload()                       -> stop and free WebGL
 // load() resolves once the viewer is up (or a "no data" message is shown) and
 // rejects only on network errors, which main.js reports in its error banner.
-import { stateAt, timeAtDistance, nextCue, cornerSeekRange, fmtTime, youPoints, gapAt, lineHeadings } from "./core.js";
+import { stateAt, timeAtDistance, nextCue, cornerSeekRange, fmtTime, youPoints, gapAt, lineHeadings, lineOffsets } from "./core.js";
 import {
   esc, renderHud, renderCompareHud, renderDriveHud, createMinimap, createTelemetry, createCornerList, PRO_COLOR, YOU_COLOR,
 } from "./panels.js";
@@ -66,7 +66,7 @@ function showMessage(body, status, onPick) {
 
 const KEYS_LEARN = "Space play/pause · ← → ±2 s · 1/2/3 camera";
 const KEYS_COMPARE = KEYS_LEARN + " · F switch car";
-const NOTE_OWN_LINE = "Your line is matched to the track shape (about ±1 m). The pro line is FastF1's smoothed position data, not the exact line.";
+const NOTE_OWN_LINE = "Your line is matched to the track shape. Wide / tight compare it with the pro's line, to about ±2 m; an offset between the game's track and the real one shows up as well. The pro line is FastF1's smoothed position data, not the exact line.";
 const NOTE_PRO_LINE = "Your line isn't available for this lap; your car follows the pro's line.";
 
 async function start(data, seq) {
@@ -110,12 +110,13 @@ async function start(data, seq) {
   S.tele = createTelemetry($("l3dTelemetry"), P, (d) => locked() || seek(timeAt(d)), Y, data.meta.driver);
   S.list = createCornerList($("l3dCorners"), data.corners, (c) => {
     if (locked()) return;
+    if ($("l3dLineBtn").getAttribute("aria-pressed") === "true") setCam("top");   // see both lines through the corner
     const [from, to] = cornerSeekRange(c);
     seek(timeAt(from));
     S.stopAt = timeAt(to);
     setRate(0.5);
     setPlaying(true);
-  }, !!Y);
+  }, !!Y, ownLine ? { offsets: lineOffsets(P, Y, data.corners), driver: data.meta.driver } : null);
   $("l3dScrub").max = String(Math.round(end * 10));   // 0.1 s per step
   $("l3dLineBtn").hidden = !ownLine || !scene;
   $("l3dLineNote").hidden = !Y || !scene;         // no 3D view, no line to explain
@@ -274,6 +275,7 @@ $("l3dLineBtn").addEventListener("click", () => {
   const on = $("l3dLineBtn").getAttribute("aria-pressed") !== "true";
   markPressed($("l3dLineBtn"), on);
   view.scene.setLine(on);
+  view.list.setLine(on);
 });
 document.querySelectorAll("[data-rate]").forEach((b) => b.addEventListener("click", () => view && !locked() && setRate(+b.dataset.rate)));
 document.querySelectorAll("[data-follow]").forEach((b) => b.addEventListener("click", () => view && view.data.you && setFollow(b.dataset.follow)));
