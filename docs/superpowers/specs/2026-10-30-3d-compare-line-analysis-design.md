@@ -66,7 +66,7 @@ Measured with `data/Zandvoort.csv` (laps 1–4), `data/suzuka_sample.csv` and `d
 - **On start.** With your own line, it computes `lineOffsets(P, Y, data.corners)` once and passes it, with `data.meta.driver`, to `createCornerList`.
 - **Line button.** It also calls `S.list.setLine(on)`.
 - **Corner pick.** Picking a row while **Line** is on calls `setCam("top")` before the existing seek-and-replay. Like any camera button, this is remembered.
-- **Note.** `NOTE_OWN_LINE` becomes: "Your line is matched to the track shape. Wide / tight compare it with the pro's line, to about ±2 m; an offset between the game's track and the real one shows up as well."
+- **Note.** `NOTE_OWN_LINE` becomes: "Your line is matched to the track shape. Wide / tight compare it with the pro's line, to about ±2 m; an offset between the game's track and the real one shows up as well. The pro line is FastF1's smoothed position data, not the exact line." (The last sentence is kept from the current note.)
 
 ### CSS
 
