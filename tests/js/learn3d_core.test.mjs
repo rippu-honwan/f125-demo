@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   bisect, stateAt, timeAtDistance, cuePoint, nextCue, cornerSeekRange, fmtTime, youPoints, gapAt, lineHeadings,
+  lineBand, lineOffsets,
 } from "../../app/static/js/learn3d/core.js";
 
 const P = {
@@ -175,4 +176,55 @@ test("gapAt is your time minus the pro's at the same distance", () => {
   assert.equal(gapAt(P, Y, 0), 0);
   assert.equal(gapAt(P, Y, 15), 1.5);   // you 3.0 s, pro 1.5 s
   assert.equal(gapAt(P, Y, 30), 3);
+});
+
+test("lineBand: ≈ under 2 m, wide/tight from 2 m, + from 4 m, — without a reading", () => {
+  assert.equal(lineBand(null), "—");
+  assert.equal(lineBand(0), "≈");
+  assert.equal(lineBand(1.99), "≈");
+  assert.equal(lineBand(-1.99), "≈");
+  assert.equal(lineBand(2), "wide");
+  assert.equal(lineBand(3.99), "wide");
+  assert.equal(lineBand(4), "wide+");
+  assert.equal(lineBand(-2), "tight");
+  assert.equal(lineBand(-4.5), "tight+");
+});
+
+/**
+ * A closed circular lap of radius r, 2 m apart, turning left (counter-clockwise) or right, as a pro
+ * lap; `shift` starts the points that many indices further round (same geometry, different index).
+ */
+function circleLap(r, left = true, shift = 0) {
+  const n = 315, idx = Array.from({ length: n }, (_, i) => i);
+  const th = (i) => (2 * Math.PI * (i + shift)) / (n - 1);
+  return {
+    d: idx.map((i) => (2 * Math.PI * 100 * i) / (n - 1)), t: idx,
+    x: idx.map((i) => r * Math.cos(th(i))), y: idx.map((i) => (left ? 1 : -1) * r * Math.sin(th(i))),
+    z: idx.map(() => 0),
+  };
+}
+const CORNER = { short: "T1", entry_m: 200, apex_m: 300, exit_m: 400 };
+
+test("lineOffsets: + where your line runs outside the pro's, − inside, in left and right turns", () => {
+  for (const left of [true, false]) {
+    const pro = circleLap(100, left);
+    const wide = lineOffsets(pro, circleLap(103, left), [CORNER])[0];
+    for (const k of ["entry", "apex", "exit"]) assert.ok(Math.abs(wide[k] - 3) < 0.05, `${left} wide ${k}: ${wide[k]}`);
+    const tight = lineOffsets(pro, circleLap(97, left), [CORNER])[0];
+    for (const k of ["entry", "apex", "exit"]) assert.ok(Math.abs(tight[k] + 3) < 0.05, `${left} tight ${k}: ${tight[k]}`);
+    assert.equal(lineBand(lineOffsets(pro, circleLap(105, left), [CORNER])[0].apex), "wide+");
+  }
+});
+
+test("lineOffsets reads the same place on the track whatever index your points sit at", () => {
+  // The server's alignment puts your x/y up to ~30 m along from the pro's at the same index.
+  const pro = circleLap(100);
+  const at = lineOffsets(pro, circleLap(103), [CORNER])[0];
+  const shifted = lineOffsets(pro, circleLap(103, true, 10), [CORNER])[0];   // 10 points = 20 m further round
+  for (const k of ["entry", "apex", "exit"]) assert.ok(Math.abs(shifted[k] - at[k]) < 0.05, `${k}: ${shifted[k]} vs ${at[k]}`);
+});
+
+test("lineOffsets gives null where none of your points reach a corner", () => {
+  const pro = circleLap(100);
+  assert.deepEqual(lineOffsets(pro, { x: [], y: [] }, [CORNER]), [{ entry: null, apex: null, exit: null }]);
 });

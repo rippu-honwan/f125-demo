@@ -101,7 +101,7 @@ export function youPoints(pro, you) {
   if (you.x && you.y) {
     out.x = you.x;
     out.y = you.y;
-    out.z = roadHeights(pro, you.x, you.y);
+    out.z = projectOnLine(pro, you.x, you.y).z;
     out.heading = lineHeadings(out);
     out.ownLine = true;
   }
@@ -109,29 +109,81 @@ export function youPoints(pro, you) {
 }
 
 /**
- * Height of the road (the pro's line, which the road follows) under each of your x/y points: the
- * pro's line projected on, searched only `span` m either side of your index. Not the pro's z at your
- * index: the server's distance alignment puts your x/y up to ~30 m along from the pro's at the same d,
- * which on a slope sank your car metres into the road. Not the nearest point on the whole lap
- * either: Suzuka crosses itself.
+ * Your x/y points projected onto the pro's line (which the road follows): for each, the lap distance `s`
+ * on the pro's line, the road height `z` there, and `side`, metres to the left (+) or right (−) of the
+ * pro's line. Searched only `span` m either side of your index. Not the pro's point at your index: the
+ * server's distance alignment puts your x/y up to ~30 m along from the pro's at the same d (on a slope
+ * that sank your car metres into the road). Not the nearest point on the whole lap either: Suzuka
+ * crosses itself.
  */
-function roadHeights(pro, x, y, span = 60) {
+export function projectOnLine(pro, x, y, span = 60) {
   const { d, x: px, y: py, z: pz } = pro, np = d.length, loop = np - 1;
   const w = Math.max(1, Math.round(span / ((d[np - 1] - d[0]) / loop)));
-  return x.map((xi, i) => {
-    let best = Infinity, z = pz[i];
+  const s = new Array(x.length), z = new Array(x.length), side = new Array(x.length);
+  for (let i = 0; i < x.length; i++) {
+    let best = Infinity;
     for (let k = i - w; k <= i + w; k++) {
       const a = ((k % loop) + loop) % loop, b = a + 1;             // segment a -> b, wrapping round the lap
       const ex = px[b] - px[a], ey = py[b] - py[a], len2 = ex * ex + ey * ey;
-      const f = len2 > 0 ? Math.min(1, Math.max(0, ((xi - px[a]) * ex + (y[i] - py[a]) * ey) / len2)) : 0;
-      const dx = px[a] + f * ex - xi, dy = py[a] + f * ey - y[i], dist = dx * dx + dy * dy;
-      if (dist < best) { best = dist; z = pz[a] + f * (pz[b] - pz[a]); }
+      const rx = x[i] - px[a], ry = y[i] - py[a];
+      const f = len2 > 0 ? Math.min(1, Math.max(0, (rx * ex + ry * ey) / len2)) : 0;
+      const dx = px[a] + f * ex - x[i], dy = py[a] + f * ey - y[i], dist = dx * dx + dy * dy;
+      if (dist < best) {
+        best = dist;
+        s[i] = d[a] + f * (d[b] - d[a]);
+        z[i] = pz[a] + f * (pz[b] - pz[a]);
+        side[i] = len2 > 0 ? (ex * ry - ey * rx) / Math.sqrt(len2) : 0;   // cross product: + = left of travel
+      }
     }
-    return z;
-  });
+  }
+  return { s, z, side };
 }
 
 /** Live gap (s) at lap distance d: your time minus the pro's. Positive = you're behind. */
 export function gapAt(pro, you, d) {
   return timeAtDistance(you, d) - timeAtDistance(pro, d);
+}
+
+// Your line against the pro's, per corner (3D Compare). Bands, not metres: the line fit and the game's
+// track model are only good to about ±2 m.
+const LINE_SAME_M = 2;          // under this, either way: same line as the pro
+export const LINE_BIG_M = 4;    // from this: a big difference, marked "+"
+
+/** Metres wider (+) or tighter (−) than the pro -> "≈", "wide", "tight", "wide+", "tight+"; "—" for no reading. */
+export function lineBand(m) {
+  if (m == null) return "—";
+  const a = Math.abs(m);
+  if (a < LINE_SAME_M) return "≈";
+  return (m > 0 ? "wide" : "tight") + (a >= LINE_BIG_M ? "+" : "");
+}
+
+// A corner point's reading: the median of your points within this of it, along the lap. The median also
+// outvotes the odd reversed `side` where FastF1's positions step back against d.
+const LINE_WINDOW_M = 5;
+const TURN_SPAN_M = 20;     // the corner's direction: the pro's heading change across this either side of the apex
+
+/**
+ * Per corner, how much wider (+) or tighter (−) your line runs than the pro's at entry, apex and exit
+ * (metres; null where none of your points come within LINE_WINDOW_M of that point). `pro`: the pro's
+ * points; `you`: {x, y} of your line on the pro's distance grid (youPoints); `corners`: the pro's
+ * corners ({entry_m, apex_m, exit_m}). The corner's direction comes from the pro's line, not the track json.
+ */
+export function lineOffsets(pro, you, corners) {
+  const { s, side } = projectOnLine(pro, you.x, you.y);
+  const h = pro.heading || lineHeadings(pro);
+  const median = (v) => {
+    const a = [...v].sort((p, q) => p - q), m = a.length >> 1;
+    return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+  };
+  const at = (m) => {
+    const v = [];
+    for (let i = 0; i < s.length; i++) if (Math.abs(s[i] - m) <= LINE_WINDOW_M) v.push(side[i]);
+    return v.length ? median(v) : null;
+  };
+  return corners.map((c) => {
+    const turn = h[bisect(pro.d, c.apex_m + TURN_SPAN_M)] - h[bisect(pro.d, c.apex_m - TURN_SPAN_M)];
+    const outside = turn > 0 ? -1 : 1;     // a left turn's outside is to the right (side < 0)
+    const read = (m) => { const v = at(m); return v == null ? null : outside * v; };
+    return { entry: read(c.entry_m), apex: read(c.apex_m), exit: read(c.exit_m) };
+  });
 }

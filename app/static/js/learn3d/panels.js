@@ -1,5 +1,5 @@
 // DOM / SVG panels for the 3D Learn mode: HUD, minimap, telemetry traces, corner list.
-import { cuePoint, fmtTime } from "./core.js";
+import { cuePoint, fmtTime, lineBand, LINE_BIG_M } from "./core.js";
 
 const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ESC[c]);
@@ -158,8 +158,10 @@ export function createTelemetry(el, points, onSeek, you = null, proName = "Pro")
 /**
  * One row per corner. Learn: brake point → min speed, brake length.
  * Compare: pro → your apex speed, and the time you gained (−) or lost (+) there. Click = replay that corner.
+ * `line` (3D Compare with your own line): {offsets: lineOffsets(...), driver}; setLine(true) then shows
+ * how your line runs against the pro's at entry / apex / exit in place of the apex speeds.
  */
-export function createCornerList(el, corners, onPick, compare = false) {
+export function createCornerList(el, corners, onPick, compare = false, line = null) {
   const head = compare
     ? `<span>Turn</span><span>Apex speed: pro → you</span><span>Gap</span>`
     : `<span>Turn</span><span>Brake point → min speed</span><span>Brake</span>`;
@@ -181,6 +183,13 @@ export function createCornerList(el, corners, onPick, compare = false) {
     }).join("");
   const rows = [...el.querySelectorAll("button.l3d-crow")];
   rows.forEach((r) => r.addEventListener("click", () => onPick(corners[+r.dataset.i])));
+  // Line mode swaps each row's middle cell; keep both texts.
+  const headMid = el.querySelector(".l3d-chead > span:nth-child(2)");
+  const speedHead = headMid.innerHTML, speedMid = rows.map((r) => r.children[1].innerHTML);
+  const lineMid = line ? line.offsets.map((o) =>
+    `Entry ${lineBand(o.entry)} · Apex ${lineBand(o.apex)} · Exit ${lineBand(o.exit)}`) : [];
+  const big = line ? line.offsets.map((o) =>
+    [o.entry, o.apex, o.exit].some((m) => m != null && Math.abs(m) >= LINE_BIG_M)) : [];
   let current = -2;
   return {
     set(d) {
@@ -196,6 +205,14 @@ export function createCornerList(el, corners, onPick, compare = false) {
         const rb = rows[k].getBoundingClientRect(), eb = el.getBoundingClientRect();
         if (rb.top < eb.top || rb.bottom > eb.bottom) el.scrollTop += rb.top - eb.top - (eb.height - rb.height) / 2;
       }
+    },
+    setLine(on) {
+      if (!line) return;
+      headMid.innerHTML = on ? `Line vs ${esc(line.driver)}: entry · apex · exit` : speedHead;
+      rows.forEach((r, i) => {
+        r.children[1].innerHTML = on ? lineMid[i] : speedMid[i];
+        r.classList.toggle("l3d-line-big", on && big[i]);
+      });
     },
   };
 }

@@ -1357,6 +1357,35 @@ def _real_corners(track_info: dict) -> list:
     return [{f: round((v - off) * k) if _is_position(f, v) else v for f, v in c.items()} for c in corners]
 
 
+# Two parts of the lap this close in x/y and this far apart along it pass over / under each other:
+# Suzuka's cross at 0.5 m; the next closest (Baku's parallel stretches) are 8.6 m apart.
+CROSSOVER_RADIUS_M = 4
+CROSSOVER_APART_M = 300
+CROSSOVER_PAD_M = 40      # FastF1's height dip reaches about 30 m either side of the crossing
+
+
+def _bridge_crossovers(d, x, y, z):
+    """Heights (metres, on lap distance ``d``) with each crossover bridged across from either side.
+
+    Where the lap passes over or under itself (Suzuka), FastF1's height on one level dips towards
+    the other's: VER's 2025 Q lap drops from 86.4 m to the lower road's 80.2 m on the bridge. Both
+    levels are interpolated across the crossing from CROSSOVER_PAD_M outside it.
+    """
+    from scipy.spatial import cKDTree
+
+    near = cKDTree(np.c_[x, y]).query_pairs(CROSSOVER_RADIUS_M, output_type="ndarray")
+    if near.size == 0:
+        return z
+    apart = np.abs(d[near[:, 0]] - d[near[:, 1]])
+    cross = np.unique(near[np.minimum(apart, d[-1] - apart) > CROSSOVER_APART_M])
+    if cross.size == 0:
+        return z
+    bad = (np.abs(d[:, None] - d[cross][None, :]) < CROSSOVER_PAD_M).any(axis=1)
+    z = np.array(z, dtype=float)
+    z[bad] = np.interp(d[bad], d[~bad], z[~bad])
+    return z
+
+
 def _build_pro_lap(df, meta: dict, track_info: dict, step: float = PRO_LAP_STEP_M) -> dict:
     """A FastF1 reference lap -> compact column arrays (metres, seconds) for the 3D viewer."""
     d_full = df["lap_distance"].to_numpy(dtype=float)
@@ -1370,7 +1399,7 @@ def _build_pro_lap(df, meta: dict, track_info: dict, step: float = PRO_LAP_STEP_
     path = float(np.hypot(np.diff(raw_x), np.diff(raw_y)).sum())
     scale = length / path if path > 0 else 1.0
     xs, ys, _ = _smooth_loop_xy(raw_x * scale, raw_y * scale)
-    zs = smooth(raw_z * scale, window=25)
+    zs = smooth(_bridge_crossovers(d_full, raw_x * scale, raw_y * scale, raw_z * scale), window=25)
 
     d = np.arange(0.0, d_full[-1] + 1e-9, step)
 

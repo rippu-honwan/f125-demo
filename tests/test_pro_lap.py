@@ -256,3 +256,24 @@ class TestProLapEndpoint:
         res = client.get("/pro_lap", params={"track": "bahrain", **params})
         assert res.status_code == 422
         assert called == []
+
+
+class TestSuzukaCrossover:
+    """Suzuka's back straight runs over the bridge at about 4.9 km, at about 86.4 m. Under it, at about
+    2.5 km, the road from Degner to the hairpin runs at about 80.2 m. FastF1's height on the bridge
+    dips in a V to the lower road's height (to 80.2 m on VER's 2025 Q lap)."""
+
+    @pytest.fixture(scope="class")
+    def lap(self):
+        res = client.get("/pro_lap", params={"year": 2025, "driver": "VER", "track": "suzuka"})
+        assert res.status_code == 200, res.text
+        p = res.json()["points"]
+        return np.array(p["d"]), np.array(p["z"])
+
+    def test_the_bridge_keeps_its_height(self, lap):
+        d, z = lap
+        assert z[(d > 4840) & (d < 4960)].min() > 86.0
+
+    def test_the_road_under_it_stays_low(self, lap):
+        d, z = lap
+        assert np.abs(z[(d > 2440) & (d < 2580)] - 80.2).max() < 0.3
