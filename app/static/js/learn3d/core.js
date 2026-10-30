@@ -93,18 +93,42 @@ export function fmtTime(s) {
 
 /**
  * Your lap as a `points` object: your timing and inputs on the pro's distance grid. With `you.x/y`
- * (your line, fitted to the track by the server) the car drives your line, with the pro's road height;
- * without them it drives the pro's line.
+ * (your line, fitted to the track by the server) the car drives your line, at the road's height under
+ * it; without them it drives the pro's line.
  */
 export function youPoints(pro, you) {
   const out = { ...pro, t: you.t, speed: you.speed, throttle: you.throttle, brake: you.brake, gear: you.gear };
   if (you.x && you.y) {
     out.x = you.x;
     out.y = you.y;
+    out.z = roadHeights(pro, you.x, you.y);
     out.heading = lineHeadings(out);
     out.ownLine = true;
   }
   return out;
+}
+
+/**
+ * Height of the road (the pro's line, which the road follows) under each of your x/y points: the
+ * pro's line projected on, searched only `span` m either side of your index. Not the pro's z at your
+ * index: the server's distance alignment puts your x/y up to ~30 m along from the pro's at the same d,
+ * which on a slope sank your car metres into the road. Not the nearest point on the whole lap
+ * either: Suzuka crosses itself.
+ */
+function roadHeights(pro, x, y, span = 60) {
+  const { d, x: px, y: py, z: pz } = pro, np = d.length, loop = np - 1;
+  const w = Math.max(1, Math.round(span / ((d[np - 1] - d[0]) / loop)));
+  return x.map((xi, i) => {
+    let best = Infinity, z = pz[i];
+    for (let k = i - w; k <= i + w; k++) {
+      const a = ((k % loop) + loop) % loop, b = a + 1;             // segment a -> b, wrapping round the lap
+      const ex = px[b] - px[a], ey = py[b] - py[a], len2 = ex * ex + ey * ey;
+      const f = len2 > 0 ? Math.min(1, Math.max(0, ((xi - px[a]) * ex + (y[i] - py[a]) * ey) / len2)) : 0;
+      const dx = px[a] + f * ex - xi, dy = py[a] + f * ey - y[i], dist = dx * dx + dy * dy;
+      if (dist < best) { best = dist; z = pz[a] + f * (pz[b] - pz[a]); }
+    }
+    return z;
+  });
 }
 
 /** Live gap (s) at lap distance d: your time minus the pro's. Positive = you're behind. */

@@ -5,6 +5,7 @@ import { bisect, cuePoint, lineHeadings } from "./core.js";
 
 // ponytail: fixed 14 m track; real widths, kerbs and run-off aren't in the data.
 const TRACK_HALF_WIDTH = 7;
+const YOU_ROAD_HALF_WIDTH = 2.5;   // under your line in 3D Compare: the car (1.9 m wide) plus a margin
 const CAMS = {
   tcam: { back: 0.6, height: 1.7, ahead: 40, look: 1.0 },   // above the airbox
   chase: { back: 9, height: 3.2, ahead: 8, look: 0.5 },
@@ -72,13 +73,17 @@ function buildScene(renderer, container, points, corners, cars, youLine) {
     g.setIndex(index);
     return g;
   };
-  const road = ribbon(pos, heading, TRACK_HALF_WIDTH, 0.05);
   // Where positions step back against d the ribbon folds over itself: those quads run backwards, so
   // they face down. Front faces only (the road faces up) drops them; forward quads already cover the
   // spot. Normals point straight up, as computed ones would average up with down into dark seams.
   // ponytail: slopes shade like flat road.
-  road.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(n * 6).map((_, k) => (k % 3 === 1 ? 1 : 0)), 3));
-  scene.add(new THREE.Mesh(road, new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.9 })));
+  const roadMat = new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.9 });
+  const addRoad = (pts, hd, half) => {
+    const g = ribbon(pts, hd, half, 0.05);
+    g.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(pts.length * 6).map((_, k) => (k % 3 === 1 ? 1 : 0)), 3));
+    scene.add(new THREE.Mesh(g, roadMat));
+  };
+  addRoad(pos, heading, TRACK_HALF_WIDTH);
 
   // Racing line for Drive: the pro's line, red where braking, green at full throttle, yellow between.
   const lineGeo = ribbon(pos, heading, 0.35, 0.12);
@@ -97,7 +102,11 @@ function buildScene(renderer, container, points, corners, cars, youLine) {
   // 3D Compare: your line in your car's colour, shown and hidden with the pro's.
   let youRibbon = null;
   if (youLine) {
-    youRibbon = new THREE.Mesh(ribbon(path(youLine), youLine.heading || lineHeadings(youLine), 0.35, 0.13),
+    const youPos = path(youLine), youHeading = youLine.heading || lineHeadings(youLine);
+    // Road under your car too: the 14 m strip is centred on the pro's line, which hugs the apexes, so a
+    // line wider than his left it on the grass. Same material and height, so the overlap doesn't show.
+    addRoad(youPos, youHeading, YOU_ROAD_HALF_WIDTH);
+    youRibbon = new THREE.Mesh(ribbon(youPos, youHeading, 0.35, 0.13),
       new THREE.MeshBasicMaterial({ color: cars[1].color, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3 }));
     youRibbon.visible = false;
     scene.add(youRibbon);

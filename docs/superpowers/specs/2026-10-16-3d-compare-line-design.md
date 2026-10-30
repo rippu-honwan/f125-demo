@@ -30,11 +30,11 @@ In 3D Compare, your car drives your own line. A **Line** toggle draws your line 
   - Returns your transformed points and the median distance to the pro's line.
 - **`_build_you_lap`.** Fits `game_world_x/y` (one row per game metre) onto the pro lap's `points.x/y`, the smoothed path the scene draws. It resamples the result onto `d_grid` through the existing `real_d` mapping, and adds `x` and `y` (2 decimals) to `you`.
   - **Quality gate.** If the median exceeds `LINE_FIT_MAX_M = 4.0`, or the columns are missing, `x` and `y` are left out.
-- Height isn't sent. The client uses the pro's `z` at the same `d`.
+- Height isn't sent. The client takes the road's height under your `x`/`y` (the pro's line projected on, within 60 m of the same `d`). The pro's `z` at the same `d` sank your car: the distance alignment puts your `x`/`y` up to ~30 m along from the pro's.
 
 ## 4. Frontend (`app/static/js/learn3d/`)
 
-- **`core.youPoints(pro, you)`.** If `you.x` exists, it uses your `x`/`y` (the pro's `z`) and sets `heading = lineHeadings(...)` from your path. Otherwise nothing changes.
+- **`core.youPoints(pro, you)`.** If `you.x` exists, it uses your `x`/`y` (at the road's height under them) and sets `heading = lineHeadings(...)` from your path. Otherwise nothing changes.
 - **`index.js`, Compare mode only.**
   - **Cars.** When your line is present, both cars use `lane: 0` and the pro car is drawn with `setGhost(0, true)`, so the two can overlap without z-fighting. Without your line, the lanes stay ±1.6 m and the pro car stays solid.
   - **Line button.** A **Line** button (`#l3dLineBtn`, `aria-pressed`) sits next to the camera buttons. It is shown only when your line is present and starts off. Pressing it shows:
