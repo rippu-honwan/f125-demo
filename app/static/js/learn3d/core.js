@@ -135,3 +135,18 @@ function roadHeights(pro, x, y, span = 60) {
 export function gapAt(pro, you, d) {
   return timeAtDistance(you, d) - timeAtDistance(pro, d);
 }
+
+// Your line against the pro's, per corner (3D Compare). Bands, not metres: the line fit and the game's
+// track model are only good to about ±2 m.
+export const LINE_SAME_M = 2;   // under this, either way: same line as the pro
+export const LINE_BIG_M = 4;    // from this: a big difference, marked "+"
+
+/** Metres wider (+) or tighter (−) than the pro -> "≈", "wide", "tight", "wide+", "tight+"; "—" for no reading. */
+export function lineBand(m) {
+  if (m == null) return "—";
+  const a = Math.abs(m);
+  if (a < LINE_SAME_M) return "≈";
+  return (m > 0 ? "wide" : "tight") + (a >= LINE_BIG_M ? "+" : "");
+}
+
+export function lineOffsets() { return []; }

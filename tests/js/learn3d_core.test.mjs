@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   bisect, stateAt, timeAtDistance, cuePoint, nextCue, cornerSeekRange, fmtTime, youPoints, gapAt, lineHeadings,
+  lineBand, lineOffsets,
 } from "../../app/static/js/learn3d/core.js";
 
 const P = {
@@ -175,4 +176,16 @@ test("gapAt is your time minus the pro's at the same distance", () => {
   assert.equal(gapAt(P, Y, 0), 0);
   assert.equal(gapAt(P, Y, 15), 1.5);   // you 3.0 s, pro 1.5 s
   assert.equal(gapAt(P, Y, 30), 3);
+});
+
+test("lineBand: ≈ under 2 m, wide/tight from 2 m, + from 4 m, — without a reading", () => {
+  assert.equal(lineBand(null), "—");
+  assert.equal(lineBand(0), "≈");
+  assert.equal(lineBand(1.99), "≈");
+  assert.equal(lineBand(-1.99), "≈");
+  assert.equal(lineBand(2), "wide");
+  assert.equal(lineBand(3.99), "wide");
+  assert.equal(lineBand(4), "wide+");
+  assert.equal(lineBand(-2), "tight");
+  assert.equal(lineBand(-4.5), "tight+");
 });
