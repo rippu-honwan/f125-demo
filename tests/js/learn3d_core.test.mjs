@@ -132,7 +132,7 @@ test("youPoints drives your own line when you send x/y", () => {
   const Y2 = youPoints(pro, you);
   assert.deepEqual(Y2.x, you.x);
   assert.deepEqual(Y2.y, you.y);
-  assert.deepEqual(Y2.z, pro.z);                      // road height stays the pro's
+  assert.deepEqual(Y2.z, pro.z);                      // flat road: the height under your line is the pro's
   assert.deepEqual(Y2.d, pro.d);
   assert.equal(Y2.heading.length, n);
   assert.ok(Math.abs(stateAt(Y2, 25.5).heading - Math.PI / 4) < 1e-6);
@@ -141,6 +141,34 @@ test("youPoints drives your own line when you send x/y", () => {
   assert.equal(Y3.x, pro.x);
   assert.equal(Y3.heading, undefined);
   assert.equal(Y3.ownLine, undefined);
+});
+
+/** A pro lap of n points, 2 m apart, at (x(i), y(i), z(i)); flat inputs. */
+function proLap(n, x, y, z) {
+  const idx = Array.from({ length: n }, (_, i) => i);
+  return {
+    d: idx.map((i) => 2 * i), t: idx, x: idx.map(x), y: idx.map(y), z: idx.map(z),
+    speed: idx.map(() => 100), throttle: idx.map(() => 1), brake: idx.map(() => 0), steer: idx.map(() => 0),
+    gear: idx.map(() => 5),
+  };
+}
+const yourLap = (pro, x, y) => ({ t: pro.t, speed: pro.speed, throttle: pro.throttle, brake: pro.brake, gear: pro.gear,
+  x: pro.t.map(x), y: pro.t.map(y) });
+
+test("youPoints puts your car on the road under your line, not at the pro's height for your index", () => {
+  // A 10 % slope. Your x/y run 20 m ahead of the pro's at the same d (the server's distance alignment
+  // is that far off on real laps) and 3 m to the side.
+  const pro = proLap(301, (i) => 2 * i, () => 0, (i) => 0.2 * i);
+  const Y2 = youPoints(pro, yourLap(pro, (i) => 2 * i + 20, () => 3));
+  for (const i of [50, 150, 250]) assert.ok(Math.abs(Y2.z[i] - (0.2 * i + 2)) < 1e-9, `z at ${i}: ${Y2.z[i]}`);
+});
+
+test("youPoints takes the road height from the same part of the lap where the track crosses itself", () => {
+  // Out along y = 0 at ground level, back over the same x/y on a bridge 10 m up; your line runs 1 m aside.
+  const pro = proLap(400, (i) => 2 * (i < 200 ? i : 399 - i), () => 0, (i) => (i < 200 ? 0 : 10));
+  const Y2 = youPoints(pro, yourLap(pro, (i) => pro.x[i], () => 1));
+  for (const i of [50, 100, 150]) assert.equal(Y2.z[i], 0);
+  for (const i of [250, 300, 350]) assert.equal(Y2.z[i], 10);
 });
 
 test("gapAt is your time minus the pro's at the same distance", () => {
