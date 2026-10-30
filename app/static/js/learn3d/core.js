@@ -146,7 +146,7 @@ export function gapAt(pro, you, d) {
 
 // Your line against the pro's, per corner (3D Compare). Bands, not metres: the line fit and the game's
 // track model are only good to about ±2 m.
-export const LINE_SAME_M = 2;   // under this, either way: same line as the pro
+const LINE_SAME_M = 2;          // under this, either way: same line as the pro
 export const LINE_BIG_M = 4;    // from this: a big difference, marked "+"
 
 /** Metres wider (+) or tighter (−) than the pro -> "≈", "wide", "tight", "wide+", "tight+"; "—" for no reading. */
@@ -157,14 +157,16 @@ export function lineBand(m) {
   return (m > 0 ? "wide" : "tight") + (a >= LINE_BIG_M ? "+" : "");
 }
 
-const LINE_WINDOW_M = 5;    // a corner point's reading: your points within this of it, along the lap
+// A corner point's reading: the median of your points within this of it, along the lap. The median also
+// outvotes the odd reversed `side` where FastF1's positions step back against d.
+const LINE_WINDOW_M = 5;
 const TURN_SPAN_M = 20;     // the corner's direction: the pro's heading change across this either side of the apex
 
 /**
  * Per corner, how much wider (+) or tighter (−) your line runs than the pro's at entry, apex and exit
  * (metres; null where none of your points come within LINE_WINDOW_M of that point). `pro`: the pro's
- * points; `you`: {x, y} of your line; `corners`: the pro's corners ({entry_m, apex_m, exit_m}). The
- * corner's direction comes from the pro's line, not the track json.
+ * points; `you`: {x, y} of your line on the pro's distance grid (youPoints); `corners`: the pro's
+ * corners ({entry_m, apex_m, exit_m}). The corner's direction comes from the pro's line, not the track json.
  */
 export function lineOffsets(pro, you, corners) {
   const { s, side } = projectOnLine(pro, you.x, you.y);
