@@ -1578,6 +1578,24 @@ def _available_pro_laps() -> list:
     return out
 
 
+def _servable_driver(year: int, track: str, code: Optional[str]) -> Optional[str]:
+    """``code`` if their Q lap is cached, else the driver of the fastest cached Q lap.
+
+    FastF1's live-timing archive needs an F1 TV login since Oct 2026, so the host
+    can only serve laps already in data/reference_laps/. ``code`` is returned
+    unchanged when nothing is cached for (year, track).
+    """
+    cached = [p["driver"] for p in _available_pro_laps()
+              if (p["year"], p["session"], p["track"]) == (year, "Q", track)]
+    if not cached or code in cached:
+        return code
+    try:
+        return min(cached, key=lambda d: load_real_telemetry(d, year, "Q", track)[1]["lap_time"])
+    except Exception:
+        traceback.print_exc()
+        return code
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -1617,8 +1635,9 @@ def _best_qualifier(year: int, track: str) -> Optional[str]:
 
     Uses FastF1's qualifying classification (Position == 1). Loaded with only the
     results table (no laps/telemetry) so the lookup stays as light as possible.
-    Any failure (unknown track, missing data, network) returns None — the caller
-    is expected to fall back to a default driver.
+    A pole-sitter without a cached lap is swapped for the fastest cached one
+    (see _servable_driver). Any failure (unknown track, missing data, network)
+    with nothing cached returns None — the caller falls back to a default driver.
     """
     key = (int(year), (track or "").strip().lower())
     if key in _BEST_DRIVER_CACHE:
@@ -1641,13 +1660,14 @@ def _best_qualifier(year: int, track: str) -> Optional[str]:
         traceback.print_exc()
         code = None
 
+    code = _servable_driver(key[0], key[1], code)
     _BEST_DRIVER_CACHE[key] = code
     return code
 
 
 @app.get("/best_driver")
 def best_driver(year: int = DEFAULT_YEAR, track: str = "") -> JSONResponse:
-    """Best qualifier (pole-sitter) for a year + track, for the auto-driver UI.
+    """Best qualifier (pole-sitter, or the fastest cached lap) for a year + track, for the auto-driver UI.
 
     Returns ``{"driver": "VER"|null, "year": ..., "track": ...}``. ``driver`` is
     null when it can't be determined; the frontend falls back to a default.

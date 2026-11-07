@@ -447,7 +447,7 @@
   // best qualifier but stays a normal, user-overridable dropdown (never disabled).
   const yearSel        = $("yearSel");        // year dropdown (2023/2024/2025)
   const driverSelect   = $("driver");         // visible driver dropdown (auto-selected, overridable)
-  const bestDriverCode = $("bestDriverCode"); // read-only "Best qualifier: XXX" code span
+  const bestDriverCode = $("bestDriverCode"); // read-only "Reference lap: XXX" code span
 
   let selectedFile = null;
   let lastDetection = null;   // {key, name, year} from the last /laps auto-detect, restored after 3D mode
@@ -696,7 +696,7 @@
   // -------- Auto-select the reference driver (best qualifier) --------
   // The driver is no longer chosen by hand: whenever the year or track changes we
   // ask the backend for the best qualifier of that (year, track) and store it in
-  // the hidden #driver input, plus echo it in the read-only "Best qualifier:" label.
+  // the hidden #driver input, plus echo it in the read-only "Reference lap:" label.
   // Any failure (network, unknown combo, empty result) falls back to VER silently.
   let bestDriverToken = 0;   // guards against out-of-order /best_driver responses
   function setBestDriver(code) {

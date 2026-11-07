@@ -1,0 +1,25 @@
+name: Keep backend awake
+
+# Render's free plan sleeps the backend after ~15 min idle, so the first
+# analysis on GitHub Pages waits ~30-60s for it to wake. Pinging /health every
+# 10 min keeps it up. Scheduled runs only fire from the default branch (main),
+# and GitHub pauses them after 60 days without repo activity.
+#
+# ponytail: GitHub can start scheduled runs late, so a rare cold start can still
+# slip through; switch to an external pinger or a paid Render plan if that matters.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  # Manual run from the Actions tab, to test the ping.
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Ping /health
+        run: curl -fsS --retry 3 --retry-delay 10 --max-time 120 https://f125-demo-api.onrender.com/health
