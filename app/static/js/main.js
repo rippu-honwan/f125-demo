@@ -2216,11 +2216,12 @@
     fd.append("track", $("track").value);
     fd.append("lap_index", selectedLapIndex == null ? "" : String(selectedLapIndex));
 
-    // /analyze can take 15–30s (FastF1 download on first run) and longer when a
-    // free-tier host is cold-starting. Abort after 45s so the request can't hang
+    // /analyze answers in ~2s on a warm host, but Render's free plan took 72s to
+    // over 8 min to wake from sleep (measured Nov 2026). Abort after 5 min so a
+    // cold start waits instead of failing, but the request can't hang
     // indefinitely. This timeout is scoped to /analyze only.
     const controller = new AbortController();
-    const ANALYZE_TIMEOUT_MS = 45000;
+    const ANALYZE_TIMEOUT_MS = 300000;
     const timeoutId = setTimeout(() => controller.abort(), ANALYZE_TIMEOUT_MS);
 
     try {
